@@ -1,6 +1,6 @@
-from ..pricing_environment.pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
+from .pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
 
-from ....models import TradeBookModel
+from ...models import TradeBook
 
 import QuantLib as ql
 from datetime import datetime
@@ -48,7 +48,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
 
         self._market_environment=self.set_up_market_environment()
         self._calendar_schedule=TradeCalendarSchedule(valuation_date=self._valuation_date,
-                                                      termination_date=TradeBookModel.objects.get(pk=trade_id).trade_maturity,
+                                                      termination_date=TradeBook.objects.get(pk=trade_id).trade_maturity,
                                                       frequency='once')
         self.pricable_dict=self.prepare_priceable_dictionary()
 
@@ -70,12 +70,12 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                        "dividend":None,
                        "tau":None}
 
-        db_trade_info['underlier']=TradeBookModel.objects.get(pk=trade_id).underlier_ticker
-        db_trade_info['product_type']=TradeBookModel.objects.get(pk=trade_id).product_type
-        db_trade_info['payoff']=TradeBookModel.objects.get(pk=trade_id).payoff
-        db_trade_info['trade_maturity']=TradeBookModel.objects.get(pk=trade_id).trade_maturity
-        db_trade_info['strike']=TradeBookModel.objects.get(pk=trade_id).strike
-        db_trade_info['dividend']=TradeBookModel.objects.get(pk=trade_id).dividend
+        db_trade_info['underlier']=TradeBook.objects.get(pk=trade_id).underlier_ticker
+        db_trade_info['product_type']=TradeBook.objects.get(pk=trade_id).product_type
+        db_trade_info['payoff']=TradeBook.objects.get(pk=trade_id).payoff
+        db_trade_info['trade_maturity']=TradeBook.objects.get(pk=trade_id).trade_maturity
+        db_trade_info['strike']=TradeBook.objects.get(pk=trade_id).strike
+        db_trade_info['dividend']=TradeBook.objects.get(pk=trade_id).dividend
         db_trade_info["tau"]=self._calendar_schedule.year_fractions
         return db_trade_info
         
@@ -87,7 +87,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                           'volatility':None,
                           'risk_free_rate':None,
                           'discount_factor':None}
-        market_data_dict['underlier_price']= kwargs['underlier_price'] if 'underlier_price' in kwargs else self._market_environment.extract_underlier_quotation()[TradeBookModel.objects.get(pk=self._trade_id).underlier_ticker][1]
+        market_data_dict['underlier_price']= kwargs['underlier_price'] if 'underlier_price' in kwargs else self._market_environment.extract_underlier_quotation()[TradeBook.objects.get(pk=self._trade_id).underlier_ticker][1]
         market_data_dict['volatility']=kwargs['volatility'] if 'volatility' in kwargs else self._market_environment.get_volatility()
         market_data_dict['risk_free_rate']=kwargs['risk_free_rate'] if 'risk_free_rate' in kwargs else self._market_environment.get_risk_free_rate() 
         # trade attributes part
