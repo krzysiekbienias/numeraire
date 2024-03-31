@@ -1,11 +1,21 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block scripts %}
+<script src="{% static 'wiener/trade_book.js' %}" defer></script>
+
+{% endblock scripts %}
 
 {% block  title%}
-landing page
+trade-book
 {% endblock%}
 
 {% block content %}
-hello
+<div id="dupa">   </div>
+
+<section>
+    <table id="trade-book-table" class="ui celled table">
+
+    </table>
+</section>
 {% endblock content %}
