@@ -1,5 +1,6 @@
 from tool_kit.yahoo_data_extractor import YahooDataExtractor
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
+from ...models import TradeBook
 
 import QuantLib as ql
 from datetime import datetime
@@ -222,7 +223,7 @@ class TradeCalendarSchedule():
 
     def parse_trade_attributes_from_db(self,trade_id:int):
 
-        one_trade_from_db=TradeBookModel.objects.get(pk=trade_id)
+        one_trade_from_db=TradeBook.objects.get(pk=trade_id)
 
         
         # valuation_date     
@@ -481,8 +482,8 @@ class MarketEnvironmentHandler:
         -------
         str
         """
-        if trade_id is not None and TradeBookModel.objects.filter(pk=trade_id).exists():
-            underlier_for_trade=TradeBookModel.objects.get(pk=trade_id).underlier_ticker
+        if trade_id is not None and TradeBook.objects.filter(pk=trade_id).exists():
+            underlier_for_trade=TradeBook.objects.get(pk=trade_id).underlier_ticker
             return underlier_for_trade
         else:
             return None
@@ -506,9 +507,9 @@ class MarketEnvironmentHandler:
             
         """
         
-        if TradeBookModel.objects.filter(pk=trade_id).exists():
+        if TradeBook.objects.filter(pk=trade_id).exists():
             print(f"Trade {trade_id} exists ")
-            underlier_for_trade=TradeBookModel.objects.get(pk=trade_id).underlier_ticker
+            underlier_for_trade=TradeBook.objects.get(pk=trade_id).underlier_ticker
             print(f"You might extract underlier price for {underlier_for_trade}")
             underlier_price=self.extract_underlier_quotation()
             return {"db_underlier":underlier_for_trade,"underlier_price":underlier_price}
@@ -548,7 +549,7 @@ class MarketEnvironmentHandler:
         if self._trade_id is not None:
             
             return rate.discountFactor(QuantLibToolKit.string_2qlDate(self._valuation_date),
-                                       QuantLibToolKit.date_object_2qlDate(TradeBookModel.objects.get(pk=self._trade_id).trade_maturity))
+                                       QuantLibToolKit.date_object_2qlDate(TradeBook.objects.get(pk=self._trade_id).trade_maturity))
         else:
             return rate.discountFactor(QuantLibToolKit.string_2qlDate(self._valuation_date),QuantLibToolKit.string_2qlDate(maturity_date))
         
