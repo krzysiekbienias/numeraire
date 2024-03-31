@@ -61,7 +61,10 @@ def trade_book(request):
             'payoff':obj.payoff,
             'trade_date':obj.trade_date,
             'trade_maturity':obj.trade_maturity,
-            'dividend':obj.dividend
+            'dividend':obj.dividend,
+            'created_at':obj.created_at,
+            'user_id':obj.user_id
+
 
             }
             data.append(item)
@@ -71,7 +74,7 @@ def trade_book(request):
 
 def single_trade(request,trade_id:int):
     
-    single_trade=TradeBookModel.objects.get(pk=trade_id)
+    single_trade=TradeBook.objects.get(pk=trade_id)
     underlier=single_trade.underlier_ticker
 
     market_data_form=MarketForm()
