@@ -32,7 +32,7 @@ def view_suite():
 
 
 
-view_suite()
+# view_suite()
 # --------------------------
 # End Region source code objects
 # --------------------------
@@ -77,21 +77,34 @@ def single_trade(request,trade_id:int):
     single_trade=TradeBook.objects.get(pk=trade_id)
     underlier=single_trade.underlier_ticker
 
-    market_data_form=MarketForm()
+    market_data_form=MarketForm(request.POST or None)
     if request.method=="POST":
-        filled_form=MarketForm(request.POST)
         #we need to add button submit to triger form
-        if filled_form.is_valid():
+        if market_data_form.is_valid():
 
-            european_option=EuropeanPlainVanillaOption(valuation_date=filled_form.cleaned_data['valuation_date'],trade_id=single_trade.pk)
-            european_option.prepare_priceable_dictionary()
-            return JsonResponse({"pv":european_option.pricable_dict})
+            european_option = EuropeanPlainVanillaOption(
+                valuation_date=market_data_form.cleaned_data["valuation_date"],
+                trade_id=single_trade.pk,
+            )
             
-            
-    content={"single_trade":single_trade,
-            "form":market_data_form}
-    
-    return render(request,'geralt/single_trade.html',content)
+            # row_to_insert=DerivativePriceModel(trade_id=single_trade.valuation,
+            #                            valuation_date=single_trade.valuation_date,
+            #                            price_status='Success',
+            #                            analytical_price=5,
+            #                            monte_carlo_price=5.5,
+            #                            extra_price=5.1
+            #                            )
+            # if not DerivativePriceModel.objects.filter(pk=trade_book.id).exists():
+            #     mess=f"Price for trade {trade_book.id} has been inserted."
+            #     row_to_insert.save()
+            # else:
+            #     mess=f"Trade {trade_book.id} already has been priced."           
+            return JsonResponse({"pv_dict": european_option.pricable_dict,"price":european_option.run_analytical_pricer()})
+        
+    content = {"id": single_trade.pk, "single_trade": single_trade, "market_data_form": market_data_form,}
+
+    return render(request, "wiener/single-trade.html", content)
+
 
 
 def test(request):
