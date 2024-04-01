@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block  title%}
+single-trade
+{% endblock%}
+
+
+
+
+{% block scripts %}
+<script src="{% static 'wiener/single_trade.js' %}" defer></script>
+
+{% endblock scripts %}
+  
+{% block content %}
+<div class="ui two column doubling stackable grid container">
+    <div class="column">
+        <h1>Trade Details:</h1>
+        <h4>Ticker: {{single_trade.underlier_ticker}}</h4> 
+        <h4>Product type: {{single_trade.product_type}}</h4>
+        <h4>Payoff type: {{single_trade.payoff}}</h4>
+        <h4>Trade type: {{single_trade.trade_date}}</h4>
+        <h4>Trade maturity: {{single_trade.trade_maturity}}</h4>
+        <h4>Strike: {{single_trade.strike}} </h4>
+        <h4>Dividend: {{single_trade.dividend}} </h4>
+        <h4>Created at: {{single_trade.created_at}} </h4>
+        <h4>User Id: {{single_trade.user_id}} </h4>
+
+    </div>
+
+    <div class="column">
+        <h1>Market Data</h1>
+        <form method="POST" id="market-data-form">
+            <div>
+                
+                {% csrf_token %}
+                {{market_data_form.as_p}}
+            </div>
+            <button type="submit" class="ui button" id ="pv-able-btn">Fetch PVAble Dictionary</button>
+        </form>
+    </div>
+
+<div id="res"></div>
+<br>
+<div id='price'> </div>
+
+{% endblock content %}
+
