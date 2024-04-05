@@ -3,6 +3,9 @@ console.log('lala')
 const helloWorldBox=document.getElementById('dupa')
 helloWorldBox.innerHTML='hw'
 
+console.log(window.location)
+const tradeUrl=window.location.href
+
 $.ajax({
     type:"GET",
     url:"trade-book",
@@ -23,7 +26,7 @@ $.ajax({
                     +`<th scope="col">Strike</th>`
                     +`<th scope="col">Dividend</th>`
                     +`<th scope="col">created_at</th>`
-                    +`<th scope="col">user_at</th>`
+                    +`<th scope="col">user_id</th>`
 
                 +`<tr>`+
         `<thead>`
@@ -31,7 +34,7 @@ $.ajax({
         // add table body     
         data.forEach(el => {
         new_row=`<tr>`
-        +`<td>`+el.pk+`</td>`
+        +`<td>`+`<a href="${tradeUrl}/${el.pk}">${el.pk}</a>`+`</td>`
         +`<td>`+el.underlier_ticker+`</td>`
         +`<td>`+el.product_type+`</td>`
         +`<td>`+el.payoff+`</td>`
