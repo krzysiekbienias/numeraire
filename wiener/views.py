@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import HttpResponse,HttpResponseNotFound,HttpResponseRedirect,JsonResponse
-from .models import TradeBook
+from .models import TradeBook,DerivativePrice
 from .forms import MarketForm
 from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
 
@@ -84,17 +84,16 @@ def single_trade(request,trade_id:int):
 
             european_option = EuropeanPlainVanillaOption(
                 valuation_date=market_data_form.cleaned_data["valuation_date"],
-                trade_id=single_trade.pk,
-            )
+                trade_id=single_trade.pk)
             
-            # row_to_insert=DerivativePriceModel(trade_id=single_trade.valuation,
+            # row_to_insert=DerivativePrice(trade_id=single_trade.valuation,
             #                            valuation_date=single_trade.valuation_date,
             #                            price_status='Success',
             #                            analytical_price=5,
             #                            monte_carlo_price=5.5,
             #                            extra_price=5.1
             #                            )
-            # if not DerivativePriceModel.objects.filter(pk=trade_book.id).exists():
+            # if not DerivativePrice.objects.filter(pk=trade_book.id).exists():
             #     mess=f"Price for trade {trade_book.id} has been inserted."
             #     row_to_insert.save()
             # else:

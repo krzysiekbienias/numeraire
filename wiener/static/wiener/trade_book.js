@@ -1,7 +1,6 @@
 console.log('lala')
 
-const helloWorldBox=document.getElementById('dupa')
-helloWorldBox.innerHTML='hw'
+
 
 console.log(window.location)
 const tradeUrl=window.location.href
