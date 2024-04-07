@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
+{% load widget_tweaks %}
+
 
 
 {% block  title%}
@@ -82,15 +84,30 @@ single-trade
 
     </div>
 
-    <div class="column">
-        <h1>Market Data</h1>
+    <div class="column" >
+        <h3 class="text-base font-semibold leading-7 text-gray-900 p-2">Market data </h3>
         <form method="POST" id="market-data-form">
-            <div>
+          {% csrf_token %}
+            <div class="mb-2">
+              <label for="{{market_data_form.valuation_date.id_for_label}}" class="block font-bold text-slate-600">Valuation Date</label>
                 
-                {% csrf_token %}
-                {{market_data_form.as_p}}
+                {{ market_data_form.valuation_date|add_class:"bg-gray-300 rounded p-2"}}
+            
             </div>
-            <button type="submit" class="ui button" id ="pv-able-btn">Fetch PVAble Dictionary</button>
+            <div class="mb-2">
+              <label for="{{market_data_form.risk_free_rate.id_for_label}}" class="block font-bold text-slate-600">Risk Free rate</label>
+                
+                {{ market_data_form.risk_free_rate|add_class:"bg-gray-300 rounded p-2"}}
+            
+            </div>
+            <div class="mb-2">
+              <label for="{{market_data_form.volatility.id_for_label}}" class="block font-bold text-slate-600">Volatility</label>
+                
+                {{ market_data_form.volatility|add_class:"bg-gray-300 rounded p-2"}}
+            
+            </div>
+
+            <button type="submit" class="p-5 bg-green-500 text-blue-600" id ="pv-able-btn">Fetch PVAble Dictionary</button>
         </form>
     </div>
 
