@@ -79,41 +79,54 @@ single-trade
               </div>
             </dl>
           </div>
-
-       
-
     </div>
 
     <div class="column" >
-        <h3 class="text-base font-semibold leading-7 text-gray-900 p-2">Market data </h3>
-        <form method="POST" id="market-data-form">
+
+      <form method="POST" id="market-data-form">
+      <div class="grid grid-cols-3 grid-rows-3 gap-4 w-100 bg-gray-100">
           {% csrf_token %}
-            <div class="mb-2">
-              <label for="{{market_data_form.valuation_date.id_for_label}}" class="block font-bold text-slate-600">Valuation Date</label>
-                
-                {{ market_data_form.valuation_date|add_class:"bg-gray-300 rounded p-2"}}
-            
-            </div>
-            <div class="mb-2">
-              <label for="{{market_data_form.risk_free_rate.id_for_label}}" class="block font-bold text-slate-600">Risk Free rate</label>
-                
-                {{ market_data_form.risk_free_rate|add_class:"bg-gray-300 rounded p-2"}}
-            
-            </div>
-            <div class="mb-2">
-              <label for="{{market_data_form.volatility.id_for_label}}" class="block font-bold text-slate-600">Volatility</label>
-                
-                {{ market_data_form.volatility|add_class:"bg-gray-300 rounded p-2"}}
-            
+          <div class="p-10 border border-blue-600 bg-blue-100 ">
+            <label for="{{market_data_form.valuation_date.id_for_label}}" class="block font-bold text-slate-600">Valuation Date</label>
+                    {{ market_data_form.valuation_date|add_class:"bg-gray-300 rounded p-2 w-full"}}
+          </div>
+
+          <div class="p-10 border border-blue-600 bg-blue-100"> 
+            <label for="{{market_data_form.valuation_date.id_for_label}}" class="block font-bold text-slate-600">Risk Free Rate</label>
+            {{ market_data_form.risk_free_rate|add_class:"bg-gray-300 rounded p-2 w-full"}}
+          </div>
+
+
+          <div class="p-10 border border-blue-600 bg-blue-100">
+            <label for="{{market_data_form.volatility.id_for_label}}" class="block font-bold text-slate-600">Volatility</label>
+                      
+                      {{ market_data_form.volatility|add_class:"bg-gray-300 rounded p-2 w-full"}}
+                  
+                  
+          </div>
+          <div class="p-10">
+            <button type="submit" class="ui positive button" id ="pv-able-btn">PVAble Dictionary</button>
+          </div>
+          <div class="p-10 col-start-3" >
+            <button type="submit" class="ui primary button" id ="pv-able-btn">Price Trade</button>
+          </div>
+
+          <div class="row-start-3 col-span-3">
+            <div class="container mx-auto bg-yellow-300 p-16">
+              
+              price will ge here
             </div>
 
-            <button type="submit" class="p-5 bg-green-500 text-blue-600" id ="pv-able-btn">Fetch PVAble Dictionary</button>
-        </form>
+          </div>
+          
+        </div>
+      </form>  
+
+
+    
     </div>
 
 <div id="res"></div>
-<br>
-<div id='price'> </div>
 
 {% endblock content %}
 

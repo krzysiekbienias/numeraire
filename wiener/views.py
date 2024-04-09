@@ -3,6 +3,8 @@ from django.http import HttpResponse,HttpResponseNotFound,HttpResponseRedirect,J
 from .models import TradeBook,DerivativePrice
 from .forms import MarketForm
 from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
+import decimal
+decimal.getcontext().prec=6
 
 # Create your views here.
 

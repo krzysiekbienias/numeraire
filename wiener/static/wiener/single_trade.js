@@ -55,8 +55,9 @@ postForm.addEventListener('submit',e=>{
             });
             tableData += '</table>';
             $('#res').html(tableData); 
-
-            price.innerHTML=data.price
+            const priceToDisplay=data.price.toFixed(2);
+            price.innerHTML=priceToDisplay;
+            
         },
         
         error:function(error){
