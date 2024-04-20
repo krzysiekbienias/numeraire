@@ -15,7 +15,7 @@ decimal.getcontext().prec = 6
 # --------------------------
 
 valuation_date: str = "2023-05-12"
-trade_id = 1
+trade_id = 2
 
 
 # --------------------------
@@ -31,10 +31,10 @@ def view_suite():
     print("the end.")
 
 
-#     # this function mimic behavior of wraper
+#     # this function mimic behavior of wrapper
 
 
-# view_suite()
+view_suite()
 # --------------------------
 # End Region source code objects
 # --------------------------
@@ -80,7 +80,7 @@ def single_trade(request, trade_id: int):
 
     market_data_form = MarketForm(request.POST or None)
     if request.method == "POST":
-        #we need to add button submit to triger form
+        # we need to add button submit to triger form
         if market_data_form.is_valid():
             european_option = EuropeanPlainVanillaOption(
                 valuation_date=market_data_form.cleaned_data["valuation_date"],
@@ -97,11 +97,11 @@ def single_trade(request, trade_id: int):
             #     mess=f"Price for trade {trade_book.id} has been inserted."
             #     row_to_insert.save()
             # else:
-            #     mess=f"Trade {trade_book.id} already has been priced."           
+            #     mess=f"Trade {trade_book.id} already has been priced."
             return JsonResponse(
-                {"pv_dict": european_option.pricable_dict, "price": european_option.run_analytical_pricer()})
+                {"pv_dict": european_option.pricable_dict, "price_trade": european_option.run_analytical_pricer()})
 
-    content = {"id": one_trade.pk, "single_trade": one_trade, "market_data_form": market_data_form, }
+    content = {"id": one_trade.pk, "single_trade": one_trade, "market_data_form": market_data_form}
 
     return render(request, "wiener/single-trade.html", content)
 
