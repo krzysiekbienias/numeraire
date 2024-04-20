@@ -35,6 +35,8 @@ def view_suite():
 
 
 view_suite()
+
+
 # --------------------------
 # End Region source code objects
 # --------------------------
@@ -46,6 +48,10 @@ def landing_page(request):
 
 def home_page(request):
     return render(request, "wiener/home-page.html")
+
+
+def fundamentals(request):
+    return render(request, "wiener/fundamentals.html")
 
 
 def equities(request):

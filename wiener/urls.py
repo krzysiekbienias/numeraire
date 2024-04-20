@@ -5,6 +5,7 @@ from . import views
 app_name='wiener'
 
 urlpatterns=[path("", views.landing_page, name="landing-page"),
+             path("fundamentals", views.fundamentals, name="fundamentals"),
              path("home-page", views.home_page, name="home-page"),
              path("home-page/eq-dashboard",views.equities,name="eq-dashboard"),
              path("test",views.test,name="test"),
