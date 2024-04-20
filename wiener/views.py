@@ -1,10 +1,11 @@
 from django.shortcuts import render
-from django.http import HttpResponse,HttpResponseNotFound,HttpResponseRedirect,JsonResponse
-from .models import TradeBook,DerivativePrice
+from django.http import HttpResponse, HttpResponseNotFound, HttpResponseRedirect, JsonResponse
+from .models import TradeBook, DerivativePrice
 from .forms import MarketForm
 from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
 import decimal
-decimal.getcontext().prec=6
+
+decimal.getcontext().prec = 6
 
 # Create your views here.
 
@@ -13,25 +14,24 @@ decimal.getcontext().prec=6
 # sudo form
 # --------------------------
 
-valuation_date:str="2023-05-12"
-trade_id=1
+valuation_date: str = "2023-05-12"
+trade_id = 1
+
 
 # --------------------------
 # end sudo form
 # --------------------------
 
 
-
 def view_suite():
-    european_option=EuropeanPlainVanillaOption(valuation_date=valuation_date,trade_id=trade_id)
+    european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
     european_option.prepare_priceable_dictionary()
-    price=european_option.run_analytical_pricer()
+    price = european_option.run_analytical_pricer()
     print(price)
     print("the end.")
 
-#     # this function mimic behavior of wraper 
 
-
+#     # this function mimic behavior of wraper
 
 
 # view_suite()
@@ -41,53 +41,51 @@ def view_suite():
 
 
 def landing_page(request):
-    return render(request,"wiener/landing-page.html")
+    return render(request, "wiener/landing-page.html")
+
 
 def home_page(request):
-    return render(request,"wiener/home-page.html")
+    return render(request, "wiener/home-page.html")
+
 
 def equities(request):
-    return render (request,"wiener/eq-dashboard.html")
+    return render(request, "wiener/eq-dashboard.html")
+
 
 def trade_book(request):
-    if request.headers.get('x-requested-with')=='XMLHttpRequest': #check if request is ajax
-        all_trades_qs=TradeBook.objects.all()
-        data=[]
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':  # check if request is ajax
+        all_trades_qs = TradeBook.objects.all()
+        data = []
         for obj in all_trades_qs:
-            item={'pk':obj.pk,
-                  'underlier_ticker':obj.underlier_ticker,
-                  'und':obj.underlier_ticker,
-            'strike':obj.strike,
-            'underlier_ticker':obj.underlier_ticker,
-            'product_type':obj.product_type,
-            'payoff':obj.payoff,
-            'trade_date':obj.trade_date,
-            'trade_maturity':obj.trade_maturity,
-            'dividend':obj.dividend,
-            'created_at':obj.created_at,
-            'user_id':obj.user_id
+            item = {'pk': obj.pk,
+                    'underlier_ticker': obj.underlier_ticker,
+                    'und': obj.underlier_ticker,
+                    'strike': obj.strike,
+                    'product_type': obj.product_type,
+                    'payoff': obj.payoff,
+                    'trade_date': obj.trade_date,
+                    'trade_maturity': obj.trade_maturity,
+                    'dividend': obj.dividend,
+                    'created_at': obj.created_at,
+                    'user_id': obj.user_id
 
-
-            }
+                    }
             data.append(item)
-        return JsonResponse({'trades':data})
-    return render(request,"wiener/trade-book.html")
+        return JsonResponse({'trades': data})
+    return render(request, "wiener/trade-book.html")
 
 
-def single_trade(request,trade_id:int):
-    
-    single_trade=TradeBook.objects.get(pk=trade_id)
-    underlier=single_trade.underlier_ticker
+def single_trade(request, trade_id: int):
+    one_trade = TradeBook.objects.get(pk=trade_id)
 
-    market_data_form=MarketForm(request.POST or None)
-    if request.method=="POST":
+    market_data_form = MarketForm(request.POST or None)
+    if request.method == "POST":
         #we need to add button submit to triger form
         if market_data_form.is_valid():
-
             european_option = EuropeanPlainVanillaOption(
                 valuation_date=market_data_form.cleaned_data["valuation_date"],
-                trade_id=single_trade.pk)
-            
+                trade_id=one_trade.pk)
+
             # row_to_insert=DerivativePrice(trade_id=single_trade.valuation,
             #                            valuation_date=single_trade.valuation_date,
             #                            price_status='Success',
@@ -100,13 +98,13 @@ def single_trade(request,trade_id:int):
             #     row_to_insert.save()
             # else:
             #     mess=f"Trade {trade_book.id} already has been priced."           
-            return JsonResponse({"pv_dict": european_option.pricable_dict,"price":european_option.run_analytical_pricer()})
-        
-    content = {"id": single_trade.pk, "single_trade": single_trade, "market_data_form": market_data_form,}
+            return JsonResponse(
+                {"pv_dict": european_option.pricable_dict, "price": european_option.run_analytical_pricer()})
+
+    content = {"id": one_trade.pk, "single_trade": one_trade, "market_data_form": market_data_form, }
 
     return render(request, "wiener/single-trade.html", content)
 
 
-
 def test(request):
-    return render(request,"wiener/test.html")
+    return render(request, "wiener/test.html")

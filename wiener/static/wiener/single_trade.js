@@ -55,6 +55,8 @@ postForm.addEventListener('submit',e=>{
             });
             tableData += '</table>';
             $('#res').html(tableData); 
+
+
             const priceToDisplay=data.price.toFixed(2);
             price.innerHTML=priceToDisplay;
             
@@ -67,10 +69,46 @@ postForm.addEventListener('submit',e=>{
 })
 
 
+
+
+postForm.addEventListener('submit',e=>{
+
+    e.preventDefault()
+    const valuation=document.getElementById('id_valuation_date')
+    const risk_free_rate=document.getElementById('id_risk_free_rate')
+    const volatility=document.getElementById('id_volatility')
+    $.ajax({
+        type:"POST",
+        url:'',
+        data:{
+            "csrfmiddlewaretoken":csrf[0].value,
+            "valuation_date":valuation.value,
+            "risk_free_rate":risk_free_rate.value,
+            "volatility":volatility.value
+        },
+        dataType:'json',
+        success:function(data){
+            
+
+
+            const priceToDisplay=data.price.toFixed(2);
+            price.innerHTML=priceToDisplay;
+            
+        },
+        
+        error:function(error){
+            console.log(error)
+        }
+    })
+})
+
+
+
+
+
 $(document).ready(function(){
     $("#pv-able-btn").click(function(){
-        $("#res").toggle()
-        $("#price").toggle();
+        $("#res").toggle();
         
     });
 })
