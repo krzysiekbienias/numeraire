@@ -50,7 +50,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
 
     def set_up_market_environment(self, **kwargs):
 
-        return MarketEnvironmentHandler(valuation_date=self._valuation_date, trade_id=1)
+        return MarketEnvironmentHandler(valuation_date=self._valuation_date, trade_id=self._trade_id)
 
     def upload_trade_attributes_from_booking_system(self, trade_id: int) -> dict:
         db_trade_info = {'underlier': None,
