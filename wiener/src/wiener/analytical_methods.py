@@ -102,7 +102,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
            time_to_maturity: float,
            risk_free_rate: float,
            volatility: float,
-           dividend: str = 0) -> float:
+           dividend: float = 0) -> float:
         """d1_helper
         Description
         -----------
@@ -139,7 +139,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
            time_to_maturity: float,
            risk_free_rate: float,
            volatility: float,
-           dividend: str = 0) -> float:
+           dividend: float = 0) -> float:
         """d1_helper
         Description
         -----------
