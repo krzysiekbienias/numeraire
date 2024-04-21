@@ -1,28 +1,26 @@
-
 import QuantLib as ql
-from typing import TypeVar,Iterable,Tuple,Dict,List,Generic,NewType
+from typing import TypeVar, Iterable, Tuple, Dict, List, Generic, NewType
 from datetime import datetime
 
+QL = NewType("QL", ql)
+DT = TypeVar('DT', bound=datetime)
+HM = TypeVar("HM", bound=Dict)
 
-QL=NewType("QL",ql)
-DT=TypeVar('DT',bound=datetime)
-HM=TypeVar("HM",bound=Dict)
 
 class QuantLibToolKit:
+    _weekday_corrections = {"Following": ql.Following,
+                            "ModifiedFollowing": ql.ModifiedFollowing,
+                            "Preceding": ql.ModifiedPreceding,
+                            "ModifiedPreceding": ql.ModifiedPreceding,
+                            "Unadjusted": ql.Unadjusted
 
-    _weekday_corrections={"Following":ql.Following,
-                         "ModifiedFollowing":ql.ModifiedFollowing,
-                         "Preceding":ql.ModifiedPreceding,
-                         "ModifiedPreceding":ql.ModifiedPreceding,
-                         "Unadjusted":ql.Unadjusted
+                            }
 
-                         }
+    _date_generation_rules = {"Backward": ql.DateGeneration.Backward,
+                              "Forward": ql.DateGeneration.Forward}
 
-    _date_generation_rules={"Backward":ql.DateGeneration.Backward,
-                      "Forward":ql.DateGeneration.Forward}
-    
     @staticmethod
-    def date_object_2qlDate(date:datetime.date)->ql.Date:
+    def date_object_2ql_date(date: datetime.date) -> ql.Date:
         """
         date_object_2qlDate
         Description
@@ -36,10 +34,10 @@ class QuantLibToolKit:
         -------
         ql.Date
         """
-        return ql.Date(date.day,date.month,date.year)
+        return ql.Date(date.day, date.month, date.year)
 
     @staticmethod
-    def string_2qlDate(date:str)->QL:
+    def string_2ql_date(date: str) -> QL:
         """string_2qlDate
         Description
         -----------
@@ -56,13 +54,12 @@ class QuantLibToolKit:
             date as a QuantLib object
         """
 
-        dt_date=datetime.strptime(date,"%Y-%m-%d")
+        dt_date = datetime.strptime(date, "%Y-%m-%d")
         ql_date = ql.Date(dt_date.day, dt_date.month, dt_date.year)
         return ql_date
 
-
     @staticmethod
-    def set_calendar(country:str="theUK")->QL:
+    def set_calendar(country: str = "theUK") -> QL:
         """set_calendar
         Description
         -----------
@@ -93,8 +90,8 @@ class QuantLibToolKit:
             return ql.Poland()
 
     @staticmethod
-    def set_date_corrections_schema(corrections_map:HM=_weekday_corrections,
-                              correction_rule:str="Following")->int:
+    def set_date_corrections_schema(corrections_map: HM = _weekday_corrections,
+                                    correction_rule: str = "Following") -> int:
         """setBusinessConvention
         Description
         -----------
@@ -108,7 +105,7 @@ class QuantLibToolKit:
         return corrections_map[correction_rule]
 
     @staticmethod
-    def set_rule_of_date_generation(date_generation_rules:str="forward")->int:
+    def set_rule_of_date_generation(date_generation_rules: str = "forward") -> int:
 
         """set_rule_of_date_generation
         Description
@@ -120,17 +117,16 @@ class QuantLibToolKit:
         _type_
             _description_
         """
-        if date_generation_rules=="forward":
-           return ql.DateGeneration.Forward
-        elif date_generation_rules=="backward":
+        if date_generation_rules == "forward":
+            return ql.DateGeneration.Forward
+        elif date_generation_rules == "backward":
             return ql.DateGeneration.Backward
 
-
     @staticmethod
-    def define_schedule(effective_day:str,
-                       termination_date:str,
-                       freq_period:str="monthly",
-                       calendar:str="theUK")->ql.Schedule:
+    def define_schedule(valuation_date: str,
+                        termination_date: str,
+                        freq_period: str = "monthly",
+                        calendar: str = "theUK") -> ql.Schedule:
         """define_schedule
         Description
         -----------
@@ -138,7 +134,7 @@ class QuantLibToolKit:
 
         Parameters
         ----------
-        effective_day : str
+        valuation_date : str
             _description_
         termination_date : str
             _description_
@@ -152,14 +148,20 @@ class QuantLibToolKit:
         ql.Schedule
             _description_
         """
+        if isinstance(valuation_date, str) or isinstance(termination_date, str):
+            return ql.MakeSchedule(effectiveDate=QuantLibToolKit.string_2ql_date(valuation_date),
+                                   terminationDate=QuantLibToolKit.string_2ql_date(termination_date),
+                                   frequency=QuantLibToolKit.set_frequency(freq_period),
+                                   calendar=QuantLibToolKit.set_calendar(calendar))
+        else:
+            return ql.MakeSchedule(effectiveDate=valuation_date,
+                                   terminationDate=termination_date,
+                                   frequency=QuantLibToolKit.set_frequency(freq_period),
+                                   calendar=QuantLibToolKit.set_calendar(calendar))
 
-        return ql.MakeSchedule(effectiveDate=QuantLibToolKit.string_2qlDate(effective_day),
-                        terminationDate=QuantLibToolKit.string_2qlDate(termination_date),
-                        frequency=QuantLibToolKit.set_frequency(freq_period),
-                        calendar=QuantLibToolKit.set_calendar(calendar))
 
     @staticmethod
-    def set_frequency(freq_period:str)->int:
+    def set_frequency(freq_period: str) -> int:
         """set_frequency
         Description
         -----------
@@ -175,19 +177,19 @@ class QuantLibToolKit:
         QL
             frequency Period
         """
-        if freq_period not in ('daily', "once", "monthly", "quarterly","annual", "semiannual"):
-            raise ValueError(" Name of the period must be one of following 'daily', 'once','monthly','quarterly','annual','semiannual'. ")
+        if freq_period not in ('daily', "once", "monthly", "quarterly", "annual", "semiannual"):
+            raise ValueError(
+                " Name of the period must be one of following 'daily', 'once','monthly','quarterly','annual','semiannual'. ")
 
-
-        if freq_period=='daily':
+        if freq_period == 'daily':
             return ql.Daily
-        if freq_period=='once':
+        if freq_period == 'once':
             return ql.Once
-        if freq_period=='monthly':
+        if freq_period == 'monthly':
             return ql.Monthly
-        if freq_period=='quarterly':
+        if freq_period == 'quarterly':
             return ql.Quarterly
-        if freq_period=='annual':
+        if freq_period == 'annual':
             return ql.Annual
-        if freq_period=='semiannual':
+        if freq_period == 'semiannual':
             return ql.Semiannual

@@ -34,7 +34,7 @@ def view_suite():
 #     # this function mimic behavior of wrapper
 
 
-view_suite()
+# view_suite()
 
 
 # --------------------------

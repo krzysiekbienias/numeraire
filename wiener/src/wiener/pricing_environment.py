@@ -108,9 +108,9 @@ class TradeCalendarSchedule():
         # -----------------------
         # Region: QuantLib Converter
         # -----------------------
-        ql_valuation_date = QuantLibToolKit.string_2qlDate(
+        ql_valuation_date = QuantLibToolKit.string_2ql_date(
             date=self._valuation_date)
-        ql_termination_date = QuantLibToolKit.string_2qlDate(
+        ql_termination_date = QuantLibToolKit.string_2ql_date(
             date=self._termination_date)
         date_correction_schema = QuantLibToolKit.set_date_corrections_schema()
         ql_year_fraction_conv = self.set_year_fraction_convention(
@@ -520,12 +520,12 @@ class MarketEnvironmentHandler:
         rate = self.create_ql_rate(risk_free_rate=self._risk_free_rate)
         if self._trade_id is not None:
 
-            return rate.discountFactor(QuantLibToolKit.string_2qlDate(self._valuation_date),
-                                       QuantLibToolKit.date_object_2qlDate(
+            return rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
+                                       QuantLibToolKit.date_object_2ql_date(
                                            TradeBook.objects.get(pk=self._trade_id).trade_maturity))
         else:
-            return rate.discountFactor(QuantLibToolKit.string_2qlDate(self._valuation_date),
-                                       QuantLibToolKit.string_2qlDate(maturity_date))
+            return rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
+                                       QuantLibToolKit.string_2ql_date(maturity_date))
 
     def upload_market_data(self, *args, **kwargs) -> dict:
         """process_market_parameters 
