@@ -46,7 +46,7 @@ class QuantLibToolKit:
         Parameters
         ----------
         date : str
-            date time object that gonna be converted. Must be passed as year, month, day
+            date time object that going to be converted. Must be passed as year, month, day
 
         Returns
         -------
@@ -63,6 +63,7 @@ class QuantLibToolKit:
         """set_calendar
         Description
         -----------
+        Define a calendar for QuantLib.
 
         Parameters
         ----------
@@ -75,8 +76,7 @@ class QuantLibToolKit:
 
         Returns
         -------
-        QL
-            _description_
+        ql.Calendar
         """
         if country not in ("USA", "theUK", "Switzerland", "Poland"):
             raise ValueError("calendar name must be one of the following: 'USA', 'theUK', 'Switzerland', 'Poland'")
@@ -193,3 +193,30 @@ class QuantLibToolKit:
             return ql.Annual
         if freq_period == 'semiannual':
             return ql.Semiannual
+
+    @staticmethod
+    def set_year_fraction_convention(year_fraction_conv: str = "Actual365") -> QL:
+        """set_year_fraction_convention
+        Description
+        -----------
+        Returns year fraction convention.
+
+        Parameters
+        ----------
+        year_fraction_conv : string
+
+        Returns
+        -------
+        ql.FractionConvention
+
+        """
+        if year_fraction_conv == 'Actual360':
+            return ql.Actual360()
+        elif year_fraction_conv == 'Actual365':
+            return ql.Actual365Fixed()
+        elif year_fraction_conv == 'ActualActual':
+            return ql.ActualActual()
+        elif year_fraction_conv == 'Thirty360':
+            return ql.Thirty360()
+        elif year_fraction_conv == 'Business252':
+            return ql.Business252()
