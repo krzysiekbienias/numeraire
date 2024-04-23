@@ -8,4 +8,4 @@ class AppSettings:
     MAX_ITERATION: int = 100
     NUMBER_OF_SIMULATIONS: int = 1000
     CALENDAR: str = 'theUK'
-
+    DEFAULT_YEAR_FRACTION_CONVENTION: str = 'Actual365'

@@ -112,8 +112,7 @@ class TradeCalendarSchedule():
             date=self._valuation_date)
         ql_termination_date = QuantLibToolKit.string_2ql_date(
             date=self._termination_date)
-        date_correction_schema = QuantLibToolKit.set_date_corrections_schema()
-        ql_year_fraction_conv = self.set_year_fraction_convention(
+        ql_year_fraction_conv = QuantLibToolKit.set_year_fraction_convention(
             year_fraction_conv=self._s_year_fraction_conv)
         ql_calendar = QuantLibToolKit.set_calendar(country=self._s_calendar)
 
@@ -189,13 +188,13 @@ class TradeCalendarSchedule():
             # termination_date
             termination_date = args[1] if len(args) > 1 else kwargs[
                 "valuation_date"] if "valuation_date" in kwargs else self.get_termination_date()
-            #calendar_name
+            # calendar_name
             calendar_name = args[2] if len(args) > 2 else kwargs[
                 "calendar_name"] if "calendar_name" in kwargs else self.get_calendar_name()
-            #year_convention
+            # year_convention
             year_convention = args[3] if len(args) > 3 else kwargs[
                 "year_convention"] if "year_convention" in kwargs else self.get_year_fraction_convention_name()
-            #frequency
+            # frequency
             year_frequency = args[4] if len(args) > 4 else kwargs[
                 "year_frequency"] if "year_frequency" in kwargs else self.get_frequency()
 
@@ -234,39 +233,6 @@ class TradeCalendarSchedule():
                       }
 
         return params_set
-
-    def set_year_fraction_convention(self, year_fraction_conv: str = "Actual365") -> QL:
-        """set_year_fraction_convention
-        Description
-        -----------
-        Function defines how we will calculate year fraction.
-
-        Parameters
-        ----------
-        year_fraction_conv : string
-             Available alternatives: Actual360, Actual365, ActualActual, Thirty360, Business252
-
-
-        Returns
-        -------
-        ql.FractionConvention
-
-        """
-        if (year_fraction_conv == 'Actual360'):
-            day_count = ql.Actual360()
-            return day_count
-        elif (year_fraction_conv == 'Actual365'):
-            day_count = ql.Actual365Fixed()
-            return day_count
-        elif (year_fraction_conv == 'ActualActual'):
-            day_count = ql.ActualActual()
-            return day_count
-        elif (year_fraction_conv == 'Thirty360'):
-            day_count = ql.Thirty360()
-            return day_count
-        elif (year_fraction_conv == 'Business252'):
-            day_count = ql.Business252()
-            return day_count
 
     def set_schedule(self,
                      effectiveDate: ql.Date,
