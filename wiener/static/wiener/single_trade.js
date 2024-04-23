@@ -94,6 +94,11 @@ $("#pv-able-btn").click(function (e){
 })
 
 
+const backBtn=document.getElementById("back-btn")
+
+backBtn.addEventListener('click',()=>{
+    history.back()
+})
 
 
 
