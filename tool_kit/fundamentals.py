@@ -1,5 +1,5 @@
 import QuantLib as ql
-from quantlib_tool_kit import QuantLibToolKit
+from tool_kit.quantlib_tool_kit import QuantLibToolKit
 from app_settings import AppSettings
 
 
