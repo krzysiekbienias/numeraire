@@ -10,6 +10,8 @@ const pv_dict=document.getElementById("pv")
 var html_content=document.getElementById('res')
 var price_trade=document.getElementById('price-trade')
 
+var backBtn=document.getElementById("back-btn")
+
 
 
 // --------------------------
@@ -27,7 +29,7 @@ $("#price-trade-btn").click(function (e){
     const volatility=document.getElementById('id_volatility')
     $.ajax({
         type:"POST",
-        url:'',
+        url:'single-trade',
         data:{
             "csrfmiddlewaretoken":csrf[0].value,
             "valuation_date":valuation.value,
@@ -94,10 +96,12 @@ $("#pv-able-btn").click(function (e){
 })
 
 
-const backBtn=document.getElementById("back-btn")
 
-backBtn.addEventListener('click',()=>{
-    history.back()
+
+backBtn.addEventListener("click",()=>{
+    window.history.go(-1)
+
+
 })
 
 

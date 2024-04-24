@@ -1,9 +1,17 @@
-console.log('lala')
-
 
 
 console.log(window.location)
 const tradeUrl=window.location.href
+
+const formModal=document.getElementById("form-modal-trades")
+
+const openModalBtn=document.getElementById("open-modal-btn")
+openModalBtn,addEventListener('click', ()=>{
+    formModal.classList.remove('hidden')
+
+})
+
+
 
 $.ajax({
     type:"GET",
@@ -56,3 +64,8 @@ $.ajax({
         console.log(error)
     }
 })
+
+
+
+
+

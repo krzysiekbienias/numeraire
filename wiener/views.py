@@ -1,45 +1,14 @@
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseNotFound, HttpResponseRedirect, JsonResponse
 from .models import TradeBook, DerivativePrice
-from .forms import MarketForm
+from .forms import MarketForm, BookTradeForm
 from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
 import decimal
 
 decimal.getcontext().prec = 6
 
+
 # Create your views here.
-
-
-# --------------------------
-# sudo form
-# --------------------------
-
-valuation_date: str = "2023-05-12"
-trade_id = 2
-
-
-# --------------------------
-# end sudo form
-# --------------------------
-
-
-def view_suite():
-    european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
-    european_option.prepare_priceable_dictionary()
-    price = european_option.run_analytical_pricer()
-    print(price)
-    print("the end.")
-
-
-#     # this function mimic behavior of wrapper
-
-
-# view_suite()
-
-
-# --------------------------
-# End Region source code objects
-# --------------------------
 
 
 def landing_page(request):
@@ -77,8 +46,10 @@ def trade_book(request):
 
                     }
             data.append(item)
+
         return JsonResponse({'trades': data})
-    return render(request, "wiener/trade-book.html")
+    trade_book_form = BookTradeForm(request.POST or None)
+    return render(request, "wiener/trade-book.html", {'trade_book_form': trade_book_form})
 
 
 def single_trade(request, trade_id: int):
