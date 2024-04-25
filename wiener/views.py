@@ -41,7 +41,6 @@ def trade_book(request):
                     'trade_date': obj.trade_date,
                     'trade_maturity': obj.trade_maturity,
                     'dividend': obj.dividend,
-                    'created_at': obj.created_at,
                     'user_id': obj.user_id
 
                     }

@@ -6,9 +6,14 @@ const tradeUrl=window.location.href
 const formModal=document.getElementById("form-modal-trades")
 
 const openModalBtn=document.getElementById("open-modal-btn")
-openModalBtn,addEventListener('click', ()=>{
+openModalBtn.addEventListener('click', ()=>{
     formModal.classList.remove('hidden')
 
+})
+
+const cancelModalBtn=document.getElementById("cancel-modal-btn")
+cancelModalBtn.addEventListener('click' ,()=>{
+    formModal.classList.add('hidden')
 })
 
 
@@ -32,7 +37,6 @@ $.ajax({
                     +`<th scope="col">Trade Maturity</th>`
                     +`<th scope="col">Strike</th>`
                     +`<th scope="col">Dividend</th>`
-                    +`<th scope="col">created_at</th>`
                     +`<th scope="col">user_id</th>`
 
                 +`<tr>`+
@@ -49,7 +53,6 @@ $.ajax({
         +`<td>`+el.trade_maturity+`</td>`
         +`<td>`+el.strike+`</td>`
         +`<td>`+el.dividend+`</td>`
-        +`<td>`+el.created_at+`</td>`
         +`<td>`+el.user_id+`</td>`
 
         +`<tr>`

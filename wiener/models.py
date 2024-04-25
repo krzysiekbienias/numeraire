@@ -12,7 +12,6 @@ class TradeBook(models.Model):
     trade_maturity = models.DateField()
     strike = models.FloatField()
     dividend = models.FloatField()
-    created_at = models.DateTimeField(default=timezone.now)
     user_id = models.CharField(default="kbienias", max_length=100)
 
 
