@@ -1,22 +1,29 @@
 
-
-console.log(window.location)
 const tradeUrl=window.location.href
 
-const formModal=document.getElementById("form-modal-trades")
 
+const modal=document.getElementById("modal-content")
+
+
+// open and close modal
 const openModalBtn=document.getElementById("open-modal-btn")
 openModalBtn.addEventListener('click', ()=>{
-    formModal.classList.remove('hidden')
+    modal.classList.remove('hidden')
 
 })
 
 const cancelModalBtn=document.getElementById("cancel-modal-btn")
 cancelModalBtn.addEventListener('click' ,()=>{
-    formModal.classList.add('hidden')
+    modal.classList.add('hidden')
 })
 
+//reference to form where we add new trade to db.
+const newTradeForm=document.getElementById("new-trade-form")
 
+//we need also grab all possible fields in this form.
+
+//csrf token
+const csrf=document.getElementsByName('csrfmiddlewaretoken')
 
 $.ajax({
     type:"GET",
@@ -69,6 +76,40 @@ $.ajax({
 })
 
 
+$("#add-trade-btn").click(function(e){
+    e.preventDefault()
+    const underlier_ticker=document.getElementById("id_underlier_ticker")
+    const product_type=document.getElementById("id_product_type")
+    const payoff=document.getElementById("id_payoff")
 
+    const trade_date=document.getElementById("id_trade_date")
+    const trade_maturity=document.getElementById("id_trade_maturity")
+    const strike=document.getElementById("id_strike")
+    const dividend=document.getElementById("id_dividend")
+    const user_id=document.getElementById("id_user_id")
+
+    $.ajax({
+        type: 'POST',
+        url: '',
+        data:{
+            'csrfmiddlewaretoken':csrf[0].value,
+            "underlier_ticker":underlier_ticker.value,
+            "product_type":product_type.value,
+            "payoff":payoff.value,
+            "trade_date":trade_date.value,
+            "trade_maturity":trade_maturity.value,
+            "strike":strike.value,
+            "dividend":dividend.value,
+            "user_id":user_id.value
+        },
+        dataType:'json',
+        success:function (data){
+            console.log(data)
+        },
+        error:function(error){
+            console.log(error)
+        }
+    })
+})
 
 

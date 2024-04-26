@@ -28,8 +28,10 @@ def equities(request):
 
 
 def trade_book(request):
+    new_trade_model_form = BookTradeForm(request.POST or None,initial={'dividend':0})
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':  # check if request is ajax
         all_trades_qs = TradeBook.objects.all()
+
         data = []
         for obj in all_trades_qs:
             item = {'pk': obj.pk,
@@ -45,10 +47,22 @@ def trade_book(request):
 
                     }
             data.append(item)
-
+        if request.method == 'POST':
+            if new_trade_model_form.is_valid():
+                instance=new_trade_model_form.save(commit=False)
+                instance.save()
         return JsonResponse({'trades': data})
-    trade_book_form = BookTradeForm(request.POST or None)
-    return render(request, "wiener/trade-book.html", {'trade_book_form': trade_book_form})
+    return render(request, "wiener/trade-book.html",{"new_trade_form": new_trade_model_form})
+
+
+# def add_new_trade(request):
+#     new_trade_form = BookTradeForm(request.POST or None)
+#     if request.method == 'POST':
+#
+#         if new_trade_form.is_valid():
+#             instance = new_trade_form.save()
+#             instance.save()
+#     return render(request, "wiener/trade-book.html", {"new_trade_form": new_trade_form})
 
 
 def single_trade(request, trade_id: int):
