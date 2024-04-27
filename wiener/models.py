@@ -21,6 +21,6 @@ class DerivativePrice(models.Model):
     valuation_date = models.DateField()
     price_status = models.CharField(max_length=25)
     analytical_price = models.FloatField()
-    extra_price = models.FloatField()
+    extra_price = models.FloatField(default=-1)
     created_at = models.DateTimeField(default=timezone.now)
     user_id = models.CharField(default="kbienias", max_length=100)

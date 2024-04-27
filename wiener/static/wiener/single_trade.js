@@ -29,7 +29,7 @@ $("#price-trade-btn").click(function (e){
     const volatility=document.getElementById('id_volatility')
     $.ajax({
         type:"POST",
-        url:'single-trade',
+        url:'',
         data:{
             "csrfmiddlewaretoken":csrf[0].value,
             "valuation_date":valuation.value,

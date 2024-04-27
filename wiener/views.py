@@ -28,7 +28,7 @@ def equities(request):
 
 
 def trade_book(request):
-    new_trade_model_form = BookTradeForm(request.POST or None,initial={'dividend':0})
+    new_trade_model_form = BookTradeForm(request.POST or None, initial={'dividend': 0})
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':  # check if request is ajax
         all_trades_qs = TradeBook.objects.all()
 
@@ -49,10 +49,10 @@ def trade_book(request):
             data.append(item)
         if request.method == 'POST':
             if new_trade_model_form.is_valid():
-                instance=new_trade_model_form.save(commit=False)
+                instance = new_trade_model_form.save(commit=False)
                 instance.save()
         return JsonResponse({'trades': data})
-    return render(request, "wiener/trade-book.html",{"new_trade_form": new_trade_model_form})
+    return render(request, "wiener/trade-book.html", {"new_trade_form": new_trade_model_form})
 
 
 # def add_new_trade(request):
@@ -76,18 +76,19 @@ def single_trade(request, trade_id: int):
                 valuation_date=market_data_form.cleaned_data["valuation_date"],
                 trade_id=one_trade.pk)
 
-            # row_to_insert=DerivativePrice(trade_id=single_trade.valuation,
-            #                            valuation_date=single_trade.valuation_date,
-            #                            price_status='Success',
-            #                            analytical_price=5,
-            #                            monte_carlo_price=5.5,
-            #                            extra_price=5.1
-            #                            )
-            # if not DerivativePrice.objects.filter(pk=trade_book.id).exists():
-            #     mess=f"Price for trade {trade_book.id} has been inserted."
-            #     row_to_insert.save()
-            # else:
-            #     mess=f"Trade {trade_book.id} already has been priced."
+            row_to_insert = DerivativePrice(trade_id=TradeBook.objects.get(pk=trade_id),
+                                            valuation_date=european_option._valuation_date,
+                                            price_status='Success',
+                                            analytical_price=european_option.run_analytical_pricer(),
+                                            extra_price=-1,
+                                            created_at='2024-04-25',
+                                            user_id=one_trade.user_id,
+                                            )
+            if not DerivativePrice.objects.filter(pk=one_trade.trade_id).exists():
+                mess = f"Price for trade {one_trade.trade_id} has been inserted."
+                row_to_insert.save()
+            else:
+                mess = f"Trade {one_trade.trade_id} already has been priced."
             return JsonResponse(
                 {"pv_dict": european_option.pricable_dict, "price_trade": european_option.run_analytical_pricer()})
 
