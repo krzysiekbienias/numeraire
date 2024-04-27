@@ -90,7 +90,7 @@ def single_trade(request, trade_id: int):
             else:
                 mess = f"Trade {one_trade.trade_id} already has been priced."
             return JsonResponse(
-                {"pv_dict": european_option.pricable_dict, "price_trade": european_option.run_analytical_pricer()})
+                {"pv_dict": european_option.priceable_dict, "price_trade": european_option.run_analytical_pricer()})
 
     content = {"id": one_trade.pk, "single_trade": one_trade, "market_data_form": market_data_form}
 
