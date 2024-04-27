@@ -1,7 +1,8 @@
 
 # Numeraire library
 
-The package aim is to provide a comprehensive set of tools to help in different aspect of pricing plain vanilla european options in Black Scholes framework. Additional module provides that provides also extra module for sensitivity analysis. 
+The application's aim is to provide a comprehensive set of tools to help in different aspect of pricing  derivative product
+Additional module provides that provides also extra module for sensitivity analysis. 
 
 #### Table of contents
 [Instalation](#Instalation)  
@@ -14,9 +15,14 @@ The package aim is to provide a comprehensive set of tools to help in different 
 [Utils](#Utils)  
 
 ## Instalation
-To use the package you need to clone the repository first. The package itself has a numerous dependencies and it is better to isolate environment for this module. To run it properly ple
+To use the package you need to clone the repository first. The package itself has a numerous dependencies and it is
+better to isolate environment for this module. 
 ## Dependecies
-To run the code smoothly a User must first import QuantLib library and Django. From QuantLib we laverage only calendar schedule and lifecycle of trades. Django provides framework for FrondEnd. All analytical formula are implemented from scratch.
+To run the code smoothly a User must first import QuantLib library and Django Tailwind. From QuantLib we leverage only calendar 
+schedule and lifecycle of trades. Django provides framework for FrondEnd. All analytical formula are implemented from
+scratch.
+
+
 
 ## Structure
 ```
