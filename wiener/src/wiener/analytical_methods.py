@@ -37,23 +37,41 @@ class AnalyticalPricingEnginesInterface:
 
 # Use defult parameters to be able to implement class using
 class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
-    def __init__(self, valuation_date: str, trade_id: (int, None) = None):
+    def __init__(self, valuation_date: str, trade_id: (int, None) = None,**kwargs):
         self._valuation_date = valuation_date
         self._trade_id = trade_id
 
         self._market_environment = self.set_up_market_environment()
         self._calendar_schedule = TradeCalendarSchedule(valuation_date=self._valuation_date,
-                                                        termination_date=TradeBook.objects.get(
-                                                            pk=trade_id).trade_maturity,
-                                                        frequency='once')
-        self.pricable_dict = self.prepare_priceable_dictionary()
+                                                        termination_date=kwargs.get('trade_maturity'),frequency='once') \
+                                                        if 'trade_maturity' in kwargs\
+                                                        else TradeCalendarSchedule(valuation_date=self._valuation_date,
+                                                                                termination_date=
+                                                                                TradeBook.objects.get(pk=trade_id).trade_maturity,
+                                                                                frequency='once')
+        self.priceable_dict = self.prepare_priceable_dictionary()
 
     def set_up_market_environment(self, **kwargs):
 
         return MarketEnvironmentHandler(valuation_date=self._valuation_date, trade_id=self._trade_id)
 
-    def upload_trade_attributes_from_booking_system(self, trade_id: int) -> dict:
-        db_trade_info = {'underlier': None,
+    def set_trade_attributes(self, trade_id: int,**kwargs) -> dict:
+        """
+        Description
+        -----------
+        This method sets up the attributes of the trade. If we pass kwargs it will populate parameters directly, otherwise,
+        it will fetch parameters from data base, according to trade id.
+        Parameters
+        ----------
+        trade_id
+        kwargs
+
+        Returns
+        -------
+        dict
+
+        """
+        trade_info = {'underlier': None,
                          "product_type": None,
                          "payoff": None,
                          "trade_date": None,
@@ -62,21 +80,36 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                          "dividend": None,
                          "tau": None}
 
-        db_trade_info['underlier'] = TradeBook.objects.get(pk=trade_id).underlier_ticker
-        db_trade_info['product_type'] = TradeBook.objects.get(pk=trade_id).product_type
-        db_trade_info['payoff'] = TradeBook.objects.get(pk=trade_id).payoff
-        db_trade_info['trade_maturity'] = TradeBook.objects.get(pk=trade_id).trade_maturity
-        db_trade_info['strike'] = TradeBook.objects.get(pk=trade_id).strike
-        db_trade_info['dividend'] = TradeBook.objects.get(pk=trade_id).dividend
-        db_trade_info["tau"] = self._calendar_schedule.year_fractions
-        return db_trade_info
+        trade_info['underlier'] = kwargs['underlier'] if 'underlier' in kwargs else TradeBook.objects.get(pk=trade_id).underlier_ticker
+        trade_info['product_type'] =kwargs['product_type'] if 'product_type' in kwargs else TradeBook.objects.get(pk=trade_id).product_type
+        trade_info['payoff'] = kwargs['payoff'] if 'payoff' in kwargs else TradeBook.objects.get(pk=trade_id).payoff
+        trade_info['trade_maturity'] =kwargs['trade_maturity'] if 'trade_maturity' in kwargs else TradeBook.objects.get(pk=trade_id).trade_maturity
+        trade_info['strike'] =kwargs['strike'] if 'strike' in kwargs else TradeBook.objects.get(pk=trade_id).strike
+        trade_info['dividend'] = kwargs['dividend'] if 'dividend' in kwargs else TradeBook.objects.get(pk=trade_id).dividend
+        trade_info["tau"] = kwargs['tau'] if 'tau' in kwargs else self._calendar_schedule.year_fractions
+        return trade_info
 
     def prepare_priceable_dictionary(self, **kwargs) -> dict:
-        # market part
+        """
+        Description
+        -----------
+        Priceable dictionary it is a dictionary that contains information that is combination of trade attributes
+        and market data parameters.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+        dict
+
+        """
         market_data_dict = {'underlier_price': None,
                             'volatility': None,
                             'risk_free_rate': None,
                             'discount_factor': None}
+        priceable_dict={}
         market_data_dict['underlier_price'] = kwargs['underlier_price'] if 'underlier_price' in kwargs else \
             self._market_environment.extract_underlier_quotation()[
                 TradeBook.objects.get(pk=self._trade_id).underlier_ticker][1]
@@ -86,15 +119,29 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
             'risk_free_rate'] if 'risk_free_rate' in kwargs else self._market_environment.get_risk_free_rate()
         # trade attributes part
         if self._trade_id is not None:
-            trade_attributes = self.upload_trade_attributes_from_booking_system(trade_id=self._trade_id)
-            market_data_dict.update(trade_attributes)
-            market_data_dict['discount_factor'] = kwargs[
+            trade_attributes = self.set_trade_attributes(trade_id=self._trade_id)
+            priceable_dict.update(trade_attributes)
+            priceable_dict.update(market_data_dict)
+            priceable_dict['discount_factor'] = kwargs[
                 'discount_factor'] if 'discount_factor' in kwargs else self._market_environment.extract_discount_factors(
-                maturity_date=market_data_dict['trade_maturity'])
+                maturity_date=priceable_dict['trade_maturity'])
             return market_data_dict
         else:
+            trade_attributes=self.set_trade_attributes(trade_id=None,underlier=kwargs['underlier'],
+                                                       product_type=kwargs['product_type'],payoff=kwargs['payoff'],
+                                                       trade_maturity=kwargs['trade_maturity'],
+                                                       strike=kwargs['strike'],
+                                                       dividend=kwargs['dividend'],
+                                                       tau=kwargs['tau'])
+            priceable_dict.update(trade_attributes)
+            priceable_dict.update(market_data_dict)
+            priceable_dict['discount_factor'] = kwargs[
+                'discount_factor'] if 'discount_factor' in kwargs else self._market_environment.extract_discount_factors(
+                maturity_date=priceable_dict['trade_maturity'])
+
+            return trade_attributes
             # here we will run create trade function where we build dummy trade from ground
-            NotImplementedError
+
 
     def d1(self,
            strike: float,
@@ -171,19 +218,19 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
         return d2
 
     def run_analytical_pricer(self):
-        d1 = self.d1(underlying_price=self.pricable_dict["underlier_price"],
-                     strike=self.pricable_dict["strike"],
-                     time_to_maturity=self.pricable_dict["tau"],
-                     risk_free_rate=self.pricable_dict["risk_free_rate"],
-                     volatility=self.pricable_dict["volatility"])
-        d2 = self.d2(underlying_price=self.pricable_dict["underlier_price"],
-                     strike=self.pricable_dict["strike"],
-                     time_to_maturity=self.pricable_dict["tau"],
-                     risk_free_rate=self.pricable_dict["risk_free_rate"],
-                     volatility=self.pricable_dict["volatility"])
-        if self.pricable_dict['payoff'] == "call":
-            return self.pricable_dict["underlier_price"] * norm.cdf(d1, 0, 1) - self.pricable_dict["strike"] * \
-                self.pricable_dict["discount_factor"] * norm.cdf(d2, 0, 1)
+        d1 = self.d1(underlying_price=self.priceable_dict["underlier_price"],
+                     strike=self.priceable_dict["strike"],
+                     time_to_maturity=self.priceable_dict["tau"],
+                     risk_free_rate=self.priceable_dict["risk_free_rate"],
+                     volatility=self.priceable_dict["volatility"])
+        d2 = self.d2(underlying_price=self.priceable_dict["underlier_price"],
+                     strike=self.priceable_dict["strike"],
+                     time_to_maturity=self.priceable_dict["tau"],
+                     risk_free_rate=self.priceable_dict["risk_free_rate"],
+                     volatility=self.priceable_dict["volatility"])
+        if self.priceable_dict['payoff'] == "call":
+            return self.priceable_dict["underlier_price"] * norm.cdf(d1, 0, 1) - self.priceable_dict["strike"] * \
+                self.priceable_dict["discount_factor"] * norm.cdf(d2, 0, 1)
         else:
-            return self.pricable_dict["strike"] * self.pricable_dict["discount_factor"] * norm.cdf(-d2, 0, 1) - \
-                self.pricable_dict["underlier_price"] * norm.cdf(-d1, 0, 1)
+            return self.priceable_dict["strike"] * self.priceable_dict["discount_factor"] * norm.cdf(-d2, 0, 1) - \
+                self.priceable_dict["underlier_price"] * norm.cdf(-d1, 0, 1)
