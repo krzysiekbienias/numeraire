@@ -26,6 +26,9 @@ if __name__ == '__main__':
                                                         grid_time_step='daily',
                                                         initialisation_point=init_point)
 
+    geometric_brownian_motion.euler_discretization_schema(simulation_dates=geometric_brownian_motion.define_grid()[0],
+                                                          incremental=geometric_brownian_motion.define_grid()[1])
+
 
     discount_factor = InterestRateFundamentals.discount_factor(spot_rate=spot_rate, freq_period="annual",
                                                                valuation_date=valuation_date,
