@@ -9,3 +9,4 @@ class AppSettings:
     NUMBER_OF_SIMULATIONS: int = 1000
     CALENDAR: str = 'theUK'
     DEFAULT_YEAR_FRACTION_CONVENTION: str = 'Actual365'
+    SIMULATION_SCHEMA: str = 'exact_solution'
