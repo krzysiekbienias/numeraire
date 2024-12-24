@@ -11,7 +11,7 @@ class SimulationInterface:
     def chose_simulation_schema(self):
         pass
 
-    def model_underlier(self):
+    def model_underlier(self,simulation_schema):
         pass
 
     def path_metrics(self):
@@ -153,11 +153,54 @@ class GeometricBrownianMotion(SimulationInterface):
         x_ip1[:, 0] = self._initialisation_point
         for t, dt in zip(range(1, len(x_ip1[0])), dts):
             z = np.random.standard_normal(paths_number)
-            x_ip1[:, t] = x_ip1[:, t - 1] + self._drift * x_ip1[:, t - 1] * dt +\
-                self._volatility*x_ip1[:, t - 1]  * np.sqrt(dt)*z+\
-                0.5 * self._volatility ** 2 * x_ip1[:,t - 1] * (dt*z**2 * np.sqrt(dt)-dt)
+            x_ip1[:, t] = x_ip1[:, t - 1] + self._drift * x_ip1[:, t - 1] * dt + \
+                          self._volatility * x_ip1[:, t - 1] * np.sqrt(dt) * z + \
+                          0.5 * self._volatility ** 2 * x_ip1[:, t - 1] * (dt * z ** 2 * np.sqrt(dt) - dt)
+        return np.transpose(x_ip1)
+
+    def exact_solution_discretization_schema(self,
+                                             simulation_dates,
+                                             incremental: List[float],
+                                             paths_number: int = AppSettings.NUMBER_OF_SIMULATIONS) -> np.array:
+        """
+        Description
+        -----------
+        Define the euler discretization schema.
+
+        Parameters
+        ----------
+        incremental
+        simulation_dates
+        paths_number
+
+        Returns
+        -------
+
+        """
+
+        dts = incremental
+        x_ip1 = np.zeros((paths_number, len(simulation_dates)))
+        x_ip1[:, 0] = self._initialisation_point
+        for t, dt in zip(range(1, len(x_ip1[0])), dts):
+            z = np.random.standard_normal(paths_number)
+            x_ip1[:, t] = x_ip1[:, t - 1] * np.exp(
+                (self._volatility - 0.5 * self._volatility ** 2) * dt +
+                self._volatility * np.sqrt(dt) * z)
         return np.transpose(x_ip1)
 
     # --------------
     # End Region methods
     # --------------
+
+    def model_underlier(self, simulation_schema: str):
+        if simulation_schema == "euler":
+            return self.euler_discretization_schema(simulation_dates=self.define_grid()[0],
+                                                    incremental=self.define_grid()[1])
+        elif simulation_schema == "milstein":
+            return self.milstein_discretization_schema(simulation_dates=self.define_grid()[0],
+                                                    incremental=self.define_grid()[1])
+        elif simulation_schema == "exact_solution":
+            return self.exact_solution_discretization_schema(simulation_dates=self.define_grid()[0],
+                                                    incremental=self.define_grid()[1])
+        else:
+            raise ValueError("This schema does not exist! Please chose 'euler', 'milstein', 'exact_solution")

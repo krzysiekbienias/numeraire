@@ -23,3 +23,19 @@ class BookTradeForm(forms.ModelForm):
         widgets = {'product_type': forms.Select(choices=PROD_TYPE_SELECTION),
                    'payoff': forms.Select(choices=PAYOFF)}
 
+
+class DiscountFactorForm(forms.Form):
+    spot_rate = forms.FloatField(label="Spot Rate", initial=0.2)
+    valuation_date = forms.CharField(label="Market Date", initial="2023-05-12")
+    maturity_date = forms.CharField(label="Market Date", initial="2023-05-12")
+
+    FREQUENCY_PERIOD_SELECTION = (('daily', 'daily'), ('once', 'once'), ('monthly', 'monthly'), ('annual', 'annual'),
+                                  ('quarterly', 'quarterly'), ('semiannual', 'semiannual'))
+
+    frequency_period = forms.Select(choices=FREQUENCY_PERIOD_SELECTION)
+
+    YEAR_FRACTION_CONVENTION_SECTION = (("Actual360", "Actual360"), ("Actual365", "Actual365"),
+                                        ("ActualActual", "ActualActual"), ("Thirty360", "Thirty360"),
+                                        ("Business252", "Business252"))
+
+    year_fraction = forms.Select(choices=YEAR_FRACTION_CONVENTION_SECTION)

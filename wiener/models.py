@@ -5,7 +5,7 @@ from django.utils import timezone
 # Create your models here.
 class TradeBook(models.Model):
     trade_id = models.AutoField(primary_key=True)
-    underlier_ticker = models.CharField(max_length=25)
+    underlying_ticker = models.CharField(max_length=25)
     product_type = models.CharField(max_length=25)
     payoff = models.CharField(max_length=10)
     trade_date = models.DateField()

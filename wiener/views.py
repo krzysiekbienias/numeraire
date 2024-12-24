@@ -1,9 +1,12 @@
-from django.shortcuts import render
-from django.http import HttpResponse, HttpResponseNotFound, HttpResponseRedirect, JsonResponse
-from .models import TradeBook, DerivativePrice
-from .forms import MarketForm, BookTradeForm
-from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
 import decimal
+
+from django.http import JsonResponse
+from django.shortcuts import render
+
+from tool_kit.fundamentals import InterestRateFundamentals
+from .forms import MarketForm, BookTradeForm, DiscountFactorForm
+from .models import TradeBook, DerivativePrice
+from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
 
 decimal.getcontext().prec = 6
 
@@ -21,6 +24,41 @@ def home_page(request):
 
 def fundamentals(request):
     return render(request, "wiener/fundamentals.html")
+
+
+def fundamentals_interest_rate(request):
+    discount_factor_form = DiscountFactorForm(request.POST or None)
+    if request.method == "POST":
+        if discount_factor_form.is_valid():
+            discount_factor = InterestRateFundamentals.discount_factor(
+                spot_rate=discount_factor_form.cleaned_data['spot_rate'],
+                valuation_date=discount_factor_form.cleaned_data['valuation_date'],
+                maturity_date=discount_factor_form.cleaned_data['maturity_date'],
+                freq_period=discount_factor_form.cleaned_data['freq_period'],
+                year_fraction_convention=discount_factor_form.cleaned_data['year_fraction_convention'])
+            return JsonResponse({'discount_factor': discount_factor})
+
+    return render(request, "wiener/interest-rate.html")
+
+
+def fundamentals_fixed_income(request):
+    """
+    Description
+    -----------
+
+    Parameters
+    ----------
+    request
+
+    Returns
+    -------
+
+    """
+    return render(request, "wiener/fundamentals/fixed-income.html")
+
+
+def fundamentals_arbitrage(request):
+    return render(request, "wiener/fundamentals/arbitrage.html")
 
 
 def equities(request):

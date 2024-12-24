@@ -1,36 +1,17 @@
-from tool_kit.fundamentals import InterestRateFundamentals
 import os
+
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
-
-from wiener.src.wiener.underlier_modeling import GeometricBrownianMotion
-
+from wiener.src.wiener.analytical_methods import EuropeanPlainVanillaOption
 
 if __name__ == '__main__':
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'numeraire.base.settings')
+    trade_id = 1
+    valuation_date = '2023-05-10'
 
-
-    valuation_date: str = "2023-05-12"
-    maturity_date: str = "2024-05-12"
-    spot_rate = 0.02
-    drift =0.4
-    init_point=44
-    volatility=0.23
-
-    geometric_brownian_motion = GeometricBrownianMotion(drift=drift,
-                                                        volatility=volatility,
-                                                        start_simulation_date=valuation_date,
-                                                        end_simulation_date=maturity_date,
-                                                        grid_time_step='daily',
-                                                        initialisation_point=init_point)
-
-    geometric_brownian_motion.euler_discretization_schema(simulation_dates=geometric_brownian_motion.define_grid()[0],
-                                                          incremental=geometric_brownian_motion.define_grid()[1])
-
-
-    discount_factor = InterestRateFundamentals.discount_factor(spot_rate=spot_rate, freq_period="annual",
-                                                               valuation_date=valuation_date,
-                                                               maturity_date=maturity_date)
+    european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
+    european_option.set_up_market_environment(risk_free_rate=0.03)
+    european_option.set_trade_attributes(trade_id=trade_id)
+    price=european_option.run_analytical_pricer()
     print("THE END")
