@@ -1,13 +1,32 @@
 import QuantLib as ql
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 from app_settings import AppSettings
+from typing import List, Any
+
 
 
 class InterestRateFundamentals:
 
+
+
     @staticmethod
-    def get_year_fraction(schedule: ql.Schedule, convention) -> float:
-        lf_year_fraction = []
+    def get_number_of_periods(schedule: ql.Schedule, convention:str) -> (float,List[float]):
+        """
+        Description
+        -----------
+        Calculates the number of periods for a given schedule.
+        Parameters
+        ----------
+        schedule: ql.Schedule
+        convention: str
+
+        Returns
+        -------
+        (float,List[float])
+
+        """
+
+        lf_year_fraction: list[Any] = []
         scheduled_dates = list(schedule)
         if len(scheduled_dates) == 2:
             # frequency probably set as 'once' so only valuation and termination date has been provided

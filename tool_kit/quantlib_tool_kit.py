@@ -1,6 +1,7 @@
-import QuantLib as ql
-from typing import TypeVar, Iterable, Tuple, Dict, List, Generic, NewType
 from datetime import datetime
+from typing import TypeVar, Dict, List, NewType
+
+import QuantLib as ql
 
 QL = NewType("QL", ql)
 DT = TypeVar('DT', bound=datetime)
@@ -92,14 +93,16 @@ class QuantLibToolKit:
     @staticmethod
     def set_date_corrections_schema(corrections_map: HM = _weekday_corrections,
                                     correction_rule: str = "Following") -> int:
+
         """setBusinessConvention
         Description
         -----------
-        This method defines business convention.
+         It is a day-count convention that adjusts the date to the next valid business day if it falls on a holiday or
+        weekend.
 
         Returns
         -------
-        _type_
+
             _description_
         """
         return corrections_map[correction_rule]
@@ -110,7 +113,11 @@ class QuantLibToolKit:
         """set_rule_of_date_generation
         Description
         -----------
-        A rule how to adjust non-working day on working day. We may move forward or backward
+        A wrapper to control ql.DataGeneration enumeration to control how a schedule of dates is generated relative to
+        start date. With ql.DateGeneration.Backward, the schedule is generated starting from the end date and working
+        backwards to the start date. This is often used in financial instruments like bond schedules or swap schedules
+        where the last payment date is fixed, and the previous dates (coupon or payment dates) are determined by moving
+        backward from that date.
 
         Returns
         -------
@@ -121,44 +128,6 @@ class QuantLibToolKit:
             return ql.DateGeneration.Forward
         elif date_generation_rules == "backward":
             return ql.DateGeneration.Backward
-
-    @staticmethod
-    def define_schedule(valuation_date: str,
-                        termination_date: str,
-                        freq_period: str = "monthly",
-                        calendar: str = "theUK") -> ql.Schedule:
-        """define_schedule
-        Description
-        -----------
-        Simpler version of defining schedule object. Only required parameters
-
-        Parameters
-        ----------
-        valuation_date : str
-            _description_
-        termination_date : str
-            _description_
-        freq_period : str, optional
-            _description_, by default "monthly"
-        calendar : str, optional
-            _description_, by default "theUK"
-
-        Returns
-        -------
-        ql.Schedule
-            _description_
-        """
-        if isinstance(valuation_date, str) or isinstance(termination_date, str):
-            return ql.MakeSchedule(effectiveDate=QuantLibToolKit.string_2ql_date(valuation_date),
-                                   terminationDate=QuantLibToolKit.string_2ql_date(termination_date),
-                                   frequency=QuantLibToolKit.set_frequency(freq_period),
-                                   calendar=QuantLibToolKit.set_calendar(calendar))
-        else:
-            return ql.MakeSchedule(effectiveDate=valuation_date,
-                                   terminationDate=termination_date,
-                                   frequency=QuantLibToolKit.set_frequency(freq_period),
-                                   calendar=QuantLibToolKit.set_calendar(calendar))
-
 
     @staticmethod
     def set_frequency(freq_period: str) -> int:
@@ -179,7 +148,8 @@ class QuantLibToolKit:
         """
         if freq_period not in ('daily', "once", "monthly", "quarterly", "annual", "semiannual"):
             raise ValueError(
-                " Name of the period must be one of following 'daily', 'once','monthly','quarterly','annual','semiannual'. ")
+                "Name of the period must be one of following 'daily', 'once','monthly','quarterly','annual',"
+                "'semiannual'. ")
 
         if freq_period == 'daily':
             return ql.Daily
@@ -220,3 +190,74 @@ class QuantLibToolKit:
             return ql.Thirty360()
         elif year_fraction_conv == 'Business252':
             return ql.Business252()
+
+    @staticmethod
+    def define_schedule(valuation_date: str,
+                        termination_date: str,
+                        freq_period: str = "monthly",
+                        calendar: str = "theUK",
+                        correction_rule: str = "Following") -> ql.Schedule:
+        """define_schedule
+        Description
+        -----------
+        ql.MakeSchedule is a factory function that creates a schedule based on the parameters passed to it.
+         It is essentially a more flexible way to create a Schedule object.
+
+        Parameters
+        ----------
+
+        valuation_date : str
+            _description_
+        termination_date : str
+            _description_
+        freq_period : str, optional
+            _description_, by default "monthly"
+        calendar : str, optional
+            _description_, by default "theUK"
+        correction_rule : str
+
+        Returns
+        -------
+        ql.Schedule
+            _description_
+        """
+        if isinstance(valuation_date, str) or isinstance(termination_date, str):
+            return ql.MakeSchedule(effectiveDate=QuantLibToolKit.string_2ql_date(valuation_date),
+                                   terminationDate=QuantLibToolKit.string_2ql_date(termination_date),
+                                   frequency=QuantLibToolKit.set_frequency(freq_period),
+                                   calendar=QuantLibToolKit.set_calendar(calendar),
+                                   convention=QuantLibToolKit.set_date_corrections_schema(
+                                       corrections_map=QuantLibToolKit._weekday_corrections,
+                                       correction_rule=correction_rule),
+                                   endOfMonth=True)
+        else:
+            return ql.MakeSchedule(effectiveDate=valuation_date,
+                                   terminationDate=termination_date,
+                                   frequency=QuantLibToolKit.set_frequency(freq_period),
+                                   calendar=QuantLibToolKit.set_calendar(calendar),
+                                   convention=QuantLibToolKit.set_date_corrections_schema(
+                                       corrections_map=QuantLibToolKit._weekday_corrections,
+                                       correction_rule=correction_rule),
+                                   endOfMonth=True)
+
+    @staticmethod
+    def display_schedule(schedule: ql.Schedule):
+        print(list(schedule))
+
+    @staticmethod
+    def consecutive_year_fraction(schedule: ql.Schedule, day_count: ql.DayCounter = None) -> List[float]:
+        if day_count is None:
+            day_count = ql.Actual365Fixed()
+        yf_arr = []
+        for i in range(1, len(schedule)):
+            yf_arr.append(day_count.yearFraction(schedule[i - 1], schedule[i]))
+        return yf_arr
+
+    @staticmethod
+    def cumulative_year_fraction(schedule: ql.Schedule, day_count: ql.DayCounter = None) -> List[float]:
+        if day_count is None:
+            day_count = ql.Actual365Fixed()
+        yf_arr = []
+        for i in range(1, len(schedule)):
+            yf_arr.append(day_count.yearFraction(schedule[0], schedule[i]))
+        return yf_arr

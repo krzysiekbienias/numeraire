@@ -15,3 +15,5 @@ if __name__ == '__main__':
     european_option.set_trade_attributes(trade_id=trade_id)
     price=european_option.run_analytical_pricer()
     print("THE END")
+
+
