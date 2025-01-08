@@ -27,8 +27,8 @@ class BondsInterface:
 class FixedRateBond:
     coupon_divider = dict(quarterly=4, semiannually=2, monthly=12)
 
-    def __init__(self, id):
-        self.id = id
+    def __init__(self):
+        self.id:int = 1
         self.face_value: float = 1000
         self.coupon_rate: float = 0.05
         self.coupon_frequency: str = 'quarterly'
