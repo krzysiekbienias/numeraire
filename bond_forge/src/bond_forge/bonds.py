@@ -42,18 +42,28 @@ class FixedRateBond:
                     coupon_frequency: str,
                     maturity_date: str,
                     issue_date: str,
-                    is_callable: bool, call_price: (float, None)):
+                    is_callable: bool,
+                    call_price: (float, None)):
         self.face_value = face_value
         self.coupon_rate = coupon_rate
         self.maturity_date = maturity_date
         self.issue_date = issue_date
         self.coupon_frequency = coupon_frequency
+        self.is_callable = is_callable
         if self.is_callable:
             self.call_price = call_price
         else:
             self.call_price = None
 
+
+
     def create_payment_schedule(self):
+        # Convert string dates to QuantLib.Date
+        issue_date_ql = ql.DateParser.parseISO(self.issue_date)
+        maturity_date_ql = ql.DateParser.parseISO(self.maturity_date)
+        # Validate the dates
+        if issue_date_ql > maturity_date_ql:
+            raise ValueError("Issue date must be earlier than maturity date")
 
         schedule: ql.Schedule = QuantLibToolKit().define_schedule(valuation_date=self.issue_date,
                                                                   termination_date=self.maturity_date,
