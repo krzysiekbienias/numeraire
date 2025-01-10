@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     #my apps
     'wiener',
-    'bond_forge'
+    'bond_forge',
     #rd party apps
     'tailwind',
     'theme',
