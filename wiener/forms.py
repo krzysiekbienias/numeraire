@@ -12,7 +12,7 @@ class BookTradeForm(forms.ModelForm):
     class Meta:
         model = TradeBook
         fields = (
-            'underlier_ticker', 'product_type', 'payoff', 'trade_date', 'trade_maturity', 'strike', 'dividend'
+            'underlying_ticker', 'product_type', 'payoff', 'trade_date', 'trade_maturity', 'strike', 'dividend'
             , 'user_id')
 
         PROD_TYPE_SELECTION = (

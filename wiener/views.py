@@ -73,8 +73,8 @@ def trade_book(request):
         data = []
         for obj in all_trades_qs:
             item = {'pk': obj.pk,
-                    'underlier_ticker': obj.underlier_ticker,
-                    'und': obj.underlier_ticker,
+                    'underlying_ticker': obj.underlying_ticker,
+                    'und': obj.underlying_ticker,
                     'strike': obj.strike,
                     'product_type': obj.product_type,
                     'payoff': obj.payoff,

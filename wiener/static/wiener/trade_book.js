@@ -53,7 +53,7 @@ $.ajax({
         data.forEach(el => {
         new_row=`<tr>`
         +`<td>`+`<a href="${tradeUrl}/${el.pk}">${el.pk}</a>`+`</td>`
-        +`<td>`+el.underlier_ticker+`</td>`
+        +`<td>`+el.underlying_ticker+`</td>`
         +`<td>`+el.product_type+`</td>`
         +`<td>`+el.payoff+`</td>`
         +`<td>`+el.trade_date+`</td>`
@@ -78,7 +78,7 @@ $.ajax({
 
 $("#add-trade-btn").click(function(e){
     e.preventDefault()
-    const underlier_ticker=document.getElementById("id_underlier_ticker")
+    const underlying_ticker=document.getElementById("id_underlying_ticker")
     const product_type=document.getElementById("id_product_type")
     const payoff=document.getElementById("id_payoff")
 
@@ -93,7 +93,7 @@ $("#add-trade-btn").click(function(e){
         url: '',
         data:{
             'csrfmiddlewaretoken':csrf[0].value,
-            "underlier_ticker":underlier_ticker.value,
+            "underlying_ticker":underlying_ticker.value,
             "product_type":product_type.value,
             "payoff":payoff.value,
             "trade_date":trade_date.value,
