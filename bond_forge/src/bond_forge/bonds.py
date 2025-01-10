@@ -1,6 +1,7 @@
 import QuantLib as ql
 
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
+from tool_kit.numerical_methods import RootFinding
 
 
 class BondsInterface:
@@ -14,21 +15,28 @@ class BondsInterface:
     def define_schedule(self):
         pass
 
-    def create_bond(self):
+    def create_bond(self, face_value: float,
+                    coupon_rate: float,
+                    coupon_frequency: str,
+                    maturity_date: str,
+                    issue_date: str,
+                    is_callable: bool,
+                    call_price: (float, None)):
         pass
 
-    def price(self):
+    def price(self, yield_to_maturity: float):
         pass
 
-    def yield_to_maturity(self, market_price, initial_quess, tolerance, max_iteration):
+    def yield_to_maturity(self, market_price):
         pass
 
 
-class FixedRateBond:
+class FixedRateBond(BondsInterface):
     coupon_divider = dict(quarterly=4, semiannually=2, monthly=12)
 
     def __init__(self):
-        self.id:int = 1
+        super().__init__()
+        self.id: int = 1
         self.face_value: float = 1000
         self.coupon_rate: float = 0.05
         self.coupon_frequency: str = 'quarterly'
@@ -54,8 +62,6 @@ class FixedRateBond:
             self.call_price = call_price
         else:
             self.call_price = None
-
-
 
     def create_payment_schedule(self):
         # Convert string dates to QuantLib.Date
@@ -84,13 +90,8 @@ class FixedRateBond:
         pv_derivative = self.face_value / (1 + yield_to_maturity) ** cashflow_periods[-1]
         return coupon_derivative + pv_derivative
 
-    def yield_to_maturity(self, market_price: float, initial_quess=0.03,
-                          tolerance=1e-6, max_terations=1000):
-
-        pass
-
     def price(self, yield_to_maturity: float):
-        pv_coupons=0
+        pv_coupons = 0
         schedule = self.create_payment_schedule()
         cashflow_periods = QuantLibToolKit.cumulative_year_fraction(schedule=schedule)
         coupon_value = self.periodic_coupon()
@@ -99,11 +100,21 @@ class FixedRateBond:
         pv_principal = self.face_value / (1 + yield_to_maturity) ** cashflow_periods[-1]
         return pv_coupons + pv_principal
 
+    def yield_to_maturity(self, market_price: float):
+        def price_function(ytm_guess):
+            return self.price(yield_to_maturity=ytm_guess) - market_price
+
+        ytm = RootFinding.newton_raphson(
+            func=price_function,
+            derivative=self.derivative_price)
+
+        return ytm
+
 
 if __name__ == '__main__':
-    bo = FixedRateBond(1)
+    bo = FixedRateBond()
     schedule_bo = bo.create_payment_schedule()
-    bo.price(0.03)
+    print(f'Bond price is equal {bo.price(0.03)}')
     bo.derivative_price(0.03)
 
     print('the end')
