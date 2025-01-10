@@ -5,7 +5,7 @@ import pandas as pd
 
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 from tool_kit.yahoo_data_extractor import YahooDataExtractor
-from ...models import TradeBook
+from wiener.models import TradeBook
 
 QL = NewType("QL", ql)
 
@@ -83,11 +83,11 @@ class TradeCalendarSchedule:
         # Region: Check format of dates
         # ----------------------------
         if not isinstance(self._termination_date, str):
-            #probably we have datetime type and we need to convert to str to unify.
+            # probably we have datetime type and we need to convert to str to unify.
             self._termination_date = self._termination_date.strftime("%Y-%m-%d")
 
         if not isinstance(self._valuation_date, str):
-            #probably we have datetime type and we need to convert to str to unify.
+            # probably we have datetime type and we need to convert to str to unify.
             self._valuation_date = self._valuation_date.strftime("%Y-%m-%d")
 
         # ----------------------------
@@ -113,13 +113,12 @@ class TradeCalendarSchedule:
             date=self._termination_date)
         ql_year_fraction_conv = QuantLibToolKit.set_year_fraction_convention(
             year_fraction_conv=self._s_year_fraction_conv)
-        ql_calendar = QuantLibToolKit.set_calendar(country=self._s_calendar)
 
-        ql_schedule = self.set_schedule(effective_date=ql_valuation_date,
-                                        termination_date=ql_termination_date,
-                                        tenor=ql.Period(QuantLibToolKit.set_frequency(
-                                            freq_period=self._s_frequency)),
-                                        calendar=ql_calendar)
+        ql_schedule = QuantLibToolKit.define_schedule(valuation_date=ql_valuation_date,
+                                                      termination_date=ql_termination_date,
+                                                      calendar='theUK',
+                                                      correction_rule="Following",
+                                                      freq_period=self._s_frequency)
         # -----------------------
         # Region: QuantLib Converter
         # -----------------------
@@ -128,8 +127,7 @@ class TradeCalendarSchedule:
         # Region: Attributes
         # -----------------------
         self.scheduled_dates = list(ql_schedule)
-        self.year_fractions = self.get_year_fraction_sequence(schedule=ql_schedule,
-                                                              convention=ql_year_fraction_conv)
+        self.year_fractions = QuantLibToolKit.consecutive_year_fraction(schedule=ql_schedule)
         self.days_until_expiration = self.scheduled_dates[-1] - self.scheduled_dates[0]
         # -----------------------
         # End Region: Attributes
@@ -277,6 +275,7 @@ class TradeCalendarSchedule:
         return ql.Schedule(effective_date, termination_date, tenor, calendar, convention, termination_date_convention,
                            rule, endOfMonth)
 
+    # TODO remove this
     def get_year_fraction_sequence(self,
                                    schedule: ql.Schedule,
                                    convention: QL) -> List[float]:
@@ -425,6 +424,10 @@ class MarketEnvironmentHandler:
     # End  Region getters
     # --------------
 
+    def display_market_data(self):
+        def __str__(self) -> str:
+            return f'Market data:\n underlying Price :{self._underlying_price} \n Risk free rate for pricing :{self._risk_free_rate}\n Implied volatility: {self._implied_volatility}\n '
+
     @staticmethod
     def parse_trade_ticker_by_trade_id(trade_id: (int, None)) -> str:
         """
@@ -475,7 +478,8 @@ class MarketEnvironmentHandler:
             print(f"Thre is no trade with id {trade_id}")
             return None
 
-    def create_ql_rate(self, risk_free_rate: float = 0.05, year_fraction_conv: ql.DayCounter = ql.Actual365Fixed(),
+    @staticmethod
+    def create_ql_rate(risk_free_rate: float = 0.05, year_fraction_conv: ql.DayCounter = ql.Actual365Fixed(),
                        compounding_type: int = ql.Continuous, frequency: int = ql.Once) -> ql.InterestRate:
 
         return ql.InterestRate(risk_free_rate, year_fraction_conv, compounding_type, frequency)
@@ -498,7 +502,7 @@ class MarketEnvironmentHandler:
             return YahooDataExtractor(tickers=self.parse_trade_ticker_by_trade_id(trade_id=self._trade_id),
                                       start_period=self._valuation_date).close_prices_df
 
-    def extract_discount_factors(self, maturity_date: (str, None) = None) -> float:
+    def extract_discount_factors(self, maturity_date: str|None = None) -> float:
         """
         Description
         ----------
@@ -518,7 +522,7 @@ class MarketEnvironmentHandler:
             self._discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
                                                         QuantLibToolKit.string_2ql_date(maturity_date))
 
-    def upload_market_data(self,  **kwargs) -> dict:
+    def upload_market_data(self, **kwargs) -> dict:
         """
         Description
         -----------
@@ -539,7 +543,7 @@ class MarketEnvironmentHandler:
 
         risk_free_rate = kwargs['risk_free_rate'] if "risk_free_rate" in kwargs else self.get_risk_free_rate()
         # volatility
-        volatility =  kwargs['volatility'] if "volatility" in kwargs else self.get_volatility()
+        volatility = kwargs['volatility'] if "volatility" in kwargs else self.get_volatility()
         # underlying name
         if self._trade_id is not None:
             underlying_name = self.parse_trade_ticker_by_trade_id(trade_id=self._trade_id)
@@ -561,6 +565,7 @@ class MarketEnvironmentHandler:
     def validate_market_data(self):
         raise NotImplementedError()
 
-    def display_market_data(self):
-        def __str__(self) -> str:
-            return f'Market data:\n underlying Price :{self._underlying_price} \n Risk free rate for pricing :{self._risk_free_rate}\n Implied volatility: {self._implied_volatility}\n '
+
+if __name__ == '__main__':
+    trade_schedule = TradeCalendarSchedule()
+    print("THE END")

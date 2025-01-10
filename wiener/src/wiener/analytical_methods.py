@@ -57,7 +57,8 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
         self._trade_id = trade_id
 
         self._calendar_schedule = TradeCalendarSchedule(valuation_date=self._valuation_date,
-                                                        termination_date=kwargs.get('trade_maturity'), frequency='once') \
+                                                        termination_date=kwargs.get('trade_maturity'),
+                                                        frequency='once') \
             if 'trade_maturity' in kwargs \
             else TradeCalendarSchedule(valuation_date=self._valuation_date,
                                        termination_date=
@@ -136,8 +137,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
 
         """
         d1 = (np.log(underlying_price / strike) + (risk_free_rate
-                                                   - dividend + 0.5 * volatility ** 2) * time_to_maturity) / (
-                     np.sqrt(time_to_maturity) * volatility)
+                                                   - dividend + 0.5 * volatility ** 2) * time_to_maturity) / (np.sqrt(time_to_maturity) * volatility)
         return d1
 
     @staticmethod
@@ -156,12 +156,12 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
     def run_analytical_pricer(self):
         d1 = self.d1(underlying_price=self.market_environment.market_data['underlying_price'],
                      strike=self.trade_attributes['strike'],
-                     time_to_maturity=self.trade_attributes["tau"],
+                     time_to_maturity=self.trade_attributes["tau"][0],
                      risk_free_rate=self.market_environment.market_data["risk_free_rate"],
                      volatility=self.market_environment.market_data["volatility"])
         d2 = self.d2(underlying_price=self.market_environment.market_data['underlying_price'],
                      strike=self.trade_attributes['strike'],
-                     time_to_maturity=self.trade_attributes["tau"],
+                     time_to_maturity=self.trade_attributes["tau"][0],
                      risk_free_rate=self.market_environment.market_data["risk_free_rate"],
                      volatility=self.market_environment.market_data["volatility"])
         if self.trade_attributes['payoff'] == "call":
