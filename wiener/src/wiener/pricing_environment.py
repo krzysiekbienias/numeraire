@@ -232,91 +232,6 @@ class TradeCalendarSchedule:
 
         return params_set
 
-    @staticmethod
-    def set_schedule(effective_date: ql.Date,
-                     termination_date: ql.Date,
-                     tenor: ql.Period,
-                     calendar: ql.Calendar,
-                     convention=QuantLibToolKit.set_date_corrections_schema(),
-                     termination_date_convention=QuantLibToolKit.set_date_corrections_schema(),
-                     rule: ql.DateGeneration = QuantLibToolKit.set_rule_of_date_generation(
-                         date_generation_rules="forward"),
-                     endOfMonth: bool = False) -> ql.Schedule:
-        """set_schedule
-        Description
-        -----------
-        Method creates the schedule that handle with life cycle of a trade. The heart of the class.
-
-        Parameters
-        ----------
-        effective_date : ql.Date
-            _description_
-        termination_date : ql.Date
-            _description_
-        tenor : ql.Period
-            _description_
-        calendar : ql.Calendar
-            _description_
-        convention : _type_, optional
-            _description_, by default QuantLibToolKit.set_date_corrections_schema()
-        termination_date_convention : _type_, optional
-            _description_, by default QuantLibToolKit.set_date_corrections_schema()
-        rule : ql.DateGeneration, optional
-            _description_, by default QuantLibToolKit.setRuleOfDateGeneration()
-        endOfMonth : bool, optional
-            _description_, by default False
-
-        Returns
-        -------
-        ql.Schedule
-            _description_
-        """
-
-        return ql.Schedule(effective_date, termination_date, tenor, calendar, convention, termination_date_convention,
-                           rule, endOfMonth)
-
-    # TODO remove this
-    def get_year_fraction_sequence(self,
-                                   schedule: ql.Schedule,
-                                   convention: QL) -> List[float]:
-        """consecutiveDatesYearFraction
-        Description
-        -----------
-        For given sequence of dates returns arr of list year fractions with edges T_i-1 and T_i
-
-
-        Returns
-        -------
-        List[float]
-            list of year fraction's
-        """
-        lf_year_fraction = []
-        scheduled_dates = list(schedule)
-        if len(scheduled_dates) == 2:
-            # frequency probably set as 'once' so only valuation and termination date has been provided
-            return convention.yearFraction(scheduled_dates[0], scheduled_dates[1])
-        for i in range(1, len(scheduled_dates)):
-            temp_yf = convention.yearFraction(
-                scheduled_dates[i - 1], scheduled_dates[i])
-            lf_year_fraction.append(temp_yf)
-        return lf_year_fraction
-
-    def display_schedule(self) -> None:
-        """display_schedule
-        Description
-        -----------
-        This method display information about schedule.
-        """
-
-        dates = self.scheduled_dates
-        if len(dates) == 2:
-            print("At valuation date there is still {0:.2f} of the year.".format(
-                self.year_fractions))
-        else:
-            year_fractions = [None] + self.year_fractions
-            df_schedule = pd.DataFrame(zip(dates, year_fractions), columns=[
-                'Calendar_Grid', "Year_Fraction"])
-            print(df_schedule)
 
 
 class MarketEnvironmentInterface:
@@ -514,6 +429,13 @@ class MarketEnvironmentHandler:
         """
         rate = self.create_ql_rate(risk_free_rate=self._risk_free_rate)
         if self._trade_id is not None:
+            valuation_date_ql = ql.DateParser.parseISO(self._valuation_date)
+            maturity_date_ql = (QuantLibToolKit.date_object_2ql_date(
+                                                            TradeBook.objects.get(pk=self._trade_id).trade_maturity))
+            # Validate the dates
+            if valuation_date_ql > maturity_date_ql:
+                raise ValueError("Valuation date must be earlier than maturity date")
+
 
             self._discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
                                                         QuantLibToolKit.date_object_2ql_date(

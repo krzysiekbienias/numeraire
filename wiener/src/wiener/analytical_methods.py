@@ -169,5 +169,6 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                     self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
                     * norm.cdf(d2, 0, 1))
         else:
-            return self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"] * norm.cdf(-d2, 0, 1) - \
-                self.market_environment.market_data["underlying_price"] * norm.cdf(-d1, 0, 1)
+            return (self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"] *
+                    norm.cdf(-d2, 0, 1) - \
+                    self.market_environment.market_data["underlying_price"] * norm.cdf(-d1, 0, 1))
