@@ -164,7 +164,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                      time_to_maturity=self.trade_attributes["tau"][0],
                      risk_free_rate=self.market_environment.market_data["risk_free_rate"],
                      volatility=self.market_environment.market_data["volatility"])
-        if self.trade_attributes['payoff'] == "call":
+        if self.trade_attributes['payoff'] == "Call":
             return (self.market_environment.market_data['underlying_price'] * norm.cdf(d1, 0, 1) -
                     self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
                     * norm.cdf(d2, 0, 1))

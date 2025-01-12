@@ -233,7 +233,6 @@ class TradeCalendarSchedule:
         return params_set
 
 
-
 class MarketEnvironmentInterface:
     def extract_underlying_quotation(self):
         pass
@@ -410,14 +409,26 @@ class MarketEnvironmentHandler:
         dict
             _description_
         """
+        if self._trade_id is not None:
+            valuation_date_ql = QuantLibToolKit.string_2ql_date(self._valuation_date)
+            maturity_date_ql = QuantLibToolKit.date_object_2ql_date(
+                TradeBook.objects.get(pk=self._trade_id).trade_maturity)
+            start_contract_date=QuantLibToolKit.date_object_2ql_date(TradeBook.objects.get(pk=self._trade_id).trade_date)
+            if valuation_date_ql > maturity_date_ql:
+                raise ValueError("Valuation date must be earlier than maturity date")
+            elif valuation_date_ql < start_contract_date:
+                raise ValueError("Valuation date must NOT be earlier than the contract starts.")
         if self._trade_id is None:
-
+            print(f'Price of underlying as of {self._valuation_date} for underlier {self.get_underlying_name()} is'
+                  f' equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).close_prices_df[self._underlying_name][1]}' )
             return YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).close_prices_df
         else:
+            print(f'Price of underlying as of {self._valuation_date} for underlier {self.get_underlying_name()} is'
+                  f' equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).close_prices_df[self._underlying_name][1]}')
             return YahooDataExtractor(tickers=self.parse_trade_ticker_by_trade_id(trade_id=self._trade_id),
                                       start_period=self._valuation_date).close_prices_df
 
-    def extract_discount_factors(self, maturity_date: str|None = None) -> float:
+    def extract_discount_factors(self, maturity_date: str | None = None) -> float:
         """
         Description
         ----------
@@ -430,19 +441,21 @@ class MarketEnvironmentHandler:
         rate = self.create_ql_rate(risk_free_rate=self._risk_free_rate)
         if self._trade_id is not None:
             valuation_date_ql = ql.DateParser.parseISO(self._valuation_date)
-            maturity_date_ql = (QuantLibToolKit.date_object_2ql_date(
-                                                            TradeBook.objects.get(pk=self._trade_id).trade_maturity))
-            # Validate the dates
-            if valuation_date_ql > maturity_date_ql:
+            maturity_date_ql = QuantLibToolKit.date_object_2ql_date(
+                TradeBook.objects.get(pk=self._trade_id).trade_maturity)
+            start_contract_date=QuantLibToolKit.date_object_2ql_date(TradeBook.objects.get(pk=self._trade_id).trade_date)
+            if maturity_date_ql < valuation_date_ql < start_contract_date:
                 raise ValueError("Valuation date must be earlier than maturity date")
-
 
             self._discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
                                                         QuantLibToolKit.date_object_2ql_date(
                                                             TradeBook.objects.get(pk=self._trade_id).trade_maturity))
+            return self._discount_factor
         else:
             self._discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
                                                         QuantLibToolKit.string_2ql_date(maturity_date))
+            return self._discount_factor
+
 
     def upload_market_data(self, **kwargs) -> dict:
         """
@@ -487,7 +500,3 @@ class MarketEnvironmentHandler:
     def validate_market_data(self):
         raise NotImplementedError()
 
-
-if __name__ == '__main__':
-    trade_schedule = TradeCalendarSchedule()
-    print("THE END")
