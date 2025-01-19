@@ -403,11 +403,11 @@ class MarketEnvironmentHandler:
         extract_underlying_quotation
         Description
         -----------
+        This method extract underlying price for given set of ticker and for given time window.
 
         Returns
         -------
         dict
-            _description_
         """
         if self._trade_id is not None:
             valuation_date_ql = QuantLibToolKit.string_2ql_date(self._valuation_date)
@@ -420,13 +420,13 @@ class MarketEnvironmentHandler:
                 raise ValueError("Valuation date must NOT be earlier than the contract starts.")
         if self._trade_id is None:
             print(f'Price of underlying as of {self._valuation_date} for underlier {self.get_underlying_name()} is'
-                  f' equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).close_prices_df[self._underlying_name][1]}' )
-            return YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).close_prices_df
+            f'equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).extract_data()[self._underlying_price][1]}')
+            return YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).extract_data()
         else:
             print(f'Price of underlying as of {self._valuation_date} for underlier {self.get_underlying_name()} is'
-                  f' equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).close_prices_df[self._underlying_name][1]}')
+                  f' equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).extract_data()[self._underlying_name][1]}')
             return YahooDataExtractor(tickers=self.parse_trade_ticker_by_trade_id(trade_id=self._trade_id),
-                                      start_period=self._valuation_date).close_prices_df
+                                      start_period=self._valuation_date).extract_data()
 
     def extract_discount_factors(self, maturity_date: str | None = None) -> float:
         """

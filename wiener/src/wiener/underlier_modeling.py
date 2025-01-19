@@ -2,6 +2,8 @@ from .pricing_environment import TradeCalendarSchedule
 from app_settings import AppSettings
 import numpy as np
 from typing import List
+from ...models import TradeBook
+from tool_kit.yahoo_data_extractor import YahooDataExtractor
 
 
 class SimulationInterface:
@@ -11,7 +13,7 @@ class SimulationInterface:
     def chose_simulation_schema(self):
         pass
 
-    def model_underlier(self,simulation_schema):
+    def model_underlier(self, simulation_schema):
         pass
 
     def path_metrics(self):
@@ -24,12 +26,12 @@ class SimulationInterface:
 class GeometricBrownianMotion(SimulationInterface):
 
     def __init__(self,
-                 drift: float,
-                 volatility: float,
-                 initialisation_point: float,
-                 grid_time_step: str,
-                 start_simulation_date: str,
-                 end_simulation_date: str,
+                 drift: float = 0.3,
+                 volatility: float = 0.2,
+                 initialisation_point: float = 100,
+                 grid_time_step: str = 'daily',
+                 start_simulation_date: str = '2025-01-02',
+                 end_simulation_date: str = '2025-04-02',
                  simulation_schema: str = AppSettings.SIMULATION_SCHEMA):
         self._start_simulation_date = start_simulation_date
         self._end_simulation_date = end_simulation_date
@@ -73,6 +75,12 @@ class GeometricBrownianMotion(SimulationInterface):
     def set_grid_time_step(self, grid_time_step):
         self._grid_time_step = grid_time_step
 
+    def set_start_simulation_date(self, start_simulation_date):
+        self._start_simulation_date = start_simulation_date
+
+    def set_end_simulation_date(self, end_simulation_date):
+        self._end_simulation_date = end_simulation_date
+
     # --------------
     # End Region setters
     # --------------
@@ -100,11 +108,36 @@ class GeometricBrownianMotion(SimulationInterface):
                                                   year_fraction_convention=AppSettings.DEFAULT_YEAR_FRACTION_CONVENTION)
         return calendar_schedule.scheduled_dates, calendar_schedule.year_fractions
 
+    def fetch_parameters_from_db(self, trade_id):
+        '''
+        fetch_parameters_from_db
+
+        Description
+        -----------
+        Fetch parameters from DB. If we pass id maturity trade and initial price that reflects the market date of the
+        underlier on particular valuation date, we will fetch the parameters from Yahoo Finance.
+        Parameters
+        ----------
+        trade_id
+
+        Returns
+        -------
+
+        '''
+        self.set_end_simulation_date(TradeBook.objects.get(pk=trade_id).trade_maturity)
+        # we need only one date extracted to get initial price of the underlying, this is why start_period and
+        # end_period are equal
+        yd_object = YahooDataExtractor(tickers=[TradeBook.objects.get(pk=trade_id).underlying_ticker],
+                                       start_period=self._start_simulation_date,
+                                       end_period=self._start_simulation_date)
+        self.set_initialisation_point(initialisation_point=yd_object.close_prices_df)
+
     def euler_discretization_schema(self,
                                     simulation_dates,
                                     incremental: List[float],
                                     paths_number: int = AppSettings.NUMBER_OF_SIMULATIONS) -> np.array:
-        """
+        """euler_discretization_schema
+
         Description
         -----------
         Define the euler discretization schema.
@@ -198,9 +231,9 @@ class GeometricBrownianMotion(SimulationInterface):
                                                     incremental=self.define_grid()[1])
         elif simulation_schema == "milstein":
             return self.milstein_discretization_schema(simulation_dates=self.define_grid()[0],
-                                                    incremental=self.define_grid()[1])
+                                                       incremental=self.define_grid()[1])
         elif simulation_schema == "exact_solution":
             return self.exact_solution_discretization_schema(simulation_dates=self.define_grid()[0],
-                                                    incremental=self.define_grid()[1])
+                                                             incremental=self.define_grid()[1])
         else:
             raise ValueError("This schema does not exist! Please chose 'euler', 'milstein', 'exact_solution")
