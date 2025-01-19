@@ -4,6 +4,21 @@ from django.utils import timezone
 
 # Create your models here.
 class TradeBook(models.Model):
+    '''
+    TradeBook model:
+
+    Fields:
+    ------
+    - trade_id
+    - underlying_ticker
+    - product_type
+    - payoff
+    - trade_date
+    - trade_maturity
+    - strike
+    - dividend
+    - user_id
+    '''
     trade_id = models.AutoField(primary_key=True)
     underlying_ticker = models.CharField(max_length=25)
     product_type = models.CharField(max_length=25)
@@ -16,6 +31,19 @@ class TradeBook(models.Model):
 
 
 class DerivativePrice(models.Model):
+    """
+    DerivativePrice model:
+    Fields:
+    ------
+    - run_id
+    - trade_id
+    - valuation_date
+    - price_status
+    - analytical_price
+    - extra_price
+    - created_at
+    - user_id
+    """
     run_id = models.AutoField(primary_key=True)
     trade_id = models.ForeignKey(TradeBook, on_delete=models.CASCADE)
     valuation_date = models.DateField()
