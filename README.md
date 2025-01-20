@@ -195,9 +195,8 @@ The EuropeanPlainVanillaOption class is an implementation of an analytical price
 *	The set_trade_attributes method sets up the option’s parameters (e.g., underlying asset, strike price, payoff type) using either user-provided arguments or data from a trade database.
 #### Black-Scholes Components:
 *	Implements static methods to calculate  d_1  and  d_2 , which are core components of the Black-Scholes formula:	
-    * $$	 d_1 = \frac{\ln(S / K) + (r - q + \frac{1}{2} \sigma^2) \cdot T}{\sigma \sqrt{T}} $$
-
-    *  $$	 d_2 = d_1 - \sigma \sqrt{T} $$,
+    *  $$d_1 = \frac{\ln(S / K) + (r - q + \frac{1}{2} \sigma^2) \cdot T}{\sigma \sqrt{T}}$$
+    *  $$d_2 = d_1 - \sigma \sqrt{T} $$,
     *  	 S : Underlying price,  K : Strike price,  r : Risk-free rate,  q : Dividend,  $\sigma$ : Volatility,  T : Time to maturity.
 #### Option Valuation:
  * 	The run_analytical_pricer method computes the option price:
