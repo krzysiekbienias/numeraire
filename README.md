@@ -217,16 +217,7 @@ The EuropeanPlainVanillaOption class is an implementation of an analytical price
 
 ```mermaid
 classDiagram  
-%%{init: {'theme': 'base', 'themeVariables': {
-    'background': 'rgb(245,245,245)', 
-    'primaryColor': 'rgb(255,255,255)', 
-    'primaryTextColor': '#333333', 
-    'secondaryColor': 'rgb(240,240,240)', 
-    'tertiaryColor': 'rgb(230,230,230)',
-    'edgeLabelBackground': '#ffffff',
-    'lineColor': '#000000',
-    'fontFamily': 'Arial'
-}}}%%
+
 
     class AnalyticalPricingEnginesInterface {
         <<interface>>
