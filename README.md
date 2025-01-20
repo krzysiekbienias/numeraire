@@ -182,7 +182,128 @@ classDiagram
     QuantLibToolKit --> ql_FractionConvention : Uses
     QuantLibToolKit --> ql_DayCounter : Uses
 ``` 
+# Bonds
 
+## Overview
+The FixedRateBond class models a fixed-rate bond, a common financial instrument that pays a periodic coupon and returns the principal at maturity. This class provides methods to define the bond’s attributes, create a payment schedule, calculate prices, and determine the bond’s yield to maturity (YTM).
+
+## Key Features
+
+### Initialization
+
+#### Attributes
+
+• ```id```: A unique identifier for the bond.
+
+• ```face_value```: The nominal value of the bond, paid back at maturity.
+
+• ```coupon_rate```: The annual interest rate for coupon payments.
+
+• ```coupon_frequency```: The frequency of coupon payments (e.g., quarterly, semiannually).
+
+• ```issue_date```: The date the bond is issued.
+
+• ```maturity_date```: The date the bond matures.
+
+• ```is_callable```: A boolean indicating whether the bond is callable.
+
+• ```call_price```: The price at which the bond can be called, if applicable.
+#### Bond Creation
+
+• ```create_bond```:
+
+- Sets the attributes of the bond based on user inputs.
+
+- Supports callable bonds by setting a call\_price if applicable.
+#### Payment Schedule
+•	```create_payment_schedule```:
+
+*	Uses QuantLib to generate a schedule of payment dates.
+
+* Validates that the issue_date is earlier than the maturity_date.
+
+#### Periodic Coupon Calculation
+
+* ```periodic_coupon```:
+
+* Calculates the coupon payment amount based on the bond’s ```coupon_rate```, ```face_value```, and ```coupon_frequency```.
+
+Example 
+•	A bond with:
+
+    •	face_value = 1000
+    •	coupon_rate = 0.05
+    •	coupon_frequency = 'quarterly'
+Will have a periodic coupon payment of:
+
+$$
+\text{Coupon Payment} = \frac{\text{Coupon Rate} \times \text{Face Value}}{\text{Coupon Divider}}
+= \frac{0.05 \times 1000}{4} = 12.5
+$$
+
+#### Pricing and Derivatives
+
+• ```price```:
+
+• Computes the bond’s price given a yield to maturity (YTM).
+$$
+
+P = \sum_{t=1}^{N} \frac{C}{(1 + YTM)^t} + \frac{F}{(1 + YTM)^N}
+
+$$
+
+• Discounts cashflows (coupon payments and principal repayment) using the provided YTM.
+
+• ```derivative_price```:
+
+• Calculates the derivative of the bond price with respect to the yield.
+
+• Used in numerical root-finding algorithms like Newton-Raphson.
+
+
+$$\frac{dP}{dYTM} = \sum_{t=1}^{N} \left( -t \cdot \frac{C}{(1 + YTM)^{t+1}} \right) + \left( -N \cdot \frac{F}{(1 + YTM)^{N+1}} \right)$$
+
+#### Yield to Maturity (YTM)
+
+• ```yield_to_maturity```:
+
+- Computes the YTM for a given market price.
+
+- Uses Newton-Raphson root-finding to iteratively solve for the YTM that equates the bond’s price to the market price.
+
+
+#### Diagram
+
+
+```mermaid
+
+%%{init: {'theme': 'base', 'themeVariables': {
+    'background': 'rgb(245,245,245)', 
+    'primaryColor': 'rgb(255,255,255)', 
+    'primaryTextColor': '#333333', 
+    'edgeLabelBackground': '#ffffff',
+    'tertiaryColor': '#f5f5f5',
+    'fontFamily': 'Arial'
+}}}%%    
+classDiagram
+    class FixedRateBond {
+        +dict coupon_divider
+        +int id
+        +float face_value
+        +float coupon_rate
+        +str coupon_frequency
+        +str issue_date
+        +str maturity_date
+        +bool is_callable
+        +float~None~ call_price
+        +create_bond(face_value: float, coupon_rate: float, coupon_frequency: str, maturity_date: str, issue_date: str, is_callable: bool)
+        +create_payment_schedule() ql.Schedule
+        +periodic_coupon() float
+        +derivative_price(yield_to_maturity: float) float
+        +price(yield_to_maturity: float) float
+        +yield_to_maturity(market_price: float) float
+    }
+```
 
 
 
