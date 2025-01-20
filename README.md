@@ -127,14 +127,6 @@ This class is highly modular and provides a user-friendly abstraction over Quant
 
 # Diagram
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {
-    'background': 'rgb(245,245,245)', 
-    'primaryColor': 'rgb(255,255,255)', 
-    'primaryTextColor': '#333333', 
-    'edgeLabelBackground': '#ffffff',
-    'tertiaryColor': '#f5f5f5',
-    'fontFamily': 'Arial'
-}}}%%
 classDiagram
     class QuantLibToolKit {
         <<static>> dict _weekday_corrections
@@ -357,16 +349,7 @@ $$\frac{dP}{dYTM} = \sum_{t=1}^{N} \left( -t \cdot \frac{C}{(1 + YTM)^{t+1}} \ri
 #### Diagram
 
 
-```mermaid
-
-%%{init: {'theme': 'base', 'themeVariables': {
-    'background': 'rgb(245,245,245)', 
-    'primaryColor': 'rgb(255,255,255)', 
-    'primaryTextColor': '#333333', 
-    'edgeLabelBackground': '#ffffff',
-    'tertiaryColor': '#f5f5f5',
-    'fontFamily': 'Arial'
-}}}%%    
+```mermaid   
 classDiagram
     class FixedRateBond {
         +dict coupon_divider
