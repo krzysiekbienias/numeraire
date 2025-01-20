@@ -15,8 +15,8 @@ if __name__ == '__main__':
     trade_id = 1
     valuation_date = '2025-01-07'  # YYYY-MM-DD
 
-    yahoo_extractor: pd.DataFrame = YahooDataExtractor(tickers=['AAPL', 'TSLA'], start_period='2025-01-07',
-                                                       end_period='2025-01-10').extract_data()
+    yahoo_extractor: dict = YahooDataExtractor(tickers='AAPL', start_period='2025-01-07',
+                                                       end_period='2025-01-07').extract_data()
 
     gbm = GeometricBrownianMotion()
     gbm.fetch_parameters_from_db(trade_id=trade_id)

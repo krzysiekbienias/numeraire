@@ -4,7 +4,7 @@ from django.utils import timezone
 
 # Create your models here.
 class TradeBook(models.Model):
-    '''
+    """
     TradeBook model:
 
     Fields:
@@ -18,7 +18,7 @@ class TradeBook(models.Model):
     - strike
     - dividend
     - user_id
-    '''
+    """
     trade_id = models.AutoField(primary_key=True)
     underlying_ticker = models.CharField(max_length=25)
     product_type = models.CharField(max_length=25)
