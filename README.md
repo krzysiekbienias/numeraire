@@ -247,9 +247,7 @@ $$
 
 • Computes the bond’s price given a yield to maturity (YTM).
 $$
-
 P = \sum_{t=1}^{N} \frac{C}{(1 + YTM)^t} + \frac{F}{(1 + YTM)^N}
-
 $$
 
 • Discounts cashflows (coupon payments and principal repayment) using the provided YTM.
