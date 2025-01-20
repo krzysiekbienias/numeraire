@@ -5,7 +5,7 @@ The application's aim is to provide a comprehensive set of tools to help in diff
 Additional module provides that provides also extra module for sensitivity analysis. 
 
 #### Table of contents
-[Instalation](#Instalation)  
+[Installation](#Instalation)  
 [Project Structure](#ProjectStructure)  
 [General Overview](#GeneralOverview)  
 [Configuration](#Configuration)  
@@ -14,15 +14,13 @@ Additional module provides that provides also extra module for sensitivity analy
 [Sensitivity Analysis](#SensitivityAnalysis)  
 [Utils](#Utils)  
 
-## Instalation
-To use the package you need to clone the repository first. The package itself has a numerous dependencies and it is
+## Installation
+To use the package you need to clone the repository first. The package itself has a numerous dependencies, and it is
 better to isolate environment for this module. 
-## Dependecies
+## Dependencies
 To run the code smoothly a User must first import QuantLib library and Django Tailwind. From QuantLib we leverage only calendar 
 schedule and lifecycle of trades. Django provides framework for FrondEnd. All analytical formula are implemented from
 scratch.
-
-
 
 ## Structure
 ```
@@ -46,7 +44,7 @@ Numeraire Project
 
 ```
 ## App launching
-To run application first run follwing command in terminal
+To run application first run following command in terminal
 
 ```
 python manage.py tailwind start
@@ -182,6 +180,103 @@ classDiagram
     QuantLibToolKit --> ql_FractionConvention : Uses
     QuantLibToolKit --> ql_DayCounter : Uses
 ``` 
+# European Option Pricing
+## Overview
+The EuropeanPlainVanillaOption class is an implementation of an analytical pricer for European plain vanilla options, based on the Black-Scholes pricing model. It handles option pricing by integrating market data, trade attributes, and analytical methods to compute the option’s fair value.
+## Key Futures
+#### Initialization:
+* Sets up the valuation date and trade ID.
+* Initializes a calendar schedule for the option’s lifecycle using a termination date.
+#### Market Environment Setup:
+* The set_up_market_environment method initializes the market environment by:
+*	 Uploading market data.
+*	Extracting discount factors required for option valuation.
+#### Trade Attribute Management:
+*	The set_trade_attributes method sets up the option’s parameters (e.g., underlying asset, strike price, payoff type) using either user-provided arguments or data from a trade database.
+#### Black-Scholes Components:
+*	Implements static methods to calculate  d_1  and  d_2 , which are core components of the Black-Scholes formula:	
+    * $$	 d_1 = \frac{\ln(S / K) + (r - q + \frac{1}{2} \sigma^2) \cdot T}{\sigma \sqrt{T}} $$
+
+    *  $$	 d_2 = d_1 - \sigma \sqrt{T} $$,
+    *  	 S : Underlying price,  K : Strike price,  r : Risk-free rate,  q : Dividend,  $\sigma$ : Volatility,  T : Time to maturity.
+#### Option Valuation:
+ * 	The run_analytical_pricer method computes the option price:
+ *	 For a call option:
+     $$C = S \cdot N(d_1) - K \cdot e^{-rT} \cdot N(d_2)$$
+
+*	For a put option: $$P = K \cdot e^{-rT} \cdot N(-d_2) - S \cdot N(-d_1)$$
+## Workflow
+#### Setup:
+*	Initialize the class with a valuation date and trade ID.
+* 	Define market and trade attributes using set_up_market_environment and set_trade_attributes.
+#### Calculation:
+*	Compute  ```d_1```  and  ```d_2```  using the static methods.
+*	Use the payoff type (call or put) to calculate the option price.
+#### Output:
+*	Returns the analytical price of the European option based on current market conditions.
+## Diagram
+
+```mermaid
+classDiagram  
+%%{init: {'theme': 'base', 'themeVariables': {
+    'background': 'rgb(245,245,245)', 
+    'primaryColor': 'rgb(255,255,255)', 
+    'primaryTextColor': '#333333', 
+    'secondaryColor': 'rgb(240,240,240)', 
+    'tertiaryColor': 'rgb(230,230,230)',
+    'edgeLabelBackground': '#ffffff',
+    'lineColor': '#000000',
+    'fontFamily': 'Arial'
+}}}%%
+
+    class AnalyticalPricingEnginesInterface {
+        <<interface>>
+    }
+    class EuropeanPlainVanillaOption {
+        - str _valuation_date
+        - int~None~ _trade_id
+        - TradeCalendarSchedule _calendar_schedule
+        - MarketEnvironmentHandler~None~ market_environment
+        - dict~None~ trade_attributes
+        --
+        +__init__(valuation_date: str, trade_id: int~None~, **kwargs)
+        +set_up_market_environment(trade_id: int~None~, **kwargs) MarketEnvironmentHandler
+        +set_trade_attributes(trade_id: int, **kwargs) dict
+        +run_analytical_pricer() float
+        +static d1(strike: float, underlying_price: float, time_to_maturity: float, risk_free_rate: float, volatility: float, dividend: float=0) float
+        +static d2(strike: float, underlying_price: float, time_to_maturity: float, risk_free_rate: float, volatility: float, dividend: float=0) float
+    }
+
+    class TradeCalendarSchedule {
+        <<external>>
+    }
+
+    class TradeBook {
+        <<external>>
+    }
+
+    class MarketEnvironmentHandler {
+        <<external>>
+        +upload_market_data(**kwargs)
+        +extract_discount_factors()
+    }
+
+    class norm {
+        <<external>>
+        +cdf(x: float, mu: float, sigma: float) float
+    }
+
+    %% Relationships
+    EuropeanPlainVanillaOption --> AnalyticalPricingEnginesInterface : Implements
+    EuropeanPlainVanillaOption --> TradeCalendarSchedule : Uses
+    EuropeanPlainVanillaOption --> MarketEnvironmentHandler : Uses
+    EuropeanPlainVanillaOption --> TradeBook : Fetches Data
+    EuropeanPlainVanillaOption --> norm : Uses
+```
+
+
+
+
 # Bonds
 
 ## Overview
