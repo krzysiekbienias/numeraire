@@ -54,7 +54,7 @@ class YahooDataExtractor:
         # one ticker and time stamp
         elif (self._start_period is not None and self._end_period is not None and
             self._start_period == self._end_period) or (self._start_period is not None and self._end_period is None):
-            if isinstance(self._tickers, str):
+            if isinstance(self._tickers, str) or len(self._tickers) == 1:
 
                 end_period_ql_date_increased_by1 = ql.Date(self._start_period, "%Y-%m-%d") + 1
 
