@@ -1,9 +1,13 @@
+import pandas as pd
+import os
+from datetime import datetime
 from .pricing_environment import TradeCalendarSchedule
 from app_settings import AppSettings
 import numpy as np
 from typing import List
 from ...models import TradeBook
 from tool_kit.yahoo_data_extractor import YahooDataExtractor
+from tool_kit.config_loader import CONFIG
 
 
 class SimulationInterface:
@@ -13,7 +17,7 @@ class SimulationInterface:
     def chose_simulation_schema(self):
         pass
 
-    def model_underlier(self, simulation_schema):
+    def model_equity_dynamic(self, simulation_schema: str):
         pass
 
     def path_metrics(self):
@@ -109,28 +113,38 @@ class GeometricBrownianMotion(SimulationInterface):
         return calendar_schedule.scheduled_dates, calendar_schedule.year_fractions
 
     def fetch_parameters_from_db(self, trade_id):
-        '''
-        fetch_parameters_from_db
+        """Description
+           -----------
+            Fetches and sets key parameters from the database based on a given trade ID.
 
-        Description
-        -----------
-        Fetch parameters from DB. If we pass id maturity trade and initial price that reflects the market date of the
-        underlier on particular valuation date, we will fetch the parameters from Yahoo Finance.
-        Parameters
-        ----------
-        trade_id
+            This function retrieves the trade maturity and underlying ticker from the database
+            using the `TradeBook` model. It then:
+            - Sets the end simulation date based on the trade maturity.
+            - Fetches the initial price of the underlying asset using the `YahooDataExtractor`.
+            - Sets the initialization point for the simulation.
 
-        Returns
-        -------
+            Parameters:
+            ----------
+            trade_id : int
+                The unique identifier of the trade, used to fetch relevant data from the `TradeBook` database.
 
-        '''
+            Raises:
+            ------
+            TradeBook.DoesNotExist
+                If the given `trade_id` does not exist in the database.
+
+            Example:
+            -------
+            >>> model.fetch_parameters_from_db(trade_id=12345)
+            """
         self.set_end_simulation_date(TradeBook.objects.get(pk=trade_id).trade_maturity)
         # we need only one date extracted to get initial price of the underlying, this is why start_period and
         # end_period are equal
-        yd_object = YahooDataExtractor(tickers=[TradeBook.objects.get(pk=trade_id).underlying_ticker],
+        yd_object = YahooDataExtractor(tickers=TradeBook.objects.get(pk=trade_id).underlying_ticker,
                                        start_period=self._start_simulation_date,
                                        end_period=self._start_simulation_date)
-        self.set_initialisation_point(initialisation_point=yd_object.close_prices_df)
+        self.set_initialisation_point(initialisation_point=
+                                      yd_object.extract_data()[TradeBook.objects.get(pk=trade_id).underlying_ticker][1])
 
     def euler_discretization_schema(self,
                                     simulation_dates,
@@ -225,7 +239,36 @@ class GeometricBrownianMotion(SimulationInterface):
     # End Region methods
     # --------------
 
-    def model_underlier(self, simulation_schema: str):
+    def model_equity_dynamic(self, simulation_schema: str):
+        """
+            Description
+            -----------
+            Simulates the equity dynamics based on the specified discretization schema.
+
+            Parameters:
+            ----------
+            simulation_schema : str
+                The discretization schema to use for the simulation. Options are:
+                - "euler" : Uses the Euler discretization schema.
+                - "milstein" : Uses the Milstein discretization schema.
+                - "exact_solution" : Uses the exact solution discretization schema.
+
+            Returns:
+            -------
+            np.ndarray
+                A 2D NumPy array representing the simulated equity paths.
+
+            Raises:
+            ------
+            ValueError
+                If an invalid `simulation_schema` is provided.
+
+            Example:
+            -------
+            >>> model.model_equity_dynamic("euler")
+            >>> model.model_equity_dynamic("milstein")
+            >>> model.model_equity_dynamic("exact_solution")
+            """
         if simulation_schema == "euler":
             return self.euler_discretization_schema(simulation_dates=self.define_grid()[0],
                                                     incremental=self.define_grid()[1])
@@ -237,3 +280,40 @@ class GeometricBrownianMotion(SimulationInterface):
                                                              incremental=self.define_grid()[1])
         else:
             raise ValueError("This schema does not exist! Please chose 'euler', 'milstein', 'exact_solution")
+
+    @staticmethod
+    def calculate_quantile(simulated_paths: np.ndarray, quantile):
+        """Calculate the 97.5% quantile from a set of simulated equity paths.
+
+            Parameters:
+            simulated_paths (np.ndarray): A 2D NumPy array where rows represent days
+                                  and columns represent different scenarios.
+
+            Returns:
+            np.ndarray: A 1D array containing the 97.5% quantile for each day."""
+        return np.quantile(simulated_paths, quantile, axis=1)
+
+    @staticmethod
+    def calculate_mean(simulated_paths):
+        """
+        Calculate the mean from a set of simulated equity paths.
+
+        Parameters:
+        simulated_paths (np.ndarray): A 2D NumPy array where rows represent days
+                                      and columns represent different scenarios.
+
+        Returns:
+        np.ndarray: A 1D array containing the mean for each day.
+
+        """
+        return np.mean(simulated_paths, axis=1)
+
+    @staticmethod
+    def structure_simulation_results(simulation_array: np.ndarray, index, columns, save: bool=False):
+        simulation_df=pd.DataFrame(simulation_array, index=index, columns=columns)
+        if save:
+            simulation_df.to_csv(os.path.join(CONFIG['csv_drop_path'],CONFIG['equity'],
+                                              datetime.now().strftime("%Y-%m-%d %H:%M:%S"),'.csv'))
+        return simulation_df
+
+
