@@ -3,6 +3,7 @@ from scipy.stats import norm
 
 from .pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
 from ...models import TradeBook
+from tool_kit.numerical_methods import RootFinding
 
 
 class AnalyticalPricingEnginesInterface:
@@ -172,3 +173,51 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
             return (self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"] *
                     norm.cdf(-d2, 0, 1) - \
                     self.market_environment.market_data["underlying_price"] * norm.cdf(-d1, 0, 1))
+
+    def vega(self, volatility: float) -> float:
+        """
+        Calculates Vega, the sensitivity of the option price to volatility.
+        Vega is the derivative of the option price w.r.t volatility.
+        """
+        d1 = self.d1(strike=self.trade_attributes['strike'],
+                     underlying_price=self.market_environment.market_data['underlying_price'],
+                     time_to_maturity=self.trade_attributes["tau"][0],
+                     risk_free_rate=self.market_environment.market_data["risk_free_rate"],
+                     volatility=volatility)
+
+        return self.market_environment.market_data['underlying_price'] * norm.pdf(d1, 0, 1) * np.sqrt(
+            self.trade_attributes["tau"][0])
+
+    def implied_volatility(self, market_price: float, initial_guess: float = 0.2, tolerance: float = 1e-7,
+                           max_iterations: int = 100):
+        """
+        Uses Newton-Raphson method to solve for implied volatility.
+
+        Parameters:
+        - market_price: The observed market price of the option.
+        - initial_guess: Initial volatility estimate (default 20%).
+        - tolerance: Convergence tolerance.
+        - max_iterations: Maximum iterations for Newton-Raphson.
+
+        Returns:
+        - implied_vol: The calculated implied volatility.
+        - iterations: Number of iterations used.
+        """
+
+        def price_difference(vol):
+            """ Difference between the market price and BS price with given vol. """
+            self.market_environment.market_data["volatility"] = vol  # Temporarily update volatility
+            return self.run_analytical_pricer() - market_price
+
+        def vega_derivative(vol):
+            """ Computes Vega as the derivative of the price function w.r.t volatility. """
+            return self.vega(vol)
+
+        # Use Newton-Raphson method to find the implied volatility
+        try:
+            implied_vol, iterations = RootFinding.newton_raphson(price_difference, vega_derivative, initial_guess,
+                                                                 tolerance, max_iterations)
+            return implied_vol, iterations
+        except Exception as e:
+            print(f"Newton-Raphson did not converge: {e}")
+            return None, None
