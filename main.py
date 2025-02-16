@@ -14,9 +14,21 @@ from wiener.src.wiener.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
 
 if __name__ == '__main__':
-    trade_id = 1
-    valuation_date = '2025-01-07'  # YYYY-MM-DD
+    # ===========================================
+    # REGION: Input
+    # ===========================================
+    trade_id: int = 1
+    valuation_date: str = '2025-01-07'  # YYYY-MM-DD
+    simulation_button: bool = False
+    price_button: bool = False
 
+    # ===========================================
+    # END REGION: Input
+    # ===========================================
+
+    # ===========================================
+    # REGION: Simulation
+    # ===========================================
     gbm = GeometricBrownianMotion()
 
     gbm.fetch_parameters_from_db(trade_id=trade_id)
@@ -31,10 +43,19 @@ if __name__ == '__main__':
     mean_df = gbm.structure_simulation_results(simulation_array=gbm.calculate_mean(simulations_df),
                                                index=gbm.define_grid()[0],
                                                columns=["Average Path"])
+    # ===========================================
+    # END REGION: Simulation
+    # ===========================================
+
+    # ===========================================
+    # REGION: Calculating analytical price
+    # ===========================================
     date_ql = QuantLibToolKit.string_2ql_date(valuation_date)
     european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
     european_option.set_up_market_environment(risk_free_rate=0.03)
     european_option.set_trade_attributes(trade_id=trade_id)
     price = european_option.run_analytical_pricer()
     print(f'Price of option of a trade with id: {trade_id} is equal {round(price, 4)}')
-    print("THE END")
+    # ===========================================
+    # END REGION: Calculating analytical price
+    # ===========================================
