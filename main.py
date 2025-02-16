@@ -29,20 +29,21 @@ if __name__ == '__main__':
     # ===========================================
     # REGION: Simulation
     # ===========================================
-    gbm = GeometricBrownianMotion()
+    if simulation_button:
+        gbm = GeometricBrownianMotion()
 
-    gbm.fetch_parameters_from_db(trade_id=trade_id)
-    simulations_arr: np.array = gbm.model_equity_dynamic(simulation_schema='exact_solution')
-    simulations_df = gbm.structure_simulation_results(simulation_array=simulations_arr,
-                                                      index=gbm.define_grid()[0],
-                                                      columns=range(AppSettings.NUMBER_OF_SIMULATIONS))
-    quantile_df = gbm.structure_simulation_results(
-        simulation_array=gbm.calculate_quantile(simulations_df, quantile=0.975),
-        index=gbm.define_grid()[0],
-        columns=["Quantile"])
-    mean_df = gbm.structure_simulation_results(simulation_array=gbm.calculate_mean(simulations_df),
-                                               index=gbm.define_grid()[0],
-                                               columns=["Average Path"])
+        gbm.fetch_parameters_from_db(trade_id=trade_id)
+        simulations_arr: np.array = gbm.model_equity_dynamic(simulation_schema='exact_solution')
+        simulations_df = gbm.structure_simulation_results(simulation_array=simulations_arr,
+                                                          index=gbm.define_grid()[0],
+                                                          columns=range(AppSettings.NUMBER_OF_SIMULATIONS))
+        quantile_df = gbm.structure_simulation_results(
+            simulation_array=gbm.calculate_quantile(simulations_df, quantile=0.975),
+            index=gbm.define_grid()[0],
+            columns=["Quantile"])
+        mean_df = gbm.structure_simulation_results(simulation_array=gbm.calculate_mean(simulations_df),
+                                                   index=gbm.define_grid()[0],
+                                                   columns=["Average Path"])
     # ===========================================
     # END REGION: Simulation
     # ===========================================
@@ -50,12 +51,13 @@ if __name__ == '__main__':
     # ===========================================
     # REGION: Calculating analytical price
     # ===========================================
-    date_ql = QuantLibToolKit.string_2ql_date(valuation_date)
-    european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
-    european_option.set_up_market_environment(risk_free_rate=0.03)
-    european_option.set_trade_attributes(trade_id=trade_id)
-    price = european_option.run_analytical_pricer()
-    print(f'Price of option of a trade with id: {trade_id} is equal {round(price, 4)}')
+    if price_button:
+        date_ql = QuantLibToolKit.string_2ql_date(valuation_date)
+        european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
+        european_option.set_up_market_environment(risk_free_rate=0.03)
+        european_option.set_trade_attributes(trade_id=trade_id)
+        price = european_option.run_analytical_pricer()
+        print(f'Price of option of a trade with id: {trade_id} is equal {round(price, 4)}')
     # ===========================================
     # END REGION: Calculating analytical price
     # ===========================================
