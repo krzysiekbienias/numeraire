@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import norm
 
 from wiener.src.pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
-from ...models import TradeBook
+from wiener.models import TradeBook
 from tool_kit.numerical_methods import RootFinding
 
 
@@ -27,7 +27,7 @@ class AnalyticalPricingEnginesInterface:
     def create_trade(self):
         pass
 
-    def prepare_priceable_dictionary(self, market_data: MarketEnvironmentHandler, trade_atributes: dict) -> dict:
+    def prepare_priceable_dictionary(self, market_data: MarketEnvironmentHandler, trade_attributes: dict) -> dict:
         """
         Description
         -----------
@@ -51,7 +51,7 @@ class AnalyticalPricingEnginesInterface:
         pass
 
 
-# Use defult parameters to be able to implement class using
+# Use default parameters to be able to implement class using
 class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
     def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
         self._valuation_date = valuation_date
@@ -80,8 +80,8 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
         """
         Description
         -----------
-        This method sets up the attributes of the trade. If we pass kwargs it will populate parameters directly, otherwise,
-        it will fetch parameters from data base, according to trade id.
+        This method sets up the attributes of the trade. If we pass kwargs it will populate parameters directly,
+        otherwise, it will fetch parameters from database, according to trade id.
         Parameters
         ----------
         trade_id
@@ -112,13 +112,9 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
         self.trade_attributes["tau"] = kwargs['tau'] if 'tau' in kwargs else self._calendar_schedule.year_fractions
         return self.trade_attributes
 
-    @staticmethod
-    def d1(strike: float,
-           underlying_price: float,
-           time_to_maturity: float,
-           risk_free_rate: float,
-           volatility: float,
-           dividend: float = 0) -> float:
+    @property
+    def d1(self,
+           ) -> float:
         """
         Description
         -----------
@@ -137,74 +133,66 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
         -------
 
         """
-        d1 = (np.log(underlying_price / strike) + (risk_free_rate
-                                                   - dividend + 0.5 * volatility ** 2) * time_to_maturity) / (np.sqrt(time_to_maturity) * volatility)
+        d1 = (np.log(self.market_environment.market_data['underlying_price'] / self.trade_attributes['strike']) +
+                    (self.market_environment.market_data['discount_factor'] - self.trade_attributes['dividend'] + 0.5
+                     * self.market_environment.market_data['volatility'] ** 2) * self.trade_attributes['tau'][0]) / (
+                     np.sqrt(self.trade_attributes['tau'][0]) * self.market_environment.market_data['volatility'])
         return d1
 
-    @staticmethod
-    def d2(strike: float,
-           underlying_price: float,
-           time_to_maturity: float,
-           risk_free_rate: float,
-           volatility: float,
-           dividend: float = 0) -> float:
-
-        d2 = (np.log(underlying_price / strike) + (risk_free_rate
-                                                   - dividend - 0.5 * volatility ** 2) * time_to_maturity) / (
-                     np.sqrt(time_to_maturity) * volatility)
+    @property
+    def d2(self):
+        d2=self.d1-self.market_environment.market_data['volatility']*np.sqrt(self.trade_attributes['tau'])
         return d2
 
     def plain_vanilla_option(self):
         if self.trade_attributes['payoff'] == "Call":
-            return (self.market_environment.market_data['underlying_price'] * norm.cdf(d1, 0, 1) -
+            return (self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1) -
                     self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
-                    * norm.cdf(d2, 0, 1))
+                    * norm.cdf(self.d2, 0, 1))[0]
         else:
             return (self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"] *
-                    norm.cdf(-d2, 0, 1) - \
-                    self.market_environment.market_data["underlying_price"] * norm.cdf(-d1, 0, 1))
-
+                    norm.cdf(-self.d2, 0, 1) -
+                    self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1))[0]
 
     def digital_option(self):
-        pass
+
+        if self.trade_attributes['payoff'] == "Call":
+            return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(self.d2, 0, 1)
+
+        else:
+            return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(-self.d2, 0, 1)
+
+    def asset_or_nothing_option(self):
+        if self.trade_attributes['payoff'] == "Call":
+            return self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1)
+        else:
+            return self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1)
 
     def asian_option(self):
-        pass
+        raise NotImplementedError("This pricer requires implemented Monte carlo methods")
 
-    def barier_option(self):
-        pass
+    def barrier_option(self):
+        raise NotImplementedError("This pricer requires implemented Monte carlo methods")
 
     def chooser_option(self):
+        raise NotImplementedError("This pricer requires implemented Monte carlo methods")
 
+    def run_analytical_pricer(self, option_style: str) -> float:
 
-    def run_analytical_pricer(self,option_style: str) -> float:
-        d1 = self.d1(underlying_price=self.market_environment.market_data['underlying_price'],
-                     strike=self.trade_attributes['strike'],
-                     time_to_maturity=self.trade_attributes["tau"][0],
-                     risk_free_rate=self.market_environment.market_data["risk_free_rate"],
-                     volatility=self.market_environment.market_data["volatility"])
-        d2 = self.d2(underlying_price=self.market_environment.market_data['underlying_price'],
-                     strike=self.trade_attributes['strike'],
-                     time_to_maturity=self.trade_attributes["tau"][0],
-                     risk_free_rate=self.market_environment.market_data["risk_free_rate"],
-                     volatility=self.market_environment.market_data["volatility"])
-        if option_style=='plain_vanilla':
-            self.plain_vanilla_option()
-        elif option_style=='digital_option':
-            pass
+        if option_style == 'plain_vanilla':
+            return self.plain_vanilla_option()
+        elif option_style == 'digital_option':
+            return self.digital_option()
+        elif option_style == 'asset_or_nothing_option':
+            return self.asset_or_nothing_option()
 
-    def vega(self, volatility: float) -> float:
+    def vega(self,vol) -> float:
         """
         Calculates Vega, the sensitivity of the option price to volatility.
         Vega is the derivative of the option price w.r.t volatility.
         """
-        d1 = self.d1(strike=self.trade_attributes['strike'],
-                     underlying_price=self.market_environment.market_data['underlying_price'],
-                     time_to_maturity=self.trade_attributes["tau"][0],
-                     risk_free_rate=self.market_environment.market_data["risk_free_rate"],
-                     volatility=volatility)
 
-        return self.market_environment.market_data['underlying_price'] * norm.pdf(d1, 0, 1) * np.sqrt(
+        return self.market_environment.market_data['underlying_price'] * norm.pdf(self.d1, 0, 1) * np.sqrt(
             self.trade_attributes["tau"][0])
 
     def implied_volatility(self, market_price: float, initial_guess: float = 0.2, tolerance: float = 1e-7,
@@ -226,7 +214,8 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
         def price_difference(vol):
             """ Difference between the market price and BS price with given vol. """
             self.market_environment.market_data["volatility"] = vol  # Temporarily update volatility
-            return self.run_analytical_pricer() - market_price
+            return self.run_analytical_pricer(option_style='plain_vanilla') - market_price  # TODO option_style must
+            # come from database.
 
         def vega_derivative(vol):
             """ Computes Vega as the derivative of the price function w.r.t volatility. """
@@ -240,7 +229,3 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
         except Exception as e:
             print(f"Newton-Raphson did not converge: {e}")
             return None, None
-
-
-    class BinaryOptionPricer(AnalyticalPricingEnginesInterface):
-

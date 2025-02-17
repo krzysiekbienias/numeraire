@@ -6,7 +6,7 @@ from django.shortcuts import render
 from tool_kit.fundamentals import InterestRateFundamentals
 from .forms import MarketForm, BookTradeForm, DiscountFactorForm
 from .models import TradeBook, DerivativePrice
-from .src.wiener.analytical_pricer import EuropeanPlainVanillaOption
+from wiener.src.wiener.black_scholes_framework.analytical_pricer import EuropeanOptionPricer
 
 decimal.getcontext().prec = 6
 
@@ -110,7 +110,7 @@ def single_trade(request, trade_id: int):
     if request.method == "POST":
         # we need to add button submit to triger form
         if market_data_form.is_valid():
-            european_option = EuropeanPlainVanillaOption(
+            european_option = EuropeanOptionPricer(
                 valuation_date=market_data_form.cleaned_data["valuation_date"],
                 trade_id=one_trade.pk)
 

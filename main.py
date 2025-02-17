@@ -2,15 +2,13 @@ import os
 
 import django
 import numpy as np
-import pandas as pd
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
-from wiener.src.wiener.analytical_pricer import EuropeanPlainVanillaOption
+from wiener.src.wiener.black_scholes_framework.analytical_pricer import EuropeanOptionPricer
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
-from tool_kit.yahoo_data_extractor import YahooDataExtractor
 
-from wiener.src.wiener.underlier_modeling import GeometricBrownianMotion
+from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
 
 if __name__ == '__main__':
@@ -53,10 +51,10 @@ if __name__ == '__main__':
     # ===========================================
     if price_button:
         date_ql = QuantLibToolKit.string_2ql_date(valuation_date)
-        european_option = EuropeanPlainVanillaOption(valuation_date=valuation_date, trade_id=trade_id)
+        european_option = EuropeanOptionPricer(valuation_date=valuation_date, trade_id=trade_id)
         european_option.set_up_market_environment(risk_free_rate=0.03)
         european_option.set_trade_attributes(trade_id=trade_id)
-        price = european_option.run_analytical_pricer()
+        price = european_option.run_analytical_pricer(option_style='plain_vanilla')
         print(f'Price of option of a trade with id: {trade_id} is equal {round(price, 4)}')
     # ===========================================
     # END REGION: Calculating analytical price

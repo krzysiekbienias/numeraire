@@ -5,7 +5,7 @@ from wiener.src.pricing_environment import TradeCalendarSchedule
 from app_settings import AppSettings
 import numpy as np
 from typing import List
-from ...models import TradeBook
+from wiener.models import TradeBook
 from tool_kit.yahoo_data_extractor import YahooDataExtractor
 from tool_kit.config_loader import CONFIG
 
