@@ -52,7 +52,7 @@ class AnalyticalPricingEnginesInterface:
 
 
 # Use defult parameters to be able to implement class using
-class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
+class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
     def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
         self._valuation_date = valuation_date
         self._trade_id = trade_id
@@ -154,7 +154,30 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                      np.sqrt(time_to_maturity) * volatility)
         return d2
 
-    def run_analytical_pricer(self):
+    def plain_vanilla_option(self):
+        if self.trade_attributes['payoff'] == "Call":
+            return (self.market_environment.market_data['underlying_price'] * norm.cdf(d1, 0, 1) -
+                    self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
+                    * norm.cdf(d2, 0, 1))
+        else:
+            return (self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"] *
+                    norm.cdf(-d2, 0, 1) - \
+                    self.market_environment.market_data["underlying_price"] * norm.cdf(-d1, 0, 1))
+
+
+    def digital_option(self):
+        pass
+
+    def asian_option(self):
+        pass
+
+    def barier_option(self):
+        pass
+
+    def chooser_option(self):
+
+
+    def run_analytical_pricer(self,option_style: str) -> float:
         d1 = self.d1(underlying_price=self.market_environment.market_data['underlying_price'],
                      strike=self.trade_attributes['strike'],
                      time_to_maturity=self.trade_attributes["tau"][0],
@@ -165,14 +188,10 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
                      time_to_maturity=self.trade_attributes["tau"][0],
                      risk_free_rate=self.market_environment.market_data["risk_free_rate"],
                      volatility=self.market_environment.market_data["volatility"])
-        if self.trade_attributes['payoff'] == "Call":
-            return (self.market_environment.market_data['underlying_price'] * norm.cdf(d1, 0, 1) -
-                    self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
-                    * norm.cdf(d2, 0, 1))
-        else:
-            return (self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"] *
-                    norm.cdf(-d2, 0, 1) - \
-                    self.market_environment.market_data["underlying_price"] * norm.cdf(-d1, 0, 1))
+        if option_style=='plain_vanilla':
+            self.plain_vanilla_option()
+        elif option_style=='digital_option':
+            pass
 
     def vega(self, volatility: float) -> float:
         """
@@ -221,3 +240,7 @@ class EuropeanPlainVanillaOption(AnalyticalPricingEnginesInterface):
         except Exception as e:
             print(f"Newton-Raphson did not converge: {e}")
             return None, None
+
+
+    class BinaryOptionPricer(AnalyticalPricingEnginesInterface):
+

@@ -27,6 +27,7 @@ class TradeBook(models.Model):
     trade_maturity = models.DateField()
     strike = models.FloatField()
     dividend = models.FloatField()
+    option_style = models.CharField(max_length=50,null=True,blank=True)
     user_id = models.CharField(default="kbienias", max_length=100)
 
 
