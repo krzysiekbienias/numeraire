@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import norm
 
-from .pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
+from wiener.src.pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
 from ...models import TradeBook
 from tool_kit.numerical_methods import RootFinding
 

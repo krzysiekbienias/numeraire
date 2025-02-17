@@ -6,7 +6,7 @@ import pandas as pd
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
-from wiener.src.wiener.analytical_methods import EuropeanPlainVanillaOption
+from wiener.src.wiener.analytical_pricer import EuropeanPlainVanillaOption
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 from tool_kit.yahoo_data_extractor import YahooDataExtractor
 
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     trade_id: int = 1
     valuation_date: str = '2025-01-07'  # YYYY-MM-DD
     simulation_button: bool = False
-    price_button: bool = False
+    price_button: bool = True
 
     # ===========================================
     # END REGION: Input

@@ -6,7 +6,7 @@ from django.shortcuts import render
 from tool_kit.fundamentals import InterestRateFundamentals
 from .forms import MarketForm, BookTradeForm, DiscountFactorForm
 from .models import TradeBook, DerivativePrice
-from .src.wiener.analytical_methods import EuropeanPlainVanillaOption
+from .src.wiener.analytical_pricer import EuropeanPlainVanillaOption
 
 decimal.getcontext().prec = 6
 

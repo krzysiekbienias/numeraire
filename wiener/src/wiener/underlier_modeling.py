@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 from datetime import datetime
-from .pricing_environment import TradeCalendarSchedule
+from wiener.src.pricing_environment import TradeCalendarSchedule
 from app_settings import AppSettings
 import numpy as np
 from typing import List
