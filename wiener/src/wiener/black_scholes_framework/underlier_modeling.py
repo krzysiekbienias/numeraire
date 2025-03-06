@@ -6,7 +6,7 @@ from app_settings import AppSettings
 import numpy as np
 from typing import List
 from wiener.models import TradeBook
-from tool_kit.yahoo_data_extractor import YahooDataExtractor
+from tool_kit.market_data_extractor import MarketDataExtractor
 from tool_kit.config_loader import CONFIG
 
 
@@ -120,7 +120,7 @@ class GeometricBrownianMotion(SimulationInterface):
             This function retrieves the trade maturity and underlying ticker from the database
             using the `TradeBook` model. It then:
             - Sets the end simulation date based on the trade maturity.
-            - Fetches the initial price of the underlying asset using the `YahooDataExtractor`.
+            - Fetches the initial price of the underlying asset using the `MarketDataExtractor`.
             - Sets the initialization point for the simulation.
 
             Parameters:
@@ -140,11 +140,11 @@ class GeometricBrownianMotion(SimulationInterface):
         self.set_end_simulation_date(TradeBook.objects.get(pk=trade_id).trade_maturity)
         # we need only one date extracted to get initial price of the underlying, this is why start_period and
         # end_period are equal
-        yd_object = YahooDataExtractor(tickers=TradeBook.objects.get(pk=trade_id).underlying_ticker,
-                                       start_period=self._start_simulation_date,
-                                       end_period=self._start_simulation_date)
+        yd_object = MarketDataExtractor(tickers=TradeBook.objects.get(pk=trade_id).underlying_ticker,
+                                        start_period=self._start_simulation_date,
+                                        end_period=self._start_simulation_date)
         self.set_initialisation_point(initialisation_point=
-                                      yd_object.extract_data()[TradeBook.objects.get(pk=trade_id).underlying_ticker][1])
+                                      yd_object.extract_equity_price()[TradeBook.objects.get(pk=trade_id).underlying_ticker][1])
 
     def euler_discretization_schema(self,
                                     simulation_dates,

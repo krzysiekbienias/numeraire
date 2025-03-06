@@ -52,7 +52,7 @@ class AnalyticalPricingEnginesInterface:
 
 
 # Use default parameters to be able to implement class using
-class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
+class EuropeanOption(AnalyticalPricingEnginesInterface):
     def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
         self._valuation_date = valuation_date
         self._trade_id = trade_id
@@ -144,7 +144,10 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
         d2=self.d1-self.market_environment.market_data['volatility']*np.sqrt(self.trade_attributes['tau'])
         return d2
 
-    def plain_vanilla_option(self):
+
+
+class PlainVanilaOption(EuropeanOption):
+    def run_pricer(self):
         if self.trade_attributes['payoff'] == "Call":
             return (self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1) -
                     self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
@@ -154,19 +157,25 @@ class EuropeanOptionPricer(AnalyticalPricingEnginesInterface):
                     norm.cdf(-self.d2, 0, 1) -
                     self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1))[0]
 
-    def digital_option(self):
 
+class DigitalOption(EuropeanOption)   :
+    def run_pricer(self):
         if self.trade_attributes['payoff'] == "Call":
             return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(self.d2, 0, 1)
 
         else:
             return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(-self.d2, 0, 1)
 
-    def asset_or_nothing_option(self):
+
+
+class AssetOrNothingOption(EuropeanOption):
+    def run_pricer(self):
         if self.trade_attributes['payoff'] == "Call":
             return self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1)
         else:
             return self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1)
+
+
 
     def asian_option(self):
         raise NotImplementedError("This pricer requires implemented Monte carlo methods")
