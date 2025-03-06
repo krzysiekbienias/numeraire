@@ -1,4 +1,6 @@
 {
   "csv_drop_path":"/Users/krzysztofbienias/Documents/drop_point",
-  "equity_simulation_file_name": "equity"
+  "equity_simulation_file_name": "equity",
+  "ALPHA_VENTAGE_API_KEY":"R3GYTL2WK3V2NF6I",
+  "FRED_API_KEY": "1e762f897c6154c9c4285238f972033e"
 }

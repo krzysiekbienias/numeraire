@@ -59,7 +59,7 @@ python manage.py runserver
 
 # YahooData Extractor
 ## Overview
-The YahooDataExtractor class is a Python utility designed for extracting financial data from Yahoo Finance. This class is particularly useful for financial analysts, data scientists, and developers working with historical market data. Below is an overview of its functionality and design.
+The MarketDataExtractor class is a Python utility designed for extracting financial data from Yahoo Finance. This class is particularly useful for financial analysts, data scientists, and developers working with historical market data. Below is an overview of its functionality and design.
 
 ## Key futures
 ### 1. Initialization:
