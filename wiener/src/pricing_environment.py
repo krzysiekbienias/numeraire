@@ -4,7 +4,7 @@ import QuantLib as ql
 import pandas as pd
 
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
-from tool_kit.yahoo_data_extractor import YahooDataExtractor
+from tool_kit.market_data_extractor import MarketDataExtractor
 from wiener.models import TradeBook
 
 QL = NewType("QL", ql)
@@ -251,6 +251,34 @@ class MarketEnvironmentInterface:
 
 
 class MarketEnvironmentHandler:
+    """
+    A class to manage and handle market-related data for financial modeling and option pricing.
+
+    The `MarketEnvironmentHandler` class is designed to store, retrieve, and manipulate market parameters
+    such as risk-free rates, volatility, discount factors, and underlying asset prices. It also provides
+    functionality to interact with external data sources (e.g., Yahoo Finance) and databases to fetch
+    trade-related information.
+
+    Attributes
+    ----------
+    __valuation_date : str
+        The valuation date in 'YYYY-MM-DD' format.
+    __underlying_price : float
+        The price of the underlying asset.
+    __underlying_name : str
+        The name or ticker symbol of the underlying asset.
+    __risk_free_rate : float
+        The risk-free interest rate.
+    __volatility : float
+        The volatility of the underlying asset.
+    __discount_factor : float
+        The discount factor for valuation.
+    __trade_id : int or None
+        The trade ID associated with the market data (if applicable).
+    market_data : dict
+        A dictionary to store processed market data.
+    """
+
     def __init__(self,
                  valuation_date: str = "2023-10-02",  #remember to add zero for day
                  underlying_name: str = "TSLA",
@@ -260,79 +288,126 @@ class MarketEnvironmentHandler:
                  discount_factor: float = 0.99,
                  trade_id: (int, None) = None
                  ):
-        """
-        __init__ _summary_
 
-        Parameters
-        ----------
-        valuation_date : str, optional
-            _description_, by default "2023-10-02"
-        risk_free_rate : float, optional
-            _description_, by default 0.06
-        volatility : float, optional
-            _description_, by default 0.32
-        trade_id : int, optional
-            _description_, by default 1
-        """
-
-        self._valuation_date = valuation_date
-        self._underlying_price = underlying_price
-        self._underlying_name = underlying_name
-        self._risk_free_rate = risk_free_rate
-        self._volatility = volatility
-        self._discount_factor = discount_factor,
-        self._trade_id = trade_id
+        self.__valuation_date = valuation_date
+        self.__underlying_price = underlying_price
+        self.__underlying_name = underlying_name
+        self.__risk_free_rate = risk_free_rate
+        self.__volatility = volatility
+        self.__discount_factor = discount_factor,
+        self.__trade_id = trade_id
 
         self.market_data: dict = dict()
 
     # --------------
-    # Region getters
+    # Region setters
     # --------------
+    def set_valuation_date(self, valuation_date):
+        """
+        Set the valuation date with validation.
 
-    def get_trade_id(self):
-        return self._trade_id
+        Parameters
+        ----------
+        valuation_date : str
+            The valuation date in 'YYYY-MM-DD' format.
 
-    def get_valuation_date(self):
+        Raises
+        ------
+        ValueError
+            If the valuation date is not in the correct format or is not a valid date.
+        """
+        # Check if the input is a string
+        if not isinstance(valuation_date, str):
+            raise ValueError("Valuation date must be a string in 'YYYY-MM-DD' format.")
 
-        return self._valuation_date
+        # Check the format using a regular expression
+        import re
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", valuation_date):
+            raise ValueError("Valuation date must be in 'YYYY-MM-DD' format.")
 
-    def get_underlying_name(self):
-        return self._underlying_name
+        # Validate that the date is a valid calendar date
 
-    def get_risk_free_rate(self):
-        return self._risk_free_rate
+        # Validate that the date is a valid calendar date using QuantLib
+        try:
+            # Convert the string to a QuantLib date
+            ql_date = ql.DateParser.parseISO(valuation_date)
+        except RuntimeError:
+            raise ValueError("Valuation date is not a valid calendar date.")
 
-    def get_volatility(self):
-        return self._volatility
+        # If all checks pass, set the valuation date
+        self.__valuation_date = valuation_date
+
+    def set_underlying_name(self, underlying_name):
+        """
+        Set the name or ticker symbol of the underlying asset.
+
+        Parameters
+        ----------
+        underlying_name : str
+            The name or ticker symbol of the underlying asset.
+        """
+        if self.__trade_id is None:
+            self.__underlying_name = underlying_name
+        else:
+            self.__underlying_name = self.parse_underlying_price_from_yahoo_finance(trade_id=self.__trade_id)[
+                'db_name']
+
+    def set_underlying_price(self, underlying_price):
+
+        if self.__trade_id is None:
+            self.__underlying_price = underlying_price
+        else:
+            self.__underlying_price = self.parse_underlying_price_from_yahoo_finance(trade_id=self.__trade_id)[
+                'underlying_price']
+
+    def set_risk_free_rate(self, risk_free_rate=None):
+        """
+        Set the risk-free interest rate.
+
+        Parameters
+        ----------
+        risk_free_rate : float, optional
+            The risk-free interest rate. If None, fetches from Yahoo Finance.
+        """
+        if risk_free_rate is None:
+
+            self.__risk_free_rate = MarketDataExtractor(tickers=self.__underlying_name,
+                                                        start_period=self.__valuation_date).extract_risk_free_rate()
+        else:
+            self.__risk_free_rate = risk_free_rate
+
+    def set_volatility(self, volatility):
+        self.__volatility = volatility
 
     # --------------
     # End  Region getters
     # --------------
 
     # --------------
-    # Region setters
+    # Region getters
     # --------------
-    def set_valuation_date(self, valuation_date):
-        self._valuation_date = valuation_date
 
-    def set_underlying_name(self, underlying_name):
-        if self._trade_id is None:
-            self._underlying_name = underlying_name
-        else:
-            self._underlying_name = self.parse_underlying_price_from_yahoo_finance(trade_id=self._trade_id)['db_name']
+    def get_trade_id(self):
+        """
+        Returns the trade ID associated with the market data.
 
-    def set_underlying_price(self, underlying_price):
-        if self._trade_id is None:
-            self._underlying_price = underlying_price
-        else:
-            self._underlying_price = self.parse_underlying_price_from_yahoo_finance(trade_id=self._trade_id)[
-                'underlying_price']
+        Returns:
+            int or None: The trade ID if set, otherwise None.
+        """
+        return self.__trade_id
 
-    def set_risk_free_rate(self, risk_free_rate):
-        self._risk_free_rate = risk_free_rate
+    def get_valuation_date(self):
 
-    def set_volatility(self, volatility):
-        self._volatility = volatility
+        return self.__valuation_date
+
+    def get_underlying_name(self):
+        return self.__underlying_name
+
+    def get_risk_free_rate(self):
+        return self.__risk_free_rate
+
+    def get_volatility(self):
+        return self.__volatility
 
     # --------------
     # End  Region getters
@@ -340,24 +415,24 @@ class MarketEnvironmentHandler:
 
     def display_market_data(self):
         def __str__(self) -> str:
-            return f'Market data:\n underlying Price :{self._underlying_price} \n Risk free rate for pricing :{self._risk_free_rate}\n Implied volatility: {self._implied_volatility}\n '
+            return (f'Market data:\n underlying Price :{self.__underlying_price} \n '
+                    f'Risk free rate for pricing :{self.__risk_free_rate}\n'
+                    f' Implied volatility: {self.__implied_volatility}\n')
 
     @staticmethod
     def parse_trade_ticker_by_trade_id(trade_id: (int, None)) -> str:
         """
-        parse_trade_ticer_by_trade
-        Description
-        -----------
-        This method parses ticker from db based on trade_id
-
+        Parse the underlying ticker symbol from a database based on the trade ID.
 
         Parameters
         ----------
-        trade_id : int
+        trade_id : int or None
+            The trade ID to look up in the database.
 
         Returns
         -------
         str
+            The ticker symbol of the underlying asset if found, otherwise None.
         """
         if trade_id is not None and TradeBook.objects.filter(pk=trade_id).exists():
             underlying_for_trade = TradeBook.objects.get(pk=trade_id).underlying_ticker
@@ -365,21 +440,19 @@ class MarketEnvironmentHandler:
         else:
             return None
 
-    def parse_underlying_price_from_yahoo_finance(self, trade_id: (int, None)) -> dict:
+    def parse_underlying_price_from_yahoo_finance(self, trade_id: (int, None)) -> dict|None:
         """
-        parse_underlying_price_from_db_info
-        Description
-        -----------
-        This method check if trade exists in db and if so extract underlying price, by calling self.extract_underlying_quotation().
+        Fetch the underlying asset price from Yahoo Finance based on the trade ID.
 
         Parameters
         ----------
-        trade_id : int,None
+        trade_id : int or None
+            The trade ID to look up in the database.
 
         Returns
         -------
-        float
-            
+        dict
+            A dictionary containing the underlying asset name and price if found, otherwise None.
         """
 
         if TradeBook.objects.filter(pk=trade_id).exists():
@@ -395,38 +468,57 @@ class MarketEnvironmentHandler:
     @staticmethod
     def create_ql_rate(risk_free_rate: float = 0.05, year_fraction_conv: ql.DayCounter = ql.Actual365Fixed(),
                        compounding_type: int = ql.Continuous, frequency: int = ql.Once) -> ql.InterestRate:
+        """
+        Create a QuantLib interest rate object.
+
+        Parameters
+        ----------
+        risk_free_rate : float, optional
+            The risk-free interest rate. Defaults to 0.05.
+        year_fraction_conv : ql.DayCounter, optional
+            The day count convention. Defaults to ql.Actual365Fixed().
+        compounding_type : int, optional
+            The compounding type. Defaults to ql.Continuous.
+        frequency : int, optional
+            The compounding frequency. Defaults to ql.Once.
+
+        Returns
+        -------
+        ql.InterestRate
+            A QuantLib interest rate object.
+        """
 
         return ql.InterestRate(risk_free_rate, year_fraction_conv, compounding_type, frequency)
 
     def extract_underlying_quotation(self) -> dict:
         """
-        extract_underlying_quotation
-        Description
-        -----------
-        This method extract underlying price for given set of ticker and for given time window.
+        Extract the underlying asset price for a given time window.
 
         Returns
         -------
         dict
+            A dictionary containing the underlying asset price and related data.
         """
-        if self._trade_id is not None:
-            valuation_date_ql = QuantLibToolKit.string_2ql_date(self._valuation_date)
+        if self.__trade_id is not None:
+            valuation_date_ql = QuantLibToolKit.string_2ql_date(self.__valuation_date)
             maturity_date_ql = QuantLibToolKit.date_object_2ql_date(
-                TradeBook.objects.get(pk=self._trade_id).trade_maturity)
-            start_contract_date=QuantLibToolKit.date_object_2ql_date(TradeBook.objects.get(pk=self._trade_id).trade_date)
+                TradeBook.objects.get(pk=self.__trade_id).trade_maturity)
+            start_contract_date = QuantLibToolKit.date_object_2ql_date(
+                TradeBook.objects.get(pk=self.__trade_id).trade_date)
             if valuation_date_ql > maturity_date_ql:
                 raise ValueError("Valuation date must be earlier than maturity date")
             elif valuation_date_ql < start_contract_date:
                 raise ValueError("Valuation date must NOT be earlier than the contract starts.")
-        if self._trade_id is None:
-            print(f'Price of underlying as of {self._valuation_date} for underlier {self.get_underlying_name()} is'
-            f'equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).extract_data()[self._underlying_price][1]}')
-            return YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).extract_data()
+        if self.__trade_id is None:
+            print(f'Price of underlying as of {self.__valuation_date} for underlier {self.get_underlying_name()} is'
+                  f'equal {MarketDataExtractor(tickers=self.__underlying_name, start_period=self.__valuation_date).extract_equity_price()[self.__underlying_price][1]}')
+            return MarketDataExtractor(tickers=self.__underlying_name,
+                                       start_period=self.__valuation_date).extract_equity_price()
         else:
-            print(f'Price of underlying as of {self._valuation_date} for underlier {self.get_underlying_name()} is'
-                  f' equal {YahooDataExtractor(tickers=self._underlying_name, start_period=self._valuation_date).extract_data()[self._underlying_name][1]}')
-            return YahooDataExtractor(tickers=self.parse_trade_ticker_by_trade_id(trade_id=self._trade_id),
-                                      start_period=self._valuation_date).extract_data()
+            print(f'Price of underlying as of {self.__valuation_date} for underlier {self.get_underlying_name()} is'
+                  f' equal {MarketDataExtractor(tickers=self.__underlying_name, start_period=self.__valuation_date).extract_equity_price()[self.__underlying_name][1]}')
+            return MarketDataExtractor(tickers=self.parse_trade_ticker_by_trade_id(trade_id=self.__trade_id),
+                                       start_period=self.__valuation_date).extract_equity_price()
 
     def extract_discount_factors(self, maturity_date: str | None = None) -> float:
         """
@@ -438,26 +530,26 @@ class MarketEnvironmentHandler:
         ----------
         maturity_date
         """
-        rate = self.create_ql_rate(risk_free_rate=self._risk_free_rate)
-        if self._trade_id is not None:
-            valuation_date_ql = ql.DateParser.parseISO(self._valuation_date)
+        rate = self.create_ql_rate(risk_free_rate=self.__risk_free_rate)
+        if self.__trade_id is not None:
+            valuation_date_ql = ql.DateParser.parseISO(self.__valuation_date)
             maturity_date_ql = QuantLibToolKit.date_object_2ql_date(
-                TradeBook.objects.get(pk=self._trade_id).trade_maturity)
-            start_contract_date=QuantLibToolKit.date_object_2ql_date(TradeBook.objects.get(pk=self._trade_id).trade_date)
+                TradeBook.objects.get(pk=self.__trade_id).trade_maturity)
+            start_contract_date = QuantLibToolKit.date_object_2ql_date(
+                TradeBook.objects.get(pk=self.__trade_id).trade_date)
             if maturity_date_ql < valuation_date_ql < start_contract_date:
                 raise ValueError("Valuation date must be earlier than maturity date")
 
-            self._discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
-                                                        QuantLibToolKit.date_object_2ql_date(
-                                                            TradeBook.objects.get(pk=self._trade_id).trade_maturity))
-            return self._discount_factor
+            self.__discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self.__valuation_date),
+                                                         QuantLibToolKit.date_object_2ql_date(
+                                                             TradeBook.objects.get(pk=self.__trade_id).trade_maturity))
+            return self.__discount_factor
         else:
-            self._discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self._valuation_date),
-                                                        QuantLibToolKit.string_2ql_date(maturity_date))
-            return self._discount_factor
+            self.__discount_factor = rate.discountFactor(QuantLibToolKit.string_2ql_date(self.__valuation_date),
+                                                         QuantLibToolKit.string_2ql_date(maturity_date))
+            return self.__discount_factor
 
-
-    def upload_market_data(self, **kwargs) -> dict:
+    def upload_market_data(self, **kwargs):
         """
         Description
         -----------
@@ -476,12 +568,12 @@ class MarketEnvironmentHandler:
 
         # risk-free rate
 
-        risk_free_rate = kwargs['risk_free_rate'] if "risk_free_rate" in kwargs else self.get_risk_free_rate()
+        risk_free_rate = kwargs['risk_free_rate'] if "risk_free_rate" in kwargs else self.set_risk_free_rate()
         # volatility
-        volatility = kwargs['volatility'] if "volatility" in kwargs else self.get_volatility()
+        volatility = kwargs['volatility'] if "volatility" in kwargs else self.set_volatility()
         # underlying name
-        if self._trade_id is not None:
-            underlying_name = self.parse_trade_ticker_by_trade_id(trade_id=self._trade_id)
+        if self.__trade_id is not None:
+            underlying_name = self.parse_trade_ticker_by_trade_id(trade_id=self.__trade_id)
 
         else:
             underlying_name = self.get_underlying_name()
@@ -499,4 +591,3 @@ class MarketEnvironmentHandler:
 
     def validate_market_data(self):
         raise NotImplementedError()
-

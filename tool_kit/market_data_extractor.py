@@ -133,30 +133,7 @@ class MarketDataExtractor:
                 raise NotImplementedError("Another cases are not implemented yet")
 
     def fetch_interest_rate_data(self):
-        """
-        Fetch data from FRED for a specific instrument.
 
-        Parameters
-        ----------
-        api_key : str
-            Your FRED API key.
-        instrument : str
-            The instrument key (e.g., "10Y", "3M_TBILL").
-        start_date : str
-            The start date in 'YYYY-MM-DD' format.
-        end_date : str
-            The end date in 'YYYY-MM-DD' format.
-
-        Returns
-        -------
-        pd.DataFrame
-            The fetched data as a DataFrame.
-
-        Raises
-        ------
-        RuntimeError
-            If the instrument key is invalid or the data cannot be fetched.
-        """
         try:
             # Get the FRED series ID from the dictionary
             series_id = FRED_SERIES_IDS.get(self._instrument_id)
@@ -166,6 +143,7 @@ class MarketDataExtractor:
             # Fetch data from FRED
             data = web.DataReader(series_id, "fred", self._start_period, self._end_period,
                                   api_key=CONFIG.FRED_API_KEY)
+
             return data
         except Exception as e:
             raise RuntimeError(f"Failed to fetch data: {e}")

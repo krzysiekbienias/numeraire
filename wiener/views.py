@@ -115,7 +115,7 @@ def single_trade(request, trade_id: int):
                 trade_id=one_trade.pk)
 
             row_to_insert = DerivativePrice(trade_id=TradeBook.objects.get(pk=trade_id),
-                                            valuation_date=european_option._valuation_date,
+                                            valuation_date=european_option.__valuation_date,
                                             price_status='Success',
                                             analytical_price=european_option.run_analytical_pricer(),
                                             extra_price=-1,
