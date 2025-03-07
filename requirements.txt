@@ -146,4 +146,4 @@ websocket-client==1.8.0
 websockets==14.2
 widgetsnbextension==4.0.13
 yarl==1.18.3
-yfinance==0.2.37
+yfinance==0.2.54
