@@ -5,8 +5,8 @@ import numpy as np
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
-from wiener.src.wiener.black_scholes_framework.analytical_pricer import (PlainVanilaOption, DigitalOption,
-                                                                         AssetOrNothingOption)
+from wiener.src.wiener.black_scholes_framework.pricer import (PlainVanilaOption, DigitalOption,
+                                                              AssetOrNothingOption, AsianOption)
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
@@ -56,6 +56,7 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
         'PlainVanillaOption': PlainVanilaOption,
         'DigitalOption': DigitalOption,
         'AssetOrNothingOption': AssetOrNothingOption,
+        'AsianOption': AsianOption
     }
 
     # Select the correct pricer class
@@ -68,6 +69,8 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     option_pricer = pricer_class(valuation_date=valuation_date, trade_id=trade_id)
     option_pricer.set_up_market_environment(**kwargs)
     option_pricer.set_trade_attributes(trade_id=trade_id)
+    if option_style == 'AsianOption':
+        option_pricer.simulate_underlier()
 
     price = option_pricer.run_pricer()
 
@@ -78,14 +81,14 @@ if __name__ == '__main__':
     # ===========================================
     # REGION: Input
     # ===========================================
-    trade_id: int = 1
+    trade_id: int = 11
     valuation_date: str = '2025-01-07'  # YYYY-MM-DD
     simulation_button: bool = False
     price_button: bool = True
-    volatility=0.25
+    volatility = 0.25
     # ** kwargs for run_pricer:
     # - risk_free_rate
-    # - volatility currently i must pass it.
+    # - volatility currently I must pass it.
 
     # ===========================================
     # END REGION: Input

@@ -211,7 +211,7 @@ The EuropeanPlainVanillaOption class is an implementation of an analytical price
 classDiagram  
 
 
-    class AnalyticalPricingEnginesInterface {
+    class PricingEnginesInterface {
         <<interface>>
     }
     class EuropeanPlainVanillaOption {
@@ -249,7 +249,7 @@ classDiagram
     }
 
     %% Relationships
-    EuropeanPlainVanillaOption --> AnalyticalPricingEnginesInterface : Implements
+    EuropeanPlainVanillaOption --> PricingEnginesInterface : Implements
     EuropeanPlainVanillaOption --> TradeCalendarSchedule : Uses
     EuropeanPlainVanillaOption --> MarketEnvironmentHandler : Uses
     EuropeanPlainVanillaOption --> TradeBook : Fetches Data
