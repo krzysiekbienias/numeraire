@@ -140,7 +140,8 @@ class MarketDataExtractor:
         self._end_period = end_period
 
     def extract_equity_price(self,
-                     column_name="Close")->Dict[str, pd.DataFrame | List]:
+                     column_name="Close",
+                             offset='1d')->Dict[str, pd.DataFrame | List]:
         # TODO refactor this method!
         """
         Extracts historical market data from Yahoo Finance.
@@ -169,41 +170,50 @@ class MarketDataExtractor:
         NotImplementedError:
             If an unsupported extraction case is encountered.
         """
-        underlier_prices_dict = dict()
-        # different tickers and time window
-        if self._start_period is not None and self._end_period is not None and self._start_period != self._end_period \
-            and isinstance(self._tickers, List):
-            for ticker in self._tickers:
-                df_equities = yf.download(tickers=ticker,
-                                          start=self._start_period,
-                                          end=self._end_period)[[column_name]]
-                underlier_prices_dict[ticker] = df_equities
-            return underlier_prices_dict
+        if isinstance(self._tickers, str):
+            tickers = [self._tickers]
+        else:
+            tickers = self._tickers
 
-        # one ticker and time stamp
-        elif (self._start_period is not None and self._end_period is not None and
-            self._start_period == self._end_period) or (self._start_period is not None and self._end_period is None):
-            if isinstance(self._tickers, str) or len(self._tickers) == 1:
+        underlier_prices_dict = {}
 
-                end_period_ql_date_increased_by1 = ql.Date(self._start_period, "%Y-%m-%d") + 1
+        # Fetching data for each ticker
+        for ticker in tickers:
+            if self._start_period and self._end_period and self._start_period != self._end_period:
+                df = yf.download(ticker, start=self._start_period, end=self._end_period)[[column_name]]
+                underlier_prices_dict[ticker] = df
 
-                df_equities = yf.Ticker(self._tickers).history(start=self._start_period,
-                                                                  end=end_period_ql_date_increased_by1.ISO())
-                underlier_prices_dict[self._tickers] = [df_equities.index[0].date(), df_equities.iloc[0, 3]]
-                return underlier_prices_dict
-            # the newest available prices starting from start date.
-            elif self._start_period is not None and self._end_period=='newest':
-                # but what if we add one day that is a saturda. It must be loggic applied to move to business day
-                end_period_ql_date_increased_by1 = ql.Date(self._start_period, "%Y-%m-%d") + 1
+            elif self._start_period and (self._end_period is None or self._start_period == self._end_period):
+                # Determine the actual end period only if None using QuantLib
+                if self._end_period is None:
+                    ql_start_date = ql.DateParser.parseISO(self._start_period)
+                    # if we choose days as offset we move one day forward
+                    if offset.endswith("d"):
+                        days_back = int(offset[:-1])
+                        ql_end_date = ql_start_date + ql.Period(days_back, ql.Days)
+                    # if we choose months as offset we move backwards
+                    elif offset.endswith("mo"):
+                        months_back = int(offset[:-2])
+                        ql_end_date = ql_start_date - ql.Period(months_back, ql.Months)
+                    else:
+                        raise ValueError("Unsupported offset format. Use 'Xd' for days or 'Xmo' for months.")
 
-                for underlier in self._tickers:
-                    df_equities = yf.Ticker(underlier).history(start=self._start_period,
-                                                                      end=end_period_ql_date_increased_by1.ISO())
-                    underlier_prices_dict.update(
-                        {underlier: [df_equities.index[0].date(), df_equities[column_name][0]]})
-                return underlier_prices_dict
+                    computed_end_period = ql_end_date.ISO()
+                else:
+                    computed_end_period = self._end_period
+                if offset.endswith("d"):
+                    df = yf.Ticker(ticker).history(start=self._start_period, end=computed_end_period)
+                else:
+                    df = yf.Ticker(ticker).history(start=computed_end_period, end=self._start_period)
+
+                if not df.empty:
+                    underlier_prices_dict[ticker] = [df.index[0].date(), df.iloc[0][column_name]]
+                else:
+                    underlier_prices_dict[ticker] = None  # Handle case where data isn't available
             else:
-                raise NotImplementedError("Another cases are not implemented yet")
+                raise NotImplementedError("Unsupported extraction case.")
+
+            return underlier_prices_dict
 
     def fetch_interest_rate_data(self)->float|pd.DataFrame:
         """

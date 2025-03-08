@@ -371,6 +371,7 @@ class MarketEnvironmentHandler:
             The risk-free interest rate. If None, fetches from Yahoo Finance.
         """
         if risk_free_rate is None:
+            print("Risk free rate is extracting from FRED...")
 
             self.__risk_free_rate = MarketDataExtractor(equity_tickers=self.__underlying_name,
                                                         instrument_id=self.__risk_free_rate_id,
