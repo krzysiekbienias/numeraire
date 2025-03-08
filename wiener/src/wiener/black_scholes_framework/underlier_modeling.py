@@ -28,6 +28,45 @@ class SimulationInterface:
 
 
 class GeometricBrownianMotion(SimulationInterface):
+    """
+    Description:
+    ------------
+    A class for simulating asset prices using the Geometric Brownian Motion (GBM) model.
+
+    The GBM model is a stochastic process used in financial modeling to simulate the evolution
+    of asset prices over time. It follows the equation:
+
+        dS = μSdt + σSdz
+
+    where:
+        - `S` is the asset price,
+        - `μ` (drift) is the expected return,
+        - `σ` (volatility) is the standard deviation of returns,
+        - `dz` is a Wiener process.
+
+    Parameters:
+    -----------
+    drift : float, default=0.3
+        The expected return (drift) of the asset over time.
+
+    volatility : float, default=0.2
+        The standard deviation of the asset's returns, representing risk.
+
+    initialisation_point : float, default=100
+        The starting value of the asset price.
+
+    grid_time_step : str, default='daily'
+        The time step for simulation (e.g., 'daily', 'weekly').
+
+    start_simulation_date : str, default='2025-01-02'
+        The start date of the simulation in "YYYY-MM-DD" format.
+
+    end_simulation_date : str, default='2025-04-02'
+        The end date of the simulation in "YYYY-MM-DD" format.
+
+    simulation_schema : str, default=AppSettings.SIMULATION_SCHEMA
+        Defines the schema for the simulation configuration.
+    """
 
     def __init__(self,
                  drift: float = 0.3,
@@ -37,56 +76,143 @@ class GeometricBrownianMotion(SimulationInterface):
                  start_simulation_date: str = '2025-01-02',
                  end_simulation_date: str = '2025-04-02',
                  simulation_schema: str = AppSettings.SIMULATION_SCHEMA):
-        self._start_simulation_date = start_simulation_date
-        self._end_simulation_date = end_simulation_date
-        self._drift = drift
-        self._volatility = volatility
-        self._simulation_schema = simulation_schema
-        self._initialisation_point = initialisation_point
-        self._grid_time_step = grid_time_step
+        self.__start_simulation_date = start_simulation_date
+        self.__end_simulation_date = end_simulation_date
+        self.__drift = drift
+        self.__volatility = volatility
+        self.__simulation_schema = simulation_schema
+        self.__initialisation_point = initialisation_point
+        self.__grid_time_step = grid_time_step
 
-    # --------------
-    # Region getters
-    # --------------
-    def get_drift(self):
-        return self._drift
+    """
+    Initializes a Geometric Brownian Motion simulation with given parameters.
 
-    def get_volatility(self):
-        return self._volatility
+    Parameters:
+    -----------
+    drift : float
+        The expected return (drift) of the asset.
 
-    def get_initialisation_point(self):
-        return self._initialisation_point
+    volatility : float
+        The standard deviation of asset returns.
 
-    def get_grid_time_step(self):
-        return self._grid_time_step
+    initialisation_point : float
+        The initial price of the asset.
 
-    # --------------
-    # End  Region getters
-    # --------------
+    grid_time_step : str
+        The time step for the simulation.
+
+    start_simulation_date : str
+        The start date of the simulation.
+
+    end_simulation_date : str
+        The end date of the simulation.
+
+    simulation_schema : str
+        The schema configuration for the simulation.
+    """
 
     # --------------
     # Region setters
     # --------------
     def set_drift(self, drift):
-        self._drift = drift
+        """
+        Sets a new value for the drift parameter.
+
+        Parameters:
+        -----------
+        drift : float
+            The new expected return value.
+        """
+        self.__drift = drift
 
     def set_volatility(self, volatility):
-        self._volatility = volatility
+        """
+        Sets a new value for the volatility parameter.
+
+        Parameters:
+        -----------
+        volatility : float
+            The new standard deviation of asset returns.
+        """
+        self.__volatility = volatility
 
     def set_initialisation_point(self, initialisation_point):
-        self._initialisation_point = initialisation_point
+        """
+        Sets a new initial asset price.
+
+        Parameters:
+        -----------
+        initialisation_point : float
+            The new starting price of the asset.
+        """
+        self.__initialisation_point = initialisation_point
 
     def set_grid_time_step(self, grid_time_step):
-        self._grid_time_step = grid_time_step
+        """
+        Sets a new time step for the simulation.
+
+        Parameters:
+        -----------
+        grid_time_step : str
+            The new time step value (e.g., 'daily', 'weekly').
+        """
+        self.__grid_time_step = grid_time_step
 
     def set_start_simulation_date(self, start_simulation_date):
-        self._start_simulation_date = start_simulation_date
+        """
+        Sets a new start date for the simulation.
+
+        Parameters:
+        -----------
+        start_simulation_date : str
+            The new start date in "YYYY-MM-DD" format.
+        """
+        self.__start_simulation_date = start_simulation_date
 
     def set_end_simulation_date(self, end_simulation_date):
-        self._end_simulation_date = end_simulation_date
+        """
+        Sets a new end date for the simulation.
+
+        Parameters:
+        -----------
+        end_simulation_date : str
+            The new end date in "YYYY-MM-DD" format.
+        """
+        self.__end_simulation_date = end_simulation_date
 
     # --------------
     # End Region setters
+    # --------------
+
+    # --------------
+    # Region getters
+    # --------------
+    @property
+    def get_drift(self):
+        """
+        Returns the drift parameter (expected return).
+
+        Returns:
+        --------
+        float
+            The drift value of the simulation.
+        """
+        return self.__drift
+
+    @property
+    def get_volatility(self):
+        return self.__volatility
+
+    @property
+    def get_initialisation_point(self):
+        return self.__initialisation_point
+
+    @property
+    def get_grid_time_step(self):
+        return self.__grid_time_step
+
+    # --------------
+    # End  Region getters
     # --------------
 
     # --------------
@@ -105,9 +231,9 @@ class GeometricBrownianMotion(SimulationInterface):
         tuple
 
         """
-        calendar_schedule = TradeCalendarSchedule(valuation_date=self._start_simulation_date,
-                                                  termination_date=self._end_simulation_date,
-                                                  frequency=self._grid_time_step,
+        calendar_schedule = TradeCalendarSchedule(valuation_date=self.__start_simulation_date,
+                                                  termination_date=self.__end_simulation_date,
+                                                  frequency=self.__grid_time_step,
                                                   calendar=AppSettings.CALENDAR,
                                                   year_fraction_convention=AppSettings.DEFAULT_YEAR_FRACTION_CONVENTION)
         return calendar_schedule.scheduled_dates, calendar_schedule.year_fractions
@@ -140,11 +266,12 @@ class GeometricBrownianMotion(SimulationInterface):
         self.set_end_simulation_date(TradeBook.objects.get(pk=trade_id).trade_maturity)
         # we need only one date extracted to get initial price of the underlying, this is why start_period and
         # end_period are equal
-        yd_object = MarketDataExtractor(tickers=TradeBook.objects.get(pk=trade_id).underlying_ticker,
-                                        start_period=self._start_simulation_date,
-                                        end_period=self._start_simulation_date)
+        yd_object = MarketDataExtractor(equity_tickers=TradeBook.objects.get(pk=trade_id).underlying_ticker,
+                                        start_period=self.__,
+                                        end_period=self.__start_simulation_date)
         self.set_initialisation_point(initialisation_point=
-                                      yd_object.extract_equity_price()[TradeBook.objects.get(pk=trade_id).underlying_ticker][1])
+                                      yd_object.extract_equity_price()[
+                                          TradeBook.objects.get(pk=trade_id).underlying_ticker][1])
 
     def euler_discretization_schema(self,
                                     simulation_dates,
@@ -169,10 +296,10 @@ class GeometricBrownianMotion(SimulationInterface):
 
         dts = incremental
         x_ip1 = np.zeros((paths_number, len(simulation_dates)))
-        x_ip1[:, 0] = self._initialisation_point
+        x_ip1[:, 0] = self.__initialisation_point
         for t, dt in zip(range(1, len(x_ip1[0])), dts):
             z = np.random.standard_normal(paths_number)
-            x_ip1[:, t] = x_ip1[:, t - 1] + self._drift * dt + self._volatility * z * np.sqrt(dt)
+            x_ip1[:, t] = x_ip1[:, t - 1] + self.__drift * dt + self.__volatility * z * np.sqrt(dt)
         return np.transpose(x_ip1)
 
     def milstein_discretization_schema(self,
@@ -197,12 +324,12 @@ class GeometricBrownianMotion(SimulationInterface):
 
         dts = incremental
         x_ip1 = np.zeros((paths_number, len(simulation_dates)))
-        x_ip1[:, 0] = self._initialisation_point
+        x_ip1[:, 0] = self.__initialisation_point
         for t, dt in zip(range(1, len(x_ip1[0])), dts):
             z = np.random.standard_normal(paths_number)
-            x_ip1[:, t] = x_ip1[:, t - 1] + self._drift * x_ip1[:, t - 1] * dt + \
-                          self._volatility * x_ip1[:, t - 1] * np.sqrt(dt) * z + \
-                          0.5 * self._volatility ** 2 * x_ip1[:, t - 1] * (dt * z ** 2 * np.sqrt(dt) - dt)
+            x_ip1[:, t] = x_ip1[:, t - 1] + self.__drift * x_ip1[:, t - 1] * dt + \
+                          self.__volatility * x_ip1[:, t - 1] * np.sqrt(dt) * z + \
+                          0.5 * self.__volatility ** 2 * x_ip1[:, t - 1] * (dt * z ** 2 * np.sqrt(dt) - dt)
         return np.transpose(x_ip1)
 
     def exact_solution_discretization_schema(self,
@@ -227,12 +354,12 @@ class GeometricBrownianMotion(SimulationInterface):
 
         dts = incremental
         x_ip1 = np.zeros((paths_number, len(simulation_dates)))
-        x_ip1[:, 0] = self._initialisation_point
+        x_ip1[:, 0] = self.__initialisation_point
         for t, dt in zip(range(1, len(x_ip1[0])), dts):
             z = np.random.standard_normal(paths_number)
             x_ip1[:, t] = x_ip1[:, t - 1] * np.exp(
-                (self._volatility - 0.5 * self._volatility ** 2) * dt +
-                self._volatility * np.sqrt(dt) * z)
+                (self.__volatility - 0.5 * self.__volatility ** 2) * dt +
+                self.__volatility * np.sqrt(dt) * z)
         return np.transpose(x_ip1)
 
     # --------------
@@ -248,10 +375,12 @@ class GeometricBrownianMotion(SimulationInterface):
             Parameters:
             ----------
             simulation_schema : str
-                The discretization schema to use for the simulation. Options are:
-                - "euler" : Uses the Euler discretization schema.
-                - "milstein" : Uses the Milstein discretization schema.
-                - "exact_solution" : Uses the exact solution discretization schema.
+
+            The discretization schema to use for the simulation. Options are:
+
+            - "euler" : Uses the Euler discretization schema.
+            - "milstein" : Uses the Milstein discretization schema.
+            - "exact_solution" : Uses the exact solution discretization schema.
 
             Returns:
             -------
@@ -309,11 +438,9 @@ class GeometricBrownianMotion(SimulationInterface):
         return np.mean(simulated_paths, axis=1)
 
     @staticmethod
-    def structure_simulation_results(simulation_array: np.ndarray, index, columns, save: bool=False):
-        simulation_df=pd.DataFrame(simulation_array, index=index, columns=columns)
+    def structure_simulation_results(simulation_array: np.ndarray, index, columns, save: bool = False):
+        simulation_df = pd.DataFrame(simulation_array, index=index, columns=columns)
         if save:
-            simulation_df.to_csv(os.path.join(CONFIG['csv_drop_path'],CONFIG['equity'],
-                                              datetime.now().strftime("%Y-%m-%d %H:%M:%S"),'.csv'))
+            simulation_df.to_csv(os.path.join(CONFIG['csv_drop_path'], CONFIG['equity'],
+                                              datetime.now().strftime("%Y-%m-%d %H:%M:%S"), '.csv'))
         return simulation_df
-
-

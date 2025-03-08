@@ -9,7 +9,7 @@ import os
 import pandas as pd
 from datetime import datetime
 
-from .analytical_pricer import EuropeanPlainVanillaOption
+from .pricer import EuropeanPlainVanillaOption
 
 
 class GreeksInterface:
