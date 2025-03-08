@@ -286,7 +286,8 @@ class MarketEnvironmentHandler:
                  risk_free_rate: float = 0.06,
                  volatility: float = 0.32,
                  discount_factor: float = 0.99,
-                 trade_id: (int, None) = None
+                 trade_id: (int, None) = None,
+                 risk_free_rate_id:str|None="1Y"
                  ):
 
         self.__valuation_date = valuation_date
@@ -296,6 +297,7 @@ class MarketEnvironmentHandler:
         self.__volatility = volatility
         self.__discount_factor = discount_factor,
         self.__trade_id = trade_id
+        self.__risk_free_rate_id=risk_free_rate_id
 
         self.market_data: dict = dict()
 
@@ -349,8 +351,7 @@ class MarketEnvironmentHandler:
         if self.__trade_id is None:
             self.__underlying_name = underlying_name
         else:
-            self.__underlying_name = self.parse_underlying_price_from_yahoo_finance(trade_id=self.__trade_id)[
-                'db_name']
+            self.__underlying_name = TradeBook.objects.get(pk=self.__trade_id).underlying_ticker
 
     def set_underlying_price(self, underlying_price):
 
@@ -371,13 +372,18 @@ class MarketEnvironmentHandler:
         """
         if risk_free_rate is None:
 
-            self.__risk_free_rate = MarketDataExtractor(tickers=self.__underlying_name,
-                                                        start_period=self.__valuation_date).extract_risk_free_rate()
+            self.__risk_free_rate = MarketDataExtractor(equity_tickers=self.__underlying_name,
+                                                        instrument_id=self.__risk_free_rate_id,
+                                                        start_period=self.__valuation_date,
+                                                        end_period=self.__valuation_date).fetch_interest_rate_data()
         else:
             self.__risk_free_rate = risk_free_rate
 
-    def set_volatility(self, volatility):
-        self.__volatility = volatility
+    def set_volatility(self, volatility=None):
+        if volatility is None:
+            raise NotImplementedError("It might be implemented later as implied volatility")
+        else:
+            self.__volatility = volatility
 
     # --------------
     # End  Region getters
@@ -457,10 +463,9 @@ class MarketEnvironmentHandler:
 
         if TradeBook.objects.filter(pk=trade_id).exists():
             print(f"Trade {trade_id} exists ")
-            underlying_for_trade = TradeBook.objects.get(pk=trade_id).underlying_ticker
-            print(f"You might extract underlying price for {underlying_for_trade}")
+            print(f"You might extract underlying price for {self.__underlying_name}")
             underlying_price = self.extract_underlying_quotation()
-            return {"db_underlying": underlying_for_trade, "underlying_price": underlying_price}
+            return {"db_underlying": self.__underlying_name, "underlying_price": underlying_price}
         else:
             print(f"Thre is no trade with id {trade_id}")
             return None
@@ -511,13 +516,13 @@ class MarketEnvironmentHandler:
                 raise ValueError("Valuation date must NOT be earlier than the contract starts.")
         if self.__trade_id is None:
             print(f'Price of underlying as of {self.__valuation_date} for underlier {self.get_underlying_name()} is'
-                  f'equal {MarketDataExtractor(tickers=self.__underlying_name, start_period=self.__valuation_date).extract_equity_price()[self.__underlying_price][1]}')
-            return MarketDataExtractor(tickers=self.__underlying_name,
+                  f'equal {MarketDataExtractor(equity_tickers=self.__underlying_name,start_period=self.__valuation_date).extract_equity_price()[self.__underlying_price][1]}')
+            return MarketDataExtractor(equity_tickers=self.__underlying_name,
                                        start_period=self.__valuation_date).extract_equity_price()
         else:
             print(f'Price of underlying as of {self.__valuation_date} for underlier {self.get_underlying_name()} is'
-                  f' equal {MarketDataExtractor(tickers=self.__underlying_name, start_period=self.__valuation_date).extract_equity_price()[self.__underlying_name][1]}')
-            return MarketDataExtractor(tickers=self.parse_trade_ticker_by_trade_id(trade_id=self.__trade_id),
+                  f' equal {MarketDataExtractor(equity_tickers=self.__underlying_name, start_period=self.__valuation_date).extract_equity_price()[self.__underlying_name][1]}')
+            return MarketDataExtractor(equity_tickers=self.parse_trade_ticker_by_trade_id(trade_id=self.__trade_id),
                                        start_period=self.__valuation_date).extract_equity_price()
 
     def extract_discount_factors(self, maturity_date: str | None = None) -> float:
@@ -569,11 +574,15 @@ class MarketEnvironmentHandler:
         # risk-free rate
 
         risk_free_rate = kwargs['risk_free_rate'] if "risk_free_rate" in kwargs else self.set_risk_free_rate()
+        risk_free_rate=self.get_risk_free_rate()
         # volatility
         volatility = kwargs['volatility'] if "volatility" in kwargs else self.set_volatility()
+
         # underlying name
         if self.__trade_id is not None:
             underlying_name = self.parse_trade_ticker_by_trade_id(trade_id=self.__trade_id)
+            # ticker name set using setter based on trade id.
+            self.set_underlying_name(underlying_name=underlying_name)
 
         else:
             underlying_name = self.get_underlying_name()
