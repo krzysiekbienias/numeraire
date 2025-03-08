@@ -82,9 +82,10 @@ if __name__ == '__main__':
     valuation_date: str = '2025-01-07'  # YYYY-MM-DD
     simulation_button: bool = False
     price_button: bool = True
+    volatility=0.25
     # ** kwargs for run_pricer:
     # - risk_free_rate
-    # - volatility
+    # - volatility currently i must pass it.
 
     # ===========================================
     # END REGION: Input
@@ -103,7 +104,7 @@ if __name__ == '__main__':
     # REGION: Calculating analytical price
     # ===========================================
     if price_button:
-        run_pricer(valuation_date, trade_id)
+        run_pricer(valuation_date, trade_id, volatility=volatility)
     # ===========================================
     # END REGION: Calculating analytical price
     # ===========================================
