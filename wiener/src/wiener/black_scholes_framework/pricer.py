@@ -312,7 +312,35 @@ class EuropeanOption(PricingEnginesInterface):
 
 
 class PlainVanilaOption(EuropeanOption):
+    """
+    A class for pricing Plain Vanilla European options using the Black-Scholes model.
+
+    This class extends `EuropeanOption` and provides a method to compute the option price
+    using the **Black-Scholes formula**.
+
+    Methods:
+    --------
+    run_pricer():
+        Computes the price of a Plain Vanilla European option (Call or Put)
+        using the Black-Scholes formula.
+    """
     def run_pricer(self):
+        """
+        Computes the price of a Plain Vanilla European option using the Black-Scholes formula.
+
+        The pricing formula depends on whether the option is a **Call** or **Put** and
+        utilizes the standard normal cumulative distribution function (`norm.cdf`).
+
+        Returns:
+        --------
+        float
+            The calculated price of the Plain Vanilla option.
+
+        Raises:
+        -------
+        KeyError:
+            If required market data or trade attributes are missing.
+        """
         if self.trade_attributes['payoff'] == "Call":
             return (self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1) -
                     self.trade_attributes["strike"] * self.market_environment.market_data["discount_factor"]
@@ -324,7 +352,51 @@ class PlainVanilaOption(EuropeanOption):
 
 
 class DigitalOption(EuropeanOption):
+    """
+    A class for pricing Digital (Binary) European options using the Black-Scholes model.
+
+    A **Digital option** (also called a Binary option) has a fixed payout of 1 unit if
+    the option expires in the money (ITM), and 0 otherwise.
+
+    The class extends `EuropeanOption` and uses the **Black-Scholes closed-form solution**
+    for digital option pricing.
+
+    Methods:
+    --------
+    run_pricer():
+        Computes the price of a Digital (Binary) European option using the Black-Scholes formula.
+    """
     def run_pricer(self):
+        """
+        Computes the price of a Digital (Binary) European option using the Black-Scholes formula.
+
+        - A **Call digital option** pays 1 unit if  :math: `S_{T} > K`
+        - A **Put digital option** pays 1 unit if :math: (S_{T} < K).
+
+        The price is determined using the cumulative normal distribution function (`norm.cdf`).
+
+        Returns:
+        --------
+        float
+            The computed price of the Digital option.
+
+        Raises:
+        -------
+        KeyError:
+            If required market data or trade attributes are missing.
+
+        Notes:
+        ------
+        The pricing formulas are:
+
+        - **Call Digital Option Price**:
+
+          :math:`V_{{call}} = e^{-rT} \cdot N(d_2)`
+
+        - **Put Digital Option Price**:
+
+          :math:`V_{{put}} = e^{-rT} \cdot N(-d_2)`
+        """
         if self.trade_attributes['payoff'] == "Call":
             return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(self.d2, 0, 1)
 
@@ -341,8 +413,34 @@ class AssetOrNothingOption(EuropeanOption):
 
 
 class AsianOption(EuropeanOption):
+    """
+        A class for pricing Asian options using Monte Carlo simulation.
+
+        This class extends `EuropeanOption` and models an Asian option, where the payoff
+        depends on the average price of the underlying asset over time. The class utilizes
+        a Geometric Brownian Motion (GBM) model to simulate the asset's price dynamics.
+
+        Methods:
+        --------
+        simulate_underlier():
+            Simulates the underlying asset price path using the Geometric Brownian Motion (GBM) model.
+
+        run_pricer(underlying_price):
+            Computes the price of the Asian option based on the arithmetic average of the underlying asset price.
+    """
 
     def simulate_underlier(self):
+        """
+        Simulates the underlying asset price path using a Geometric Brownian Motion (GBM) model.
+
+        The simulation is performed over the trade's lifetime, using market parameters such as
+        the risk-free rate and initial asset price.
+
+        Returns:
+        --------
+        np.ndarray
+            A simulated price path of the underlying asset.
+        """
         gbm = GeometricBrownianMotion()
         gbm.set_start_simulation_date(start_simulation_date=self.get_valuation_date)
         gbm.set_end_simulation_date(end_simulation_date=self.trade_attributes['trade_maturity'])
@@ -351,13 +449,38 @@ class AsianOption(EuropeanOption):
         print(f"Market info and trade attributes updated for trade {self.get_trade_id}")
 
         print("Grid for simulation prepared!")
-        modelled_underlier=gbm.model_equity_dynamic(simulation_schema=AppSettings.SIMULATION_SCHEMA)
+        modelled_underlier = gbm.model_equity_dynamic(simulation_schema=AppSettings.SIMULATION_SCHEMA)
         return modelled_underlier
 
+    def run_pricer(self, underlying_price):
+        """
+        Prices the Asian option using Monte Carlo simulation.
 
+        The method calculates the arithmetic average of the simulated asset prices
+        and determines the option payoff based on the option type (Call/Put).
+        The discounted expectation of the payoffs is used to estimate the option price.
 
-    def run_pricer(self):
+        Parameters:
+        -----------
+        underlying_price : np.ndarray
+            A set of simulated underlying asset prices.
+
+        Returns:
+        --------
+        float
+            The estimated price of the Asian option.
+
+        Raises:
+        -------
+        ValueError
+            If the option type (payoff) is not recognized.
+        """
+        arithmetic_average = np.mean(underlying_price, axis=0)
         if self.trade_attributes['payoff'] == "Call":
-            pass
+            payoffs = np.maximum(arithmetic_average - self.trade_attributes['strike'], 0)
+        elif self.trade_attributes['payoff'] == "Put":
+            payoffs = arithmetic_average - self.trade_attributes['strike']
         else:
-            pass
+            raise ValueError(f"Unrecognized payoff {self.trade_attributes['payoff']}")
+        option_price = self.market_environment.market_data['discount_factor'] * np.mean(payoffs)
+        return option_price
