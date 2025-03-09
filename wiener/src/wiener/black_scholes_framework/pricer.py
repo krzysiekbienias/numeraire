@@ -398,10 +398,10 @@ class DigitalOption(EuropeanOption):
           :math:`V_{{put}} = e^{-rT} \cdot N(-d_2)`
         """
         if self.trade_attributes['payoff'] == "Call":
-            return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(self.d2, 0, 1)
+            return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(self.d2, 0, 1)[0]
 
         else:
-            return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(-self.d2, 0, 1)
+            return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(-self.d2, 0, 1)[0]
 
 
 class AssetOrNothingOption(EuropeanOption):

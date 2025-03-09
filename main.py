@@ -81,8 +81,8 @@ if __name__ == '__main__':
     # ===========================================
     # REGION: Input
     # ===========================================
-    trade_id: int = 11
-    valuation_date: str = '2025-01-07'  # YYYY-MM-DD
+    trade_ids=[1,2,3,4,5]
+    valuation_date: str = '2025-02-07'  # YYYY-MM-DD
     simulation_button: bool = False
     price_button: bool = True
     volatility = 0.25
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     # REGION: Simulation
     # ===========================================
     if simulation_button:
-        run_simulation(trade_id)
+        run_simulation(trade_ids[0])
     # ===========================================
     # END REGION: Simulation
     # ===========================================
@@ -107,7 +107,8 @@ if __name__ == '__main__':
     # REGION: Calculating analytical price
     # ===========================================
     if price_button:
-        run_pricer(valuation_date, trade_id, volatility=volatility)
+        for trade_id in trade_ids:
+            run_pricer(valuation_date, trade_id, volatility=volatility)
     # ===========================================
     # END REGION: Calculating analytical price
     # ===========================================
