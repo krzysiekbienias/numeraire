@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import norm
 
 from wiener.src.pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
-from wiener.models import TradeBook
+from wiener.models import TradeBook,DerivativePrice
 from tool_kit.numerical_methods import RootFinding
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
@@ -350,6 +350,32 @@ class PlainVanilaOption(EuropeanOption):
                     norm.cdf(-self.d2, 0, 1) -
                     self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1))[0]
 
+    def derivative_price_deploy(self):
+        existing_valuation = DerivativePrice.objects.filter(
+            trade_id=self.get_trade_id,
+            valuation_date=self.get_valuation_date
+        ).first()
+
+        if existing_valuation:
+            print(
+                f"Valuation result already exists for Trade ID: {self.get_trade_id} on {self.get_valuation_date}."
+                f" No new entry created.")
+            return  # Do not save if already priced
+
+        valuation_result = DerivativePrice(
+            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            valuation_date=self.get_valuation_date,
+            price_status='SUCCESS',
+            analytical_price=self.run_pricer(),
+            extra_price=-1,  # Default to -1 if not provided
+            market_price=None,  # Optional field
+            pricing_model="Black-Scholes",  # Optional field
+            note=None,  # Optional field
+            user_id='kb007'  # Default user_id if not provided
+        )
+        valuation_result.save()  # This will save the record to the database
+        print(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
+
 
 class DigitalOption(EuropeanOption):
     """
@@ -403,6 +429,31 @@ class DigitalOption(EuropeanOption):
         else:
             return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(-self.d2, 0, 1)[0]
 
+    def derivative_price_deploy(self):
+        existing_valuation = DerivativePrice.objects.filter(
+            trade_id=self.get_trade_id,
+            valuation_date=self.get_valuation_date
+        ).first()
+
+        if existing_valuation:
+            print(
+                f"Valuation result already exists for Trade ID: {self.get_trade_id} on {self.get_valuation_date}."
+                f" No new entry created.")
+            return  # Do not save if already priced
+
+        valuation_result = DerivativePrice(
+            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            valuation_date=self.get_valuation_date,
+            price_status='SUCCESS',
+            analytical_price=self.run_pricer(),
+            extra_price=-1,  # Default to -1 if not provided
+            market_price=None,  # Optional field
+            pricing_model="Black-Scholes",  # Optional field
+            note=None,  # Optional field
+            user_id='kb007'  # Default user_id if not provided
+        )
+        valuation_result.save()  # This will save the record to the database
+        print(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
 
 class AssetOrNothingOption(EuropeanOption):
     def run_pricer(self):
@@ -410,6 +461,32 @@ class AssetOrNothingOption(EuropeanOption):
             return self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1)
         else:
             return self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1)
+
+    def derivative_price_deploy(self):
+        existing_valuation = DerivativePrice.objects.filter(
+            trade_id=self.get_trade_id,
+            valuation_date=self.get_valuation_date
+        ).first()
+
+        if existing_valuation:
+            print(
+                f"Valuation result already exists for Trade ID: {self.get_trade_id} on {self.get_valuation_date}."
+                f" No new entry created.")
+            return  # Do not save if already priced
+
+        valuation_result = DerivativePrice(
+            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            valuation_date=self.get_valuation_date,
+            price_status='SUCCESS',
+            analytical_price=self.run_pricer(),
+            extra_price=-1,  # Default to -1 if not provided
+            market_price=None,  # Optional field
+            pricing_model="Black-Scholes",  # Optional field
+            note=None,  # Optional field
+            user_id='kb007'  # Default user_id if not provided
+        )
+        valuation_result.save()  # This will save the record to the database
+        print(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
 
 
 class AsianOption(EuropeanOption):
@@ -484,3 +561,29 @@ class AsianOption(EuropeanOption):
             raise ValueError(f"Unrecognized payoff {self.trade_attributes['payoff']}")
         option_price = self.market_environment.market_data['discount_factor'] * np.mean(payoffs)
         return option_price
+
+    def derivative_price_deploy(self):
+        existing_valuation = DerivativePrice.objects.filter(
+            trade_id=self.get_trade_id,
+            valuation_date=self.get_valuation_date
+        ).first()
+
+        if existing_valuation:
+            print(
+                f"Valuation result already exists for Trade ID: {self.get_trade_id} on {self.get_valuation_date}."
+                f" No new entry created.")
+            return  # Do not save if already priced
+
+        valuation_result = DerivativePrice(
+            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            valuation_date=self.get_valuation_date,
+            price_status='SUCCESS',
+            analytical_price=None,
+            extra_price=self.run_pricer(),  # Default to -1 if not provided
+            market_price=None,  # Optional field
+            pricing_model="Monte Carlo",  # Optional field
+            note=None,  # Optional field
+            user_id='kb007'  # Default user_id if not provided
+        )
+        valuation_result.save()  # This will save the record to the database
+        print(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
