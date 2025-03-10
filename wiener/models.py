@@ -80,10 +80,9 @@ class DerivativePrice(models.Model):
     trade_id = models.ForeignKey(TradeBook, on_delete=models.CASCADE)
     valuation_date = models.DateField()
     price_status = models.CharField(max_length=25)
-    analytical_price = models.FloatField()
-    extra_price = models.FloatField(default=-1)
-    market_price = models.FloatField(null=True, blank=True)  # Market price for reference
-    pricing_model = models.CharField(max_length=50, null=True, blank=True)  # Pricing methodology
+    official_price = models.FloatField()
+    pricing_framework = models.CharField(max_length=50, null=True, blank=True)
+    pricing_method = models.CharField(max_length=50, null=True, blank=True)  # Pricing methodology
     notes = models.TextField(null=True, blank=True)  # Pricing details, errors, or assumptions
     created_at = models.DateTimeField(default=timezone.now)
     user_id = models.CharField(default="kbienias", max_length=100)

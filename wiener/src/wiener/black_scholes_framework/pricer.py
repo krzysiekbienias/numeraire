@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import norm
 
 from wiener.src.pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
-from wiener.models import TradeBook,DerivativePrice
+from wiener.models import TradeBook, DerivativePrice
 from tool_kit.numerical_methods import RootFinding
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
@@ -324,6 +324,7 @@ class PlainVanilaOption(EuropeanOption):
         Computes the price of a Plain Vanilla European option (Call or Put)
         using the Black-Scholes formula.
     """
+
     def run_pricer(self):
         """
         Computes the price of a Plain Vanilla European option using the Black-Scholes formula.
@@ -392,6 +393,7 @@ class DigitalOption(EuropeanOption):
     run_pricer():
         Computes the price of a Digital (Binary) European option using the Black-Scholes formula.
     """
+
     def run_pricer(self):
         """
         Computes the price of a Digital (Binary) European option using the Black-Scholes formula.
@@ -563,10 +565,8 @@ class AsianOption(EuropeanOption):
         option_price = self.market_environment.market_data['discount_factor'] * np.mean(payoffs)
         return option_price
 
-
-
     def derivative_price_deploy(self):
-        simulated_underlier=self.simulate_underlier()
+        simulated_underlier = self.simulate_underlier()
         existing_valuation = DerivativePrice.objects.filter(
             trade_id=self.get_trade_id,
             valuation_date=self.get_valuation_date
