@@ -72,16 +72,17 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     if option_style == 'AsianOption':
         option_pricer.simulate_underlier()
 
-    price = option_pricer.run_pricer()
+    #price = option_pricer.run_pricer()
+    option_pricer.derivative_price_deploy()
 
-    print(f'Price of {option_style} option for trade ID {trade_id} is {round(price, 4)}')
+    #print(f'Price of {option_style} option for trade ID {trade_id} is {round(price, 4)}')
 
 
 if __name__ == '__main__':
     # ===========================================
     # REGION: Input
     # ===========================================
-    trade_ids=[1,2,3,4,5]
+    trade_ids=[1,2,3,4,5,6,7,8,9,10,11]
     valuation_date: str = '2025-02-07'  # YYYY-MM-DD
     simulation_button: bool = False
     price_button: bool = True

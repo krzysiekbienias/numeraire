@@ -363,14 +363,14 @@ class PlainVanilaOption(EuropeanOption):
             return  # Do not save if already priced
 
         valuation_result = DerivativePrice(
-            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
             analytical_price=self.run_pricer(),
             extra_price=-1,  # Default to -1 if not provided
             market_price=None,  # Optional field
             pricing_model="Black-Scholes",  # Optional field
-            note=None,  # Optional field
+            notes=None,  # Optional field
             user_id='kb007'  # Default user_id if not provided
         )
         valuation_result.save()  # This will save the record to the database
@@ -442,18 +442,19 @@ class DigitalOption(EuropeanOption):
             return  # Do not save if already priced
 
         valuation_result = DerivativePrice(
-            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
             analytical_price=self.run_pricer(),
             extra_price=-1,  # Default to -1 if not provided
             market_price=None,  # Optional field
             pricing_model="Black-Scholes",  # Optional field
-            note=None,  # Optional field
+            notes=None,  # Optional field
             user_id='kb007'  # Default user_id if not provided
         )
         valuation_result.save()  # This will save the record to the database
         print(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
+
 
 class AssetOrNothingOption(EuropeanOption):
     def run_pricer(self):
@@ -475,14 +476,14 @@ class AssetOrNothingOption(EuropeanOption):
             return  # Do not save if already priced
 
         valuation_result = DerivativePrice(
-            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
             analytical_price=self.run_pricer(),
             extra_price=-1,  # Default to -1 if not provided
             market_price=None,  # Optional field
             pricing_model="Black-Scholes",  # Optional field
-            note=None,  # Optional field
+            notes=None,  # Optional field
             user_id='kb007'  # Default user_id if not provided
         )
         valuation_result.save()  # This will save the record to the database
@@ -562,7 +563,10 @@ class AsianOption(EuropeanOption):
         option_price = self.market_environment.market_data['discount_factor'] * np.mean(payoffs)
         return option_price
 
+
+
     def derivative_price_deploy(self):
+        simulated_underlier=self.simulate_underlier()
         existing_valuation = DerivativePrice.objects.filter(
             trade_id=self.get_trade_id,
             valuation_date=self.get_valuation_date
@@ -575,14 +579,14 @@ class AsianOption(EuropeanOption):
             return  # Do not save if already priced
 
         valuation_result = DerivativePrice(
-            trade_id=self.get_trade_id,  # assuming you have a TradeBook instance
+            trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
             analytical_price=None,
-            extra_price=self.run_pricer(),  # Default to -1 if not provided
+            extra_price=self.run_pricer(underlying_price=simulated_underlier),  # Default to -1 if not provided
             market_price=None,  # Optional field
             pricing_model="Monte Carlo",  # Optional field
-            note=None,  # Optional field
+            notes=None,  # Optional field
             user_id='kb007'  # Default user_id if not provided
         )
         valuation_result.save()  # This will save the record to the database
