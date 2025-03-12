@@ -37,10 +37,10 @@ class TradeBook(models.Model):
     trade_id = models.AutoField(primary_key=True)
     underlying_ticker = models.CharField(max_length=25)
     product_type = models.CharField(max_length=25)
-    payoff = models.CharField(max_length=10)
+    payoff = models.CharField(max_length=10, null=True, blank=True)
     trade_date = models.DateField()
     trade_maturity = models.DateField()
-    strike = models.FloatField()
+    strike = models.FloatField(max_length=10, null=True, blank=True)
     dividend = models.FloatField()
     option_style = models.CharField(max_length=50,null=True,blank=True)
     structured_params = models.JSONField(null=True, blank=True)
@@ -53,31 +53,29 @@ class DerivativePrice(models.Model):
     DerivativePrice Model:
 
     Stores valuation details for derivative trades, supporting multiple pricing runs
-    with various methodologies and parameters.
+    with different methodologies and frameworks.
 
     Fields:
-    ------
+    -------
     - run_id (AutoField): Unique identifier for each pricing run.
     - trade_id (ForeignKey): Reference to the TradeBook model.
     - valuation_date (DateField): The date on which the trade is valued.
     - price_status (CharField): Status of the pricing (e.g., "Pending", "Finalized", "Error").
-    - analytical_price (FloatField): The computed price using financial models.
-    - extra_price (FloatField, default=-1): Alternative computed price or stress test value.
-    - market_price (FloatField, nullable): Market-observed price for comparison.
-    - pricing_model (CharField, nullable): The pricing model used (e.g., "Monte Carlo").
-    - confidence_level (FloatField, nullable): Confidence level for probabilistic models.
-    - notes (TextField, nullable): Additional comments on pricing assumptions or errors.
-    - created_at (DateTimeField): Timestamp for when the valuation was recorded.
+    - official_price (FloatField): The computed official price for the valuation.
+    - pricing_framework (CharField, nullable): The theoretical pricing framework used (e.g., "Black-Scholes", "LMM", "Stochastic Volatility").
+    - pricing_method (CharField, nullable): The numerical approach used for valuation (e.g., "Monte Carlo", "Analytical").
+    - notes (TextField, nullable): Additional comments on pricing assumptions, errors, or methodology details.
+    - created_at (DateTimeField): Timestamp indicating when the valuation was recorded.
     - user_id (CharField): Identifier of the user performing the valuation.
 
     Notes:
     ------
-    - Supports multiple valuation methodologies and price tracking.
-    - Market price and confidence level provide context for risk analysis.
-    - The `notes` field helps maintain an audit trail of pricing assumptions.
-    """
+    - Supports multiple valuation methodologies and detailed price tracking.
+    - `pricing_framework` represents the underlying financial model, while `pricing_method` defines the computational approach.
+    - The `notes` field maintains an audit trail for pricing decisions and assumptions.
+"""
     run_id = models.AutoField(primary_key=True)
-    trade_id = models.ForeignKey(TradeBook, on_delete=models.CASCADE)
+    trade_id = models.ForeignKey(TradeBook, on_delete=models.CASCADE, db_column="trade_id")
     valuation_date = models.DateField()
     price_status = models.CharField(max_length=25)
     official_price = models.FloatField()

@@ -311,7 +311,7 @@ class EuropeanOption(PricingEnginesInterface):
             return None, None
 
 
-class PlainVanilaOption(EuropeanOption):
+class PlainVanillaOption(EuropeanOption):
     """
     A class for pricing Plain Vanilla European options using the Black-Scholes model.
 
@@ -324,6 +324,10 @@ class PlainVanilaOption(EuropeanOption):
         Computes the price of a Plain Vanilla European option (Call or Put)
         using the Black-Scholes formula.
     """
+
+    def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
+        super().__init__(valuation_date, trade_id)
+        self.valuation_results = None
 
     def run_pricer(self):
         """
@@ -351,7 +355,14 @@ class PlainVanilaOption(EuropeanOption):
                     norm.cdf(-self.d2, 0, 1) -
                     self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1))[0]
 
-    def derivative_price_deploy(self):
+    def create_valuation_results(self):
+        self.valuation_results = {'valuation_date': self.get_valuation_date,
+                                  'official_price': self.run_pricer(),
+                                  'price_status': 'SUCCESS',
+                                  'pricing_framework': 'Black-Scholes',
+                                  'pricing_method': 'analytical'}
+
+    def price_deploy(self):
         existing_valuation = DerivativePrice.objects.filter(
             trade_id=self.get_trade_id,
             valuation_date=self.get_valuation_date
@@ -367,10 +378,9 @@ class PlainVanilaOption(EuropeanOption):
             trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
-            analytical_price=self.run_pricer(),
-            extra_price=-1,  # Default to -1 if not provided
-            market_price=None,  # Optional field
-            pricing_model="Black-Scholes",  # Optional field
+            official_price=self.valuation_results['official_price'],
+            pricing_framework="Black-Scholes",  # Optional field
+            pricing_method="Analytical",
             notes=None,  # Optional field
             user_id='kb007'  # Default user_id if not provided
         )
@@ -393,6 +403,10 @@ class DigitalOption(EuropeanOption):
     run_pricer():
         Computes the price of a Digital (Binary) European option using the Black-Scholes formula.
     """
+
+    def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
+        super().__init__(valuation_date, trade_id, kwargs)
+        self.valuation_results = None
 
     def run_pricer(self):
         """
@@ -431,6 +445,14 @@ class DigitalOption(EuropeanOption):
         else:
             return 1 * self.market_environment.market_data["discount_factor"] * norm.cdf(-self.d2, 0, 1)[0]
 
+    def create_valuation_results(self):
+        self.valuation_results = {'valuation_date': self.get_valuation_date,
+                                  'official_price': self.run_pricer(),
+                                  'price_status': 'SUCCESS',
+                                  'pricing_framework': 'Black-Scholes',
+                                  'pricing_method': 'analytical'}
+        return self.valuation_results
+
     def derivative_price_deploy(self):
         existing_valuation = DerivativePrice.objects.filter(
             trade_id=self.get_trade_id,
@@ -447,7 +469,7 @@ class DigitalOption(EuropeanOption):
             trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
-            analytical_price=self.run_pricer(),
+            official_price=self.run_pricer(),
             extra_price=-1,  # Default to -1 if not provided
             market_price=None,  # Optional field
             pricing_model="Black-Scholes",  # Optional field
@@ -459,11 +481,22 @@ class DigitalOption(EuropeanOption):
 
 
 class AssetOrNothingOption(EuropeanOption):
+    def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
+        super().__init__(valuation_date, trade_id, kwargs)
+        self.valuation_results = None
+
     def run_pricer(self):
         if self.trade_attributes['payoff'] == "Call":
             return self.market_environment.market_data['underlying_price'] * norm.cdf(self.d1, 0, 1)
         else:
             return self.market_environment.market_data["underlying_price"] * norm.cdf(-self.d1, 0, 1)
+
+    def create_valuation_results(self):
+        self.valuation_results = {'valuation_date': self.get_valuation_date,
+                                  'official_price': self.run_pricer(),
+                                  'price_status': 'SUCCESS',
+                                  'pricing_framework': 'Black-Scholes',
+                                  'pricing_method': 'Monte Carlo'}
 
     def derivative_price_deploy(self):
         existing_valuation = DerivativePrice.objects.filter(
@@ -481,7 +514,7 @@ class AssetOrNothingOption(EuropeanOption):
             trade_id=TradeBook.objects.get(pk=self.get_trade_id),  # assuming you have a TradeBook instance
             valuation_date=self.get_valuation_date,
             price_status='SUCCESS',
-            analytical_price=self.run_pricer(),
+            analytical_price=self.valuation_results['official_price'],
             extra_price=-1,  # Default to -1 if not provided
             market_price=None,  # Optional field
             pricing_model="Black-Scholes",  # Optional field
@@ -508,6 +541,10 @@ class AsianOption(EuropeanOption):
         run_pricer(underlying_price):
             Computes the price of the Asian option based on the arithmetic average of the underlying asset price.
     """
+
+    def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
+        super().__init__(valuation_date, trade_id, kwargs)
+        self.valuation_results = None
 
     def simulate_underlier(self):
         """

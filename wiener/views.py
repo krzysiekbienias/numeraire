@@ -110,7 +110,7 @@ def single_trade(request, trade_id: int):
     if request.method == "POST":
         # we need to add button submit to triger form
         if market_data_form.is_valid():
-            european_option = EuropeanOptionPricer(
+            european_option = EuropeanOption(
                 valuation_date=market_data_form.cleaned_data["valuation_date"],
                 trade_id=one_trade.pk)
 

@@ -5,7 +5,7 @@ import numpy as np
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
-from wiener.src.wiener.black_scholes_framework.pricer import (PlainVanilaOption, DigitalOption,
+from wiener.src.wiener.black_scholes_framework.pricer import (PlainVanillaOption, DigitalOption,
                                                               AssetOrNothingOption, AsianOption)
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 
@@ -49,33 +49,35 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
 
     # Fetch option style from the database
     trade = TradeBook.objects.get(pk=trade_id)
-    option_style = trade.option_style  # Assuming 'option_style' is stored in DB
+    product_type = trade.product_type  # Assuming 'product_type' is stored in DB
 
     # Mapping option styles to their corresponding pricer classes
     pricer_mapping = {
-        'PlainVanillaOption': PlainVanilaOption,
+        'PlainVanillaOption': PlainVanillaOption,
         'DigitalOption': DigitalOption,
         'AssetOrNothingOption': AssetOrNothingOption,
         'AsianOption': AsianOption
     }
 
     # Select the correct pricer class
-    pricer_class = pricer_mapping.get(option_style)
+    pricer_class = pricer_mapping.get(product_type)
 
     if not pricer_class:
-        raise ValueError(f"Unknown option style: {option_style}")
+        raise ValueError(f"Unknown option style: {product_type}")
 
     # Instantiate and run the pricer
     option_pricer = pricer_class(valuation_date=valuation_date, trade_id=trade_id)
     option_pricer.set_up_market_environment(**kwargs)
     option_pricer.set_trade_attributes(trade_id=trade_id)
-    if option_style == 'AsianOption':
+    if product_type == 'AsianOption':
         option_pricer.simulate_underlier()
 
     #price = option_pricer.run_pricer()
-    option_pricer.derivative_price_deploy()
+    option_pricer.create_valuation_results()
+    option_pricer.price_deploy()
+    print('pit_stop')
 
-    #print(f'Price of {option_style} option for trade ID {trade_id} is {round(price, 4)}')
+    #print(f'Price of {product_type} option for trade ID {trade_id} is {round(option_pricer.valuation_results['official_price'], 4)}')
 
 
 if __name__ == '__main__':
@@ -108,7 +110,7 @@ if __name__ == '__main__':
     # REGION: Calculating analytical price
     # ===========================================
     if price_button:
-        for trade_id in trade_ids:
+        for trade_id in trade_ids[:1]:
             run_pricer(valuation_date, trade_id, volatility=volatility)
     # ===========================================
     # END REGION: Calculating analytical price
