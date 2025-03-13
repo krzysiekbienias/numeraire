@@ -267,7 +267,7 @@ class GeometricBrownianMotion(SimulationInterface):
         # we need only one date extracted to get initial price of the underlying, this is why start_period and
         # end_period are equal
         yd_object = MarketDataExtractor(equity_tickers=TradeBook.objects.get(pk=trade_id).underlying_ticker,
-                                        start_period=self.__,
+                                        start_period=self.__valuation_date,
                                         end_period=self.__start_simulation_date)
         self.set_initialisation_point(initialisation_point=
                                       yd_object.extract_equity_price()[

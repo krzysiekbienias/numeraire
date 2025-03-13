@@ -2,6 +2,7 @@ import os
 
 import django
 import numpy as np
+import QuantLib as ql
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
@@ -11,7 +12,8 @@ from tool_kit.quantlib_tool_kit import QuantLibToolKit
 
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
-from wiener.models import TradeBook
+from wiener.models import TradeBook,DerivativePrice
+
 
 
 def run_simulation(trade_id: int):
@@ -41,15 +43,40 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
 
     Parameters
     ----------
-    valuation_date : valuation_date:str
-    trade_id : trade_id:int
+    valuation_date : str
+        The valuation date in string format (YYYY-MM-DD).
+    trade_id : int
+        The ID of the trade being priced.
+    country : str, optional
+        The country to use for the financial calendar. Defaults to "theUK".
+
+    Notes
+    -----
+    - Uses `QuantLibToolKit.set_calendar()` to ensure the valuation date is a business day.
+    - If not a business day, suggests the next valid business day.
+    - Ensures trades are not re-priced if they have already been priced for the given date.
     """
     # Convert the date if needed
     date_ql = QuantLibToolKit.string_2ql_date(valuation_date)
+    calendar = QuantLibToolKit.set_calendar(calendar_name)
+    # Check if the date is a business day
+    if not calendar.isBusinessDay(date_ql):
+        next_business_day = calendar.advance(date_ql, ql.Period(1, ql.Days))
+        print(f"⚠️ {valuation_date} is not a business day in {calendar_name}. Next valid business day: {next_business_day}")
+        return  # Exit early
 
     # Fetch option style from the database
     trade = TradeBook.objects.get(pk=trade_id)
     product_type = trade.product_type  # Assuming 'product_type' is stored in DB
+
+    # Check if the trade has already been priced for this valuation date
+    existing_valuation = DerivativePrice.objects.filter(
+        trade_id=trade_id, valuation_date=valuation_date
+    ).exists()
+
+    if existing_valuation:
+        print(f"Trade {trade_id} has already been priced for valuation date {valuation_date}. Skipping pricing.")
+        return  # Exit the function early
 
     # Mapping option styles to their corresponding pricer classes
     pricer_mapping = {
@@ -72,10 +99,8 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     if product_type == 'AsianOption':
         option_pricer.simulate_underlier()
 
-    #price = option_pricer.run_pricer()
     option_pricer.create_valuation_results()
     option_pricer.price_deploy()
-    print('pit_stop')
 
     #print(f'Price of {product_type} option for trade ID {trade_id} is {round(option_pricer.valuation_results['official_price'], 4)}')
 
@@ -84,8 +109,10 @@ if __name__ == '__main__':
     # ===========================================
     # REGION: Input
     # ===========================================
-    trade_ids=[1,2,3,4,5,6,7,8,9,10,11]
-    valuation_date: str = '2025-02-07'  # YYYY-MM-DD
+    # trade_ids=[1,2,3,4,5,6,7,8,9,10,11]
+    calendar_name= "USA"
+    trade_id = 1
+    valuation_date: str = '2025-02-10'  # YYYY-MM-DD
     simulation_button: bool = False
     price_button: bool = True
     volatility = 0.25
@@ -101,7 +128,7 @@ if __name__ == '__main__':
     # REGION: Simulation
     # ===========================================
     if simulation_button:
-        run_simulation(trade_ids[0])
+        run_simulation(trade_id=trade_id)
     # ===========================================
     # END REGION: Simulation
     # ===========================================
@@ -110,8 +137,7 @@ if __name__ == '__main__':
     # REGION: Calculating analytical price
     # ===========================================
     if price_button:
-        for trade_id in trade_ids[:1]:
-            run_pricer(valuation_date, trade_id, volatility=volatility)
+        run_pricer(valuation_date, trade_id, volatility=volatility, country=calendar_name)
     # ===========================================
     # END REGION: Calculating analytical price
     # ===========================================
