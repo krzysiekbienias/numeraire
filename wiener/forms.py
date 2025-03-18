@@ -3,9 +3,26 @@ from .models import TradeBook
 
 
 class MarketForm(forms.Form):
-    valuation_date = forms.CharField(label="Market Date", initial="2023-05-12")
-    risk_free_rate = forms.FloatField(label="Risk Free Rate", initial=0.05)
-    volatility = forms.FloatField(min_value=0, label="Volatility", initial=0.22)
+    valuation_date = forms.CharField(label="Market Date")
+    risk_free_rate = forms.FloatField(label="Risk Free Rate")
+    volatility = forms.FloatField(min_value=0, label="Volatility")
+
+    def __init__(self, *args, market_data=None, **kwargs):
+        """
+        Custom initialization to populate form with real market data.
+
+        Parameters:
+        -----------
+        market_data : dict, optional
+            A dictionary containing market values (e.g., risk-free rate, volatility).
+        """
+        super().__init__(*args, **kwargs)
+
+        # If market data is provided, set initial values
+        if market_data:
+            self.fields["valuation_date"].initial = market_data.get("valuation_date", "2025-02-07")
+            self.fields["risk_free_rate"].initial = market_data.get("risk_free_rate", 0.05)
+            self.fields["volatility"].initial = market_data.get("volatility", 0.22)
 
 
 class BookTradeForm(forms.ModelForm):
