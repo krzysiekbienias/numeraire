@@ -14,35 +14,42 @@ class Payoff(ABC):
     - No external dependencies
     """
 
-    def __init__(self, spot_price: Optional[float] = None):
+    def __init__(self):
         """Initialize with only direct spot price"""
-        self.__spot_price = None  # Truly private
-        if spot_price is not None:
-            self.set_spot_price(spot_price)
+        pass
 
-    def get_spot_price(self) -> Optional[float]:
+    def get_market_data(self) -> dict:
         """
         Get spot price with fallback logic:
         1. Return directly set spot price
         2. Try to get from attached option's market data
         3. Return None if no spot available
         """
-        if self.__spot_price is not None:
-            return self.__spot_price
-
         try:
             # Try to get from owner's market environment
-            if hasattr(self, '_owner') and hasattr(self._owner, 'market_environment'):
-                return self._owner.market_environment.market_data['underlying_price']
+            hasattr(self, '_owner') and hasattr(self._owner, 'market_environment')
+            return self._owner.market_environment.market_data
             # Fallback to owner's trade attributes
-            elif hasattr(self, '_owner') and hasattr(self._owner, 'trade_attributes'):
-                return self._owner.trade_attributes['underlying_price']
+
+        except (AttributeError, KeyError):
+            print("Object doe snot have properties that you are trying to transfer")
+
+        return None
+
+    def get_trade_attributes(self) -> dict:
+        """
+        Get spot price with fallback logic:
+        1. Return directly set spot price
+        2. Try to get from attached option's market data
+        3. Return None if no spot available
+        """
+        try:
+            hasattr(self, '_owner') and hasattr(self._owner, 'trade_attributes')
+            return self._owner.trade_attributes
         except (AttributeError, KeyError):
             pass
 
         return None
-
-
 
     def set_spot_price(self, spot_price: float) -> None:
         """Setter with validation"""
@@ -50,7 +57,7 @@ class Payoff(ABC):
             raise TypeError("Spot price must be numeric")
         if spot_price <= 0:
             raise ValueError("Spot price must be positive")
-        self.__spot_price = float(spot_price)
+        self._spot_price = float(spot_price)
 
     def _attach_owner(self, owner: object):
         """Protected method for owner reference (used by EuropeanOption)"""
@@ -106,31 +113,17 @@ class PlainVanillaPayoff(Payoff):
     """Vanilla option payoff implementation"""
 
     def __init__(self,
-                 strike: float|None=None,
-                 option_type: str|None=None,
-                 spot_price: Optional[float] = None):
-        super().__init__(spot_price)
-        self.__strike = None
-        self.__option_type = None
+                 strike: float | None = None,
+                 option_type: str | None = None,
+                 spot_price: Optional[float] | None = None):
+        super().__init__()
+        self.intrinsic_value = None
+        self._spot_price = spot_price # protected becasue i want to set this value using method define in parent class.
+        self.__strike = strike
+        self.__option_type = option_type
 
-    def get_strike(self) -> Optional[float]:
-        """
-        Get spot price with fallback logic:
-        1. Return directly set strike
-        2. Try to get from attached option's trade_attributes
-        3. Return None if no strike
-        """
-        if self.__strike is not None:
-            return self.__strike
-
-        try:
-            # Fallback to owner's trade attributes
-            if hasattr(self, '_owner') and hasattr(self._owner, 'trade_attributes'):
-                return self._owner.trade_attributes['strike']
-        except (AttributeError, KeyError):
-            pass
-
-        return None
+    def get_strike(self) -> float:
+        return self.__strike
 
     def set_strike(self, strike: float):
         if not isinstance(strike, (int, float)):
@@ -150,14 +143,17 @@ class PlainVanillaPayoff(Payoff):
             raise ValueError("Option type must be 'call' or 'put'")
         self.__option_type = option_type
 
-    def calculate_payoff(self, spot: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    def calculate_payoff(self) -> Union[float, np.ndarray]:
         if self.__option_type == 'call':
-            return np.maximum(spot - self.__strike, 0)
-        return np.maximum(self.__strike - spot, 0)
+            self.intrinsic_value=np.maximum(self._spot_price - self.__strike, 0)
+            return self.instrinsic_value
 
-    def payoff_description(self) -> str:
-        desc = f"Vanilla {self.__option_type} | Strike: {self.__strike:.2f}"
-        spot = self.get_spot_price()
-        if spot is not None:
-            desc += f" | Spot: {spot:.2f}"
-        return desc
+        self.intrinsic_value=np.maximum(self.__strike - self._spot_price, 0)
+        return self.intrinsic_value
+
+    def __repr__(self) -> str:
+        return (f"{self.__class__.__name__}("
+                f"option_type='{self.__option_type}', "
+                f"strike={self.__strike}, "
+                f"spot_price={self._spot_price}, "
+                f"intrinsic_value={self.intrinsic_value})")
