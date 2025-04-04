@@ -8,12 +8,13 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
 from wiener.src.wiener.black_scholes_framework.pricer import (PlainVanillaOption, DigitalOption,
                                                               AssetOrNothingOption, AsianOption)
+from wiener.src.wiener.black_scholes_framework.payoff import PlainVanillaPayoff
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
-from wiener.models import TradeBook,DerivativePrice
-
+from wiener.models import TradeBook, DerivativePrice
+from logger import logger
 
 
 def run_simulation(trade_id: int):
@@ -62,7 +63,8 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     # Check if the date is a business day
     if not calendar.isBusinessDay(date_ql):
         next_business_day = calendar.advance(date_ql, ql.Period(1, ql.Days))
-        print(f"⚠️ {valuation_date} is not a business day in {calendar_name}. Next valid business day: {next_business_day}")
+        logger.info(f"⚠️ {valuation_date} is not a business day in {calendar_name}. Next valid business day: "
+                    f"{next_business_day}")
         return  # Exit early
 
     # Fetch option style from the database
@@ -75,7 +77,7 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     ).exists()
 
     if existing_valuation:
-        print(f"Trade {trade_id} has already been priced for valuation date {valuation_date}. Skipping pricing.")
+        logger.info(f"Trade {trade_id} has already been priced for valuation date {valuation_date}. Skipping pricing.")
         return  # Exit the function early
 
     # Mapping option styles to their corresponding pricer classes
@@ -86,11 +88,24 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
         'AsianOption': AsianOption
     }
 
+    payoff_mapping = {
+        'PlainVanillaOption': PlainVanillaPayoff,
+        # 'DigitalOption': DigitalOptionPayoff,
+        # 'AssetOrNothingOption': AssetOrNothingOptionPayoff,
+        # 'AsianOption': AsianOptionPayoff
+    }
+
+
     # Select the correct pricer class
     pricer_class = pricer_mapping.get(product_type)
+    payoff_class = payoff_mapping.get(product_type)
 
     if not pricer_class:
+        logger.error(f"Unknown option style encountered: {product_type}")
         raise ValueError(f"Unknown option style: {product_type}")
+    if not payoff_class:
+        logger.error(f"Not defined payoff encountered: {product_type}")
+        raise ValueError(f"Not possible to calculate payoff: {product_type}")
 
     # Instantiate and run the pricer
     option_pricer = pricer_class(valuation_date=valuation_date, trade_id=trade_id)
@@ -98,6 +113,14 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     option_pricer.set_trade_attributes(trade_id=trade_id)
     if product_type == 'AsianOption':
         option_pricer.simulate_underlier()
+    # maybee here we might initiatet
+
+    payoff=payoff_class()
+    payoff._attach_owner(owner=option_pricer)
+    payoff.set_strike(strike=payoff._owner.trade_attributes['strike'])
+    payoff.set_option_type(option_type=payoff._owner.trade_attributes['payoff'])
+    payoff.set_spot_price(spot_price=payoff._owner.market_environment.market_data['underlying_price'])
+    payoff.calculate_payoff()
 
     option_pricer.create_valuation_results()
     option_pricer.price_deploy()
@@ -110,12 +133,17 @@ if __name__ == '__main__':
     # REGION: Input
     # ===========================================
     # trade_ids=[1,2,3,4,5,6,7,8,9,10,11]
-    calendar_name= "USA"
-    trade_id = 1
+    calendar_name = "USA"
+    logger.info(f"Calendar set to: {calendar_name}.")
+
+    trade_id = 2
+    logger.info(f"Preparing to price trade with ID: {trade_id}")
     valuation_date: str = '2025-02-10'  # YYYY-MM-DD
+    logger.info(f"Valuation date set to: {valuation_date}")
     simulation_button: bool = False
     price_button: bool = True
     volatility = 0.25
+    logger.warning(f"No external source for volatility detected. Falling back to user-defined value: {volatility}")
     # ** kwargs for run_pricer:
     # - risk_free_rate
     # - volatility currently I must pass it.
