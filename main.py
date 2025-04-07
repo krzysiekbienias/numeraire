@@ -8,7 +8,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'base.settings')
 django.setup()
 from wiener.src.wiener.black_scholes_framework.pricer import (PlainVanillaOption, DigitalOption,
                                                               AssetOrNothingOption, AsianOption)
-from wiener.src.wiener.black_scholes_framework.payoff import PlainVanillaPayoff
+from wiener.src.wiener.black_scholes_framework.payoff import PlainVanillaPayoff,DigitalOptionPayoff,AsianOptionPayoff,AssetOrNothingOptionPayoff
 from tool_kit.quantlib_tool_kit import QuantLibToolKit
 
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
@@ -90,9 +90,9 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
 
     payoff_mapping = {
         'PlainVanillaOption': PlainVanillaPayoff,
-        # 'DigitalOption': DigitalOptionPayoff,
-        # 'AssetOrNothingOption': AssetOrNothingOptionPayoff,
-        # 'AsianOption': AsianOptionPayoff
+        'DigitalOption': DigitalOptionPayoff,
+        'AssetOrNothingOption': AssetOrNothingOptionPayoff,
+        'AsianOption': AsianOptionPayoff
     }
 
 
@@ -120,7 +120,10 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     payoff.set_strike(strike=payoff._owner.trade_attributes['strike'])
     payoff.set_option_type(option_type=payoff._owner.trade_attributes['payoff'])
     payoff.set_spot_price(spot_price=payoff._owner.market_environment.market_data['underlying_price'])
+    if product_type =='DigitalOption':
+        payoff.set_cash_amount(cash_amount=payoff._owner.trade_attributes['structured_params']['cash_amount'])
     payoff.calculate_payoff()
+    logger.info(payoff)
 
     option_pricer.create_valuation_results()
     option_pricer.price_deploy()
@@ -136,7 +139,7 @@ if __name__ == '__main__':
     calendar_name = "USA"
     logger.info(f"Calendar set to: {calendar_name}.")
 
-    trade_id = 2
+    trade_id = 4
     logger.info(f"Preparing to price trade with ID: {trade_id}")
     valuation_date: str = '2025-02-10'  # YYYY-MM-DD
     logger.info(f"Valuation date set to: {valuation_date}")
