@@ -428,6 +428,70 @@ classDiagram
     }
 ```
 
+#### Pricing Workflow Logic
+A step-by-step breakdown of the pricing logic, integrating QuantLib date handling, market data setup, and product-specific payoffs.
+```mermaid
+flowchart TD
+    %% ==== Main Flow =====
+    A([Start]) --> B[Convert to QuantLib Date]
+    B --> C[Set Financial Calendar]
+    C --> D{Business Day?}
+    
+    %% ==== Date Validation Branch =====
+    D -->|No| E[⚠️ Log Warning<br>Suggest Next Business Day]
+    E --> Z([End])
+    
+    D -->|Yes| F[Fetch Trade from DB]
+    F --> G{Already Priced?}
+    
+    %% ==== Pricing Check Branch =====
+    G -->|Yes| H[📝 Log: Already Priced<br>Skip Processing]
+    H --> Z
+    
+    %% ==== Main Pricing Flow =====
+    G -->|No| I[Map product_type to<br>Pricer & Payoff Classes]
+    I --> J{Classes Found?}
+    
+    %% ==== Error Handling =====
+    J -->|No| K[❌ Log Error<br>Raise ValueError]
+    K --> Z
+    
+    %% ==== Pricing Process =====
+    J -->|Yes| L[Instantiate Pricer]
+    L --> M[Set Up Market Environment]
+    M --> N[Set Trade Attributes]
+    
+    %% ==== Asian Option Special Case =====
+    N --> O{AsianOption?}
+    O -->|Yes| P[⚙️ Simulate Underlier]
+    O -->|No| Q[Instantiate Payoff]
+    P --> Q
+    
+    %% ==== Payoff Configuration =====
+    Q --> R1[Attach Pricer Owner]
+    R1 --> R2[Set Strike]
+    R2 --> R3[Set Option Type]
+    R3 --> R4[Set Spot Price]
+    R4 --> R5[Calculate Payoff]
+    
+    %% ==== Final Steps =====
+    R5 --> S[Create Valuation Results]
+    S --> T[🚀 Deploy Pricing]
+    T --> Z
+    
+    %% ==== Styling =====
+    classDef green fill:#e6f3e6,stroke:#2d572d;
+    classDef red fill:#fae6e6,stroke:#a82d2d;
+    classDef blue fill:#e6f0fa,stroke:#2d4fa8;
+    classDef orange fill:#faf0e6,stroke:#a86b2d;
+    classDef purple fill:#f0e6fa,stroke:#6a2da8;
+    
+    class A,Z green;
+    class E,H,K red;
+    class P,T blue;
+    class I,L orange;
+    class Q,R1,R2,R3,R4,R5 purple;
+```
 
 
 
