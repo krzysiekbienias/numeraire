@@ -40,7 +40,7 @@ class TradeBook(models.Model):
     payoff = models.CharField(max_length=10, null=True, blank=True)
     trade_date = models.DateField()
     trade_maturity = models.DateField()
-    strike = models.FloatField(max_length=10, null=True, blank=True)
+    strike = models.FloatField(null=True, blank=True)
     dividend = models.FloatField()
     option_style = models.CharField(max_length=50,null=True,blank=True)
     structured_params = models.JSONField(null=True, blank=True)
