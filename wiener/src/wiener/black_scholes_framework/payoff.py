@@ -68,11 +68,6 @@ class Payoff(ABC):
         """Calculate payoff at given spot price(s)"""
         pass
 
-    @abstractmethod
-    def payoff_description(self) -> str:
-        """String description of payoff"""
-        pass
-
     def plot_payoff(self,
                     spot_range: Tuple[float, float] = None,
                     range_pct: float = 0.3,
@@ -118,7 +113,7 @@ class PlainVanillaPayoff(Payoff):
                  spot_price: Optional[float] | None = None):
         super().__init__()
         self.intrinsic_value = None
-        self._spot_price = spot_price # protected becasue i want to set this value using method define in parent class.
+        self._spot_price = spot_price  # protected becasue i want to set this value using method define in parent class.
         self.__strike = strike
         self.__option_type = option_type
 
@@ -145,10 +140,169 @@ class PlainVanillaPayoff(Payoff):
 
     def calculate_payoff(self) -> Union[float, np.ndarray]:
         if self.__option_type == 'call':
-            self.intrinsic_value=np.maximum(self._spot_price - self.__strike, 0)
+            self.intrinsic_value = np.maximum(self._spot_price - self.__strike, 0)
             return self.instrinsic_value
 
-        self.intrinsic_value=np.maximum(self.__strike - self._spot_price, 0)
+        self.intrinsic_value = np.maximum(self.__strike - self._spot_price, 0)
+        return self.intrinsic_value
+
+    def __repr__(self) -> str:
+        return (f"{self.__class__.__name__}("
+                f"option_type='{self.__option_type}', "
+                f"strike={self.__strike}, "
+                f"spot_price={self._spot_price}, "
+                f"intrinsic_value={self.intrinsic_value})")
+
+
+class DigitalOptionPayoff(Payoff):
+    """Vanilla option payoff implementation"""
+
+    def __init__(self,
+                 strike: float | None = None,
+                 option_type: str | None = None,
+                 spot_price: Optional[float] | None = None,
+                 cash_amount:float|None=None):
+        super().__init__()
+        self.intrinsic_value = None
+        self._spot_price = spot_price  # protected becasue i want to set this value using method define in parent class.
+        self.__strike = strike
+        self.__option_type = option_type
+        self.__cash_amount = cash_amount
+
+    def get_strike(self) -> float:
+        return self.__strike
+
+    def set_strike(self, strike: float):
+        if not isinstance(strike, (int, float)):
+            raise TypeError("Strike must be numeric")
+        if strike <= 0:
+            raise ValueError("Strike must be positive")
+        self.__strike = float(strike)
+
+    def get_option_type(self) -> str:
+        return self.__option_type
+
+    def set_option_type(self, option_type: str):
+        if not isinstance(option_type, str):
+            raise TypeError("Option type must be string")
+        option_type = option_type.lower()
+        if option_type not in ['call', 'put']:
+            raise ValueError("Option type must be 'call' or 'put'")
+        self.__option_type = option_type
+
+    def set_cash_amount(self, cash_amount: float):
+        if not isinstance(cash_amount, float):
+            raise TypeError("Cash amount must be numeric")
+        if cash_amount <= 0:
+            raise ValueError("Cash amount must be positive")
+        self.__cash_amount = cash_amount
+
+    def calculate_payoff(self) -> Union[float, np.ndarray]:
+        if self.__option_type == 'call':
+            self.intrinsic_value = self.__cash_amount if self._spot_price >= self.__strike else 0
+            return self.instrinsic_value
+
+        self.intrinsic_value = self.__cash_amount if self._spot_price <= self.__strike else 0
+        return self.intrinsic_value
+
+    def __repr__(self) -> str:
+        return (f"{self.__class__.__name__}("
+                f"option_type='{self.__option_type}', "
+                f"strike={self.__strike}, "
+                f"spot_price={self._spot_price}, "
+                f"intrinsic_value={self.intrinsic_value})")
+
+
+class AssetOrNothingOptionPayoff(Payoff):
+    """Vanilla option payoff implementation"""
+
+    def __init__(self,
+                 strike: float | None = None,
+                 option_type: str | None = None,
+                 spot_price: Optional[float] | None = None):
+        super().__init__()
+        self.intrinsic_value = None
+        self._spot_price = spot_price  # protected becasue i want to set this value using method define in parent class.
+        self.__strike = strike
+        self.__option_type = option_type
+
+    def get_strike(self) -> float:
+        return self.__strike
+
+    def set_strike(self, strike: float):
+        if not isinstance(strike, (int, float)):
+            raise TypeError("Strike must be numeric")
+        if strike <= 0:
+            raise ValueError("Strike must be positive")
+        self.__strike = float(strike)
+
+    def get_option_type(self) -> str:
+        return self.__option_type
+
+    def set_option_type(self, option_type: str):
+        if not isinstance(option_type, str):
+            raise TypeError("Option type must be string")
+        option_type = option_type.lower()
+        if option_type not in ['call', 'put']:
+            raise ValueError("Option type must be 'call' or 'put'")
+        self.__option_type = option_type
+
+    def calculate_payoff(self) -> Union[float, np.ndarray]:
+        if self.__option_type == 'call':
+            self.intrinsic_value = self._spot_price if self._spot_price >= self.__strike else 0
+            return self.instrinsic_value
+
+        self.intrinsic_value = self._spot_price if self._spot_price <= self.__strike else 0
+        return self.intrinsic_value
+
+    def __repr__(self) -> str:
+        return (f"{self.__class__.__name__}("
+                f"option_type='{self.__option_type}', "
+                f"strike={self.__strike}, "
+                f"spot_price={self._spot_price}, "
+                f"intrinsic_value={self.intrinsic_value})")
+
+
+class AsianOptionPayoff(Payoff):
+    """Vanilla option payoff implementation"""
+
+    def __init__(self,
+                 strike: float | None = None,
+                 option_type: str | None = None,
+                 spot_price: Optional[float] | None = None):
+        super().__init__()
+        self.intrinsic_value = None
+        self._spot_price = spot_price  # protected becasue i want to set this value using method define in parent class.
+        self.__strike = strike
+        self.__option_type = option_type
+
+    def get_strike(self) -> float:
+        return self.__strike
+
+    def set_strike(self, strike: float):
+        if not isinstance(strike, (int, float)):
+            raise TypeError("Strike must be numeric")
+        if strike <= 0:
+            raise ValueError("Strike must be positive")
+        self.__strike = float(strike)
+
+    def get_option_type(self) -> str:
+        return self.__option_type
+
+    def set_option_type(self, option_type: str):
+        if not isinstance(option_type, str):
+            raise TypeError("Option type must be string")
+        option_type = option_type.lower()
+        if option_type not in ['call', 'put']:
+            raise ValueError("Option type must be 'call' or 'put'")
+        self.__option_type = option_type
+
+    def calculate_payoff(self) -> Union[float, np.ndarray]:
+        if self.__option_type == 'call':
+            self.intrinsic_value = np.maximum(self._spot_price - self.__strike, 0)
+            return self.instrinsic_value
+
+        self.intrinsic_value = np.maximum(self.__strike - self._spot_price, 0)
         return self.intrinsic_value
 
     def __repr__(self) -> str:
