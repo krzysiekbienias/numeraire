@@ -217,7 +217,7 @@ class EuropeanOption(PricingEnginesInterface):
         self.trade_attributes['dividend'] = kwargs['dividend'] if 'dividend' in kwargs else TradeBook.objects.get(
             pk=trade_id).dividend
         self.trade_attributes["tau"] = kwargs['tau'] if 'tau' in kwargs else self.calendar_schedule.year_fractions
-        self.trade_attributes["trade_date"]=kwargs['trade_date'] if 'trade_date' in kwargs else TradeBook.objects.get(
+        self.trade_attributes["trade_date"] = kwargs['trade_date'] if 'trade_date' in kwargs else TradeBook.objects.get(
             pk=trade_id).trade_date
         return self.trade_attributes
 
@@ -565,18 +565,22 @@ class AsianOption(EuropeanOption):
             A simulated price path of the underlying asset.
         """
         gbm = GeometricBrownianMotion()
-        gbm.set_start_simulation_date(start_simulation_date=self.get_valuation_date)
-        gbm.set_end_simulation_date(end_simulation_date=self.trade_attributes['trade_maturity'])
-        gbm.set_drift(self.market_environment.market_data['risk_free_rate'])
-        gbm.set_initialisation_point(self.market_environment.market_data['underlying_price'])
-        print(f"Market info and trade attributes updated for trade {self.get_trade_id}")
+        if not self.get_fixing():
 
-        print("Grid for simulation prepared!")
-        modelled_underlier = gbm.model_equity_dynamic(simulation_schema=AppSettings.SIMULATION_SCHEMA)
-        return modelled_underlier
+            gbm.set_start_simulation_date(start_simulation_date=self.get_valuation_date)
+            gbm.set_end_simulation_date(end_simulation_date=self.trade_attributes['trade_maturity'])
+            gbm.set_drift(self.market_environment.market_data['risk_free_rate'])
+            gbm.set_initialisation_point(self.market_environment.market_data['underlying_price'])
+            logger.info("Grid for simulation prepared!")
+            modelled_underlier = gbm.model_equity_dynamic(simulation_schema=AppSettings.SIMULATION_SCHEMA)
+            return modelled_underlier
+        else:
+            logger.info("We need to blend realized historical prices with simulated future prices")
+            historical_part = None
+            simulated_part = None
 
     def get_fixing(self):
-        if self.trade_attributes['trade_date'] == datetime.strptime(self.get_valuation_date, '%Y-%m-%d'):
+        if self.trade_attributes['trade_date'] == datetime.strptime(self.get_valuation_date, '%Y-%m-%d').date():
             logger.info("No fixing needed. We will simulate the underlying asset price through entire lifecycle.")
             return False
         if datetime.strptime(self.get_valuation_date, '%Y-%m-%d') > self.trade_attributes['trade_date']:
@@ -613,14 +617,8 @@ class AsianOption(EuropeanOption):
         ValueError
             If the option type (payoff) is not recognized.
         """
-        if not self.get_fixing():
-            arithmetic_average = np.mean(underlying_price, axis=0)
-        else:
-            logger.info("We need to blend realized historical prices with simulated future prices")
-            historical_part=None
-            simulated_part=None
 
-
+        arithmetic_average = np.mean(underlying_price, axis=0)
         if self.trade_attributes['payoff'] == "Call":
             payoffs = np.maximum(arithmetic_average - self.trade_attributes['strike'], 0)
         elif self.trade_attributes['payoff'] == "Put":
