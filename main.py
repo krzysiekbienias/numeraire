@@ -113,6 +113,7 @@ def run_pricer(valuation_date: str, trade_id: int, **kwargs):
     option_pricer.set_trade_attributes(trade_id=trade_id)
     if product_type == 'AsianOption':
         option_pricer.simulate_underlier()
+
     # maybee here we might initiatet
 
     payoff=payoff_class()
@@ -139,9 +140,9 @@ if __name__ == '__main__':
     calendar_name = "USA"
     logger.info(f"Calendar set to: {calendar_name}.")
 
-    trade_id = 4
+    trade_id = 7
     logger.info(f"Preparing to price trade with ID: {trade_id}")
-    valuation_date: str = '2025-02-10'  # YYYY-MM-DD
+    valuation_date: str = '2025-01-10'  # YYYY-MM-DD
     logger.info(f"Valuation date set to: {valuation_date}")
     simulation_button: bool = False
     price_button: bool = True
