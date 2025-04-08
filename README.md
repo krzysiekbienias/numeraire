@@ -428,6 +428,49 @@ classDiagram
     }
 ```
 
+#### European Option Class
+```mermaid
+
+flowchart TD
+    EuropeanOption[("EuropeanOption Class")] --> Constructor[Constructor]
+    Constructor --> Initialize["Initialize Attributes:
+    - valuation_date
+    - trade_id
+    - calendar_schedule"]
+    Initialize --> SetDate[set_valuation_date]
+    Initialize --> SetTradeID[set_trade_id]
+    EuropeanOption --> PricingMethods[Pricing Setup]
+    PricingMethods --> MarketEnv[set_up_market_environment]
+    MarketEnv --> LoadMarketData["Load Market Data:
+    - underlying_price
+    - volatility
+    - discount_factors"]
+    PricingMethods --> TradeSetup[set_trade_attributes]
+    TradeSetup --> FetchTradeData["Fetch Trade Details:
+    - strike
+    - payoff
+    - maturity"]
+    LoadMarketData --> D1D2Formula[" d1 and d2 formula:
+    - d1 = (ln(S/K) + (r-q+σ²/2)T / (σ√T)"
+    - d2 = d1 - σ√T]
+    FetchTradeData -->D1D2Formula
+    EuropeanOption --> ImpliedVol[Implied Volatility]
+    ImpliedVol --> NewtonRaphson["Newton-Raphson:
+    1. price_difference(vol)
+    2. vega_derivative(vol)"]
+    NewtonRaphson --> Convergence{Converged?}
+    Convergence -->|Yes| ReturnVol[Return implied_vol]
+    Convergence -->|No| ReturnNone[Return None]
+    D1D2Formula-->CalulatePrice
+    style EuropeanOption fill:#4CAF50,stroke:#2E7D32
+    style PricingMethods fill:#2196F3,stroke:#0D47A1
+    style ImpliedVol fill:#9C27B0,stroke:#6A1B9A
+    style Initialize fill:#E1F5FE,stroke:#0288D1
+    style MarketEnv fill:#E8F5E9,stroke:#388E3C
+    style TradeSetup fill:#FFF3E0,stroke:#FB8C00
+ ```
+
+
 #### Pricing Workflow Logic
 A step-by-step breakdown of the pricing logic, integrating QuantLib date handling, market data setup, and product-specific payoffs.
 ```mermaid
