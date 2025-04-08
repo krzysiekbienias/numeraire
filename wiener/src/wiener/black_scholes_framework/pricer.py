@@ -1,11 +1,14 @@
 import numpy as np
 from scipy.stats import norm
+from datetime import datetime
 
+from tool_kit.market_data_extractor import MarketDataExtractor
 from wiener.src.pricing_environment import MarketEnvironmentHandler, TradeCalendarSchedule
 from wiener.models import TradeBook, DerivativePrice
 from tool_kit.numerical_methods import RootFinding
 from wiener.src.wiener.black_scholes_framework.underlier_modeling import GeometricBrownianMotion
 from app_settings import AppSettings
+from logger import logger
 
 
 class PricingEnginesInterface:
@@ -159,7 +162,7 @@ class EuropeanOption(PricingEnginesInterface):
         """
         return self.__trade_id
 
-    def set_up_market_environment(self, trade_id=None, **kwargs):
+    def set_up_market_environment(self, trade_id=None, **kwargs) -> MarketEnvironmentHandler:
         if self.market_environment is None:
             self.market_environment = MarketEnvironmentHandler(valuation_date=self.__valuation_date,
                                                                trade_id=self.__trade_id)
@@ -189,6 +192,7 @@ class EuropeanOption(PricingEnginesInterface):
             - 'strike'
             - 'dividend'
             - 'tau'
+            - 'trade_date'
 
         Returns:
         --------
@@ -213,6 +217,8 @@ class EuropeanOption(PricingEnginesInterface):
         self.trade_attributes['dividend'] = kwargs['dividend'] if 'dividend' in kwargs else TradeBook.objects.get(
             pk=trade_id).dividend
         self.trade_attributes["tau"] = kwargs['tau'] if 'tau' in kwargs else self.calendar_schedule.year_fractions
+        self.trade_attributes["trade_date"]=kwargs['trade_date'] if 'trade_date' in kwargs else TradeBook.objects.get(
+            pk=trade_id).trade_date
         return self.trade_attributes
 
     @property
@@ -385,7 +391,7 @@ class PlainVanillaOption(EuropeanOption):
             user_id='kb007'  # Default user_id if not provided
         )
         valuation_result.save()  # This will save the record to the database
-        print(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
+        logger.info(f"Valuation result saved for Trade ID: {self.get_trade_id} on {self.get_valuation_date}.")
 
 
 class DigitalOption(EuropeanOption):
@@ -543,7 +549,7 @@ class AsianOption(EuropeanOption):
     """
 
     def __init__(self, valuation_date: str, trade_id: (int, None) = None, **kwargs):
-        super().__init__(valuation_date, trade_id, kwargs)
+        super().__init__(valuation_date, trade_id, **kwargs)
         self.valuation_results = None
 
     def simulate_underlier(self):
@@ -569,6 +575,21 @@ class AsianOption(EuropeanOption):
         modelled_underlier = gbm.model_equity_dynamic(simulation_schema=AppSettings.SIMULATION_SCHEMA)
         return modelled_underlier
 
+    def get_fixing(self):
+        if self.trade_attributes['trade_date'] == datetime.strptime(self.get_valuation_date, '%Y-%m-%d'):
+            logger.info("No fixing needed. We will simulate the underlying asset price through entire lifecycle.")
+            return False
+        if datetime.strptime(self.get_valuation_date, '%Y-%m-%d') > self.trade_attributes['trade_date']:
+            logger.info("Calculating fixing required")
+            return True
+            # fixed_prices = MarketDataExtractor(equity_tickers=self.trade_attributes['equity_tickers'],
+            #                                    start_period=self.trade_attributes['trade_date'],
+            #                                    end_period=self.get_valuation_date)
+            # historical_average = fixed_prices.mean()
+
+    def get_payoff(self):
+        pass
+
     def run_pricer(self, underlying_price):
         """
         Prices the Asian option using Monte Carlo simulation.
@@ -592,7 +613,14 @@ class AsianOption(EuropeanOption):
         ValueError
             If the option type (payoff) is not recognized.
         """
-        arithmetic_average = np.mean(underlying_price, axis=0)
+        if not self.get_fixing():
+            arithmetic_average = np.mean(underlying_price, axis=0)
+        else:
+            logger.info("We need to blend realized historical prices with simulated future prices")
+            historical_part=None
+            simulated_part=None
+
+
         if self.trade_attributes['payoff'] == "Call":
             payoffs = np.maximum(arithmetic_average - self.trade_attributes['strike'], 0)
         elif self.trade_attributes['payoff'] == "Put":
