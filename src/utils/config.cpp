@@ -1,22 +1,20 @@
-#include <numeraire/utils/config.hpp>
-
-#include <numeraire/utils/exception.hpp>
-
 #include <fstream>
+#include <numeraire/utils/config.hpp>
+#include <numeraire/utils/exception.hpp>
 #include <string>
 
 namespace numeraire::utils {
 namespace {
 
-[[nodiscard]] const nlohmann::json& Navigate(const nlohmann::json& node, std::string_view segment,
-        const std::string& full_path) {
+[[nodiscard]] const nlohmann::json& Navigate(const nlohmann::json& node,
+                                             std::string_view segment,
+                                             const std::string& full_path) {
     if (!node.is_object()) {
         throw numeraire::ConfigError("Config: '" + full_path + "' is not an object at segment '" +
                                      std::string(segment) + "'");
     }
     if (!node.contains(segment)) {
-        throw numeraire::ConfigError("Config: missing key '" + std::string(segment) + "' in path '" +
-                                     full_path + "'");
+        throw numeraire::ConfigError("Config: missing key '" + std::string(segment) + "' in path '" + full_path + "'");
     }
     return node.at(segment);
 }
@@ -74,8 +72,7 @@ const nlohmann::json& Config::RequireAt(std::string_view dotted_path) const {
 std::string Config::RequireString(std::string_view dotted_path) const {
     const nlohmann::json& value = RequireAt(dotted_path);
     if (!value.is_string()) {
-        throw numeraire::ConfigError("Config: value at '" + std::string(dotted_path) +
-                                     "' is not a string");
+        throw numeraire::ConfigError("Config: value at '" + std::string(dotted_path) + "' is not a string");
     }
     return value.get<std::string>();
 }

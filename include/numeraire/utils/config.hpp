@@ -1,10 +1,10 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
-
 #include <filesystem>
 #include <string>
 #include <string_view>
+
+#include <nlohmann/json.hpp>
 
 namespace numeraire::utils {
 
@@ -12,7 +12,7 @@ namespace numeraire::utils {
 /// `configs/default.json`). Throws numeraire::ConfigError on I/O or parse
 /// failures and on missing dotted paths for the Require* helpers.
 class Config {
-   public:
+public:
     [[nodiscard]] static Config Load(const std::filesystem::path& path);
 
     [[nodiscard]] const nlohmann::json& Root() const noexcept { return root_; }
@@ -23,7 +23,7 @@ class Config {
 
     [[nodiscard]] std::string RequireString(std::string_view dotted_path) const;
 
-   private:
+private:
     explicit Config(nlohmann::json root) : root_(std::move(root)) {}
 
     nlohmann::json root_;
