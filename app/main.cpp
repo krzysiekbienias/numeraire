@@ -1,7 +1,9 @@
 #include <numeraire/utils/logger.hpp>
 
+using numeraire::utils::Logger;
+
 int main() {
-    numeraire::utils::Logger::Init();
-    NUM_INFO("Numeraire++ app starting (placeholder entry point).");
+    Logger::Init();
+    Logger::NumInfo("Numeraire++ app starting (placeholder entry point).");
     return 0;
 }

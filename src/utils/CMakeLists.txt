@@ -11,4 +11,5 @@ target_include_directories(numeraire_utils
 target_link_libraries(numeraire_utils
         PUBLIC
         spdlog::spdlog
+        fmt::fmt
 )

@@ -1,10 +1,9 @@
-#include <numeraire/utils/logger.hpp>
-
 #include <spdlog/logger.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <memory>
+#include <numeraire/utils/logger.hpp>
 #include <stdexcept>
 #include <vector>
 
@@ -13,18 +12,18 @@ namespace {
 
 [[nodiscard]] spdlog::level::level_enum ToSpdlog(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::kTrace:
-            return spdlog::level::trace;
-        case LogLevel::kDebug:
-            return spdlog::level::debug;
-        case LogLevel::kInfo:
-            return spdlog::level::info;
-        case LogLevel::kWarn:
-            return spdlog::level::warn;
-        case LogLevel::kError:
-            return spdlog::level::err;
-        case LogLevel::kCritical:
-            return spdlog::level::critical;
+    case LogLevel::kTrace:
+        return spdlog::level::trace;
+    case LogLevel::kDebug:
+        return spdlog::level::debug;
+    case LogLevel::kInfo:
+        return spdlog::level::info;
+    case LogLevel::kWarn:
+        return spdlog::level::warn;
+    case LogLevel::kError:
+        return spdlog::level::err;
+    case LogLevel::kCritical:
+        return spdlog::level::critical;
     }
     return spdlog::level::info;
 }
@@ -51,8 +50,8 @@ void Logger::Init(std::optional<LogLevel> level, std::optional<std::filesystem::
         }
         constexpr std::size_t kMaxFileBytes = 10 * 1024 * 1024;
         constexpr std::size_t kMaxRotatedFiles = 5;
-        sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-                path.string(), kMaxFileBytes, kMaxRotatedFiles));
+        sinks.push_back(
+                std::make_shared<spdlog::sinks::rotating_file_sink_mt>(path.string(), kMaxFileBytes, kMaxRotatedFiles));
     }
 
     auto logger = std::make_shared<spdlog::logger>("numeraire", sinks.begin(), sinks.end());

@@ -1,6 +1,6 @@
-#include <numeraire/utils/log_level.hpp>
-
 #include <gtest/gtest.h>
+
+#include <numeraire/utils/log_level.hpp>
 
 namespace numeraire::utils {
 

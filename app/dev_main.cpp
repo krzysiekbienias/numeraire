@@ -1,7 +1,9 @@
 #include <numeraire/utils/logger.hpp>
 
+using numeraire::utils::Logger;
+
 int main() {
-    numeraire::utils::Logger::Init();
-    NUM_INFO("dev_main sandbox starting (DEV_MAIN_BUILD).");
+    Logger::Init();
+    Logger::NumInfo("dev_main sandbox starting (DEV_MAIN_BUILD).");
     return 0;
 }

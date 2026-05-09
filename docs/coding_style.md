@@ -39,7 +39,7 @@ Full table:
 | `constexpr` / `const` (any scope) | `kCamelCase` | `inline constexpr int kMaxPaths = 1000;` |
 | Static class constant | `kCamelCase` | `static constexpr int kBufferSize = 128;` |
 | Enum value | `kCamelCase` | `OptionType::kCall` |
-| Macro | `SCREAMING_SNAKE_CASE` | `NUM_INFO(...)` |
+| Macro | `SCREAMING_SNAKE_CASE` | `NUMERAIRE_VERSION` (prefer functions over macros) |
 | File / directory | `snake_case` | `pricing_engine.hpp` |
 | Template parameter | `PascalCase` | `template <typename ProductT>` |
 

@@ -86,11 +86,13 @@ Integration tests compile only after you add `integration_tests/test_*.cpp`.
 
 ## Logging (Sprint 1)
 
-Call `numeraire::utils::Logger::Init()` once near process entry (see
-[`app/main.cpp`](app/main.cpp)). Default level is **info** unless
-`NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`, `warn`, `error`,
-`critical`, case-insensitive). Use the `NUM_INFO`, `NUM_WARN`, … macros from
-[`include/numeraire/utils/logger.hpp`](include/numeraire/utils/logger.hpp).
+Call `Logger::Init()` once near process entry (see [`app/main.cpp`](app/main.cpp);
+there we use `using numeraire::utils::Logger` to keep call sites short). Default
+level is **info** unless `NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`,
+`warn`, `error`, `critical`, case-insensitive). Log with the static helpers
+`Logger::NumInfo`, `Logger::NumWarn`, … from
+[`include/numeraire/utils/logger.hpp`](include/numeraire/utils/logger.hpp)
+(`fmt::format_string`-checked format strings).
 
 ---
 

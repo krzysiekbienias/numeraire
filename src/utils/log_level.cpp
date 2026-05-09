@@ -1,18 +1,16 @@
-#include <numeraire/utils/log_level.hpp>
-
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <numeraire/utils/log_level.hpp>
 
 namespace numeraire::utils {
 namespace {
 
 [[nodiscard]] std::string ToLowerAscii(std::string_view text) {
     std::string out(text);
-    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
+    std::transform(
+            out.begin(), out.end(), out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return out;
 }
 

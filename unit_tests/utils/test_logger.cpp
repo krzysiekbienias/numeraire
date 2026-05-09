@@ -1,22 +1,21 @@
-#include <numeraire/utils/logger.hpp>
-#include <numeraire/utils/log_level.hpp>
-
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <numeraire/utils/log_level.hpp>
+#include <numeraire/utils/logger.hpp>
 #include <string>
 
 namespace {
 
 class LoggerTest : public ::testing::Test {
-   protected:
+protected:
     void TearDown() override { numeraire::utils::Logger::Shutdown(); }
 };
 
 #if !defined(_WIN32)
 
 class ScopedEnvVar {
-   public:
+public:
     ScopedEnvVar(const char* key, const char* value) : key_(key) {
         const char* previous = std::getenv(key);
         if (previous != nullptr) {
@@ -37,7 +36,7 @@ class ScopedEnvVar {
     ScopedEnvVar(const ScopedEnvVar&) = delete;
     ScopedEnvVar& operator=(const ScopedEnvVar&) = delete;
 
-   private:
+private:
     std::string key_;
     bool had_previous_{false};
     std::string previous_value_;

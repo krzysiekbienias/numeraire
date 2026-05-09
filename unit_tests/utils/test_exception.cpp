@@ -1,6 +1,6 @@
-#include <numeraire/utils/exception.hpp>
-
 #include <gtest/gtest.h>
+
+#include <numeraire/utils/exception.hpp>
 
 namespace numeraire {
 

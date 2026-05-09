@@ -8,37 +8,37 @@ namespace numeraire {
 
 /// Base type for all Numeraire++ recoverable failures.
 class NumeraireException : public std::runtime_error {
-   public:
+public:
     explicit NumeraireException(std::string message) : std::runtime_error(std::move(message)) {}
 };
 
 class ConfigError : public NumeraireException {
-   public:
+public:
     explicit ConfigError(std::string message) : NumeraireException(std::move(message)) {}
 };
 
 class ValidationError : public NumeraireException {
-   public:
+public:
     explicit ValidationError(std::string message) : NumeraireException(std::move(message)) {}
 };
 
 class ScheduleError : public NumeraireException {
-   public:
+public:
     explicit ScheduleError(std::string message) : NumeraireException(std::move(message)) {}
 };
 
 class PricingError : public NumeraireException {
-   public:
+public:
     explicit PricingError(std::string message) : NumeraireException(std::move(message)) {}
 };
 
 class MarketDataError : public NumeraireException {
-   public:
+public:
     explicit MarketDataError(std::string message) : NumeraireException(std::move(message)) {}
 };
 
 class PersistenceError : public NumeraireException {
-   public:
+public:
     explicit PersistenceError(std::string message) : NumeraireException(std::move(message)) {}
 };
 

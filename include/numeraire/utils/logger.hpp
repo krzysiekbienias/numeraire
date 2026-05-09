@@ -1,17 +1,21 @@
 #pragma once
 
+#include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
 #include <numeraire/utils/log_level.hpp>
 #include <optional>
+#include <utility>
 
 namespace numeraire::utils {
 
-/// Central spdlog facade. Call Init() once near process entry; use the NUM_*
-/// macros for logging.
+/// Central spdlog facade. Call Init() once near process entry; use NumInfo /
+/// NumDebug / … for type-safe logging.
 class Logger {
 public:
+    Logger() = delete;
+
     /// Initializes sinks and the default logger named "numeraire".
     ///
     /// When `level` is std::nullopt, the level is taken from the environment
@@ -27,36 +31,35 @@ public:
 
     /// Returns the shared core logger instance. Init() must have run first.
     static spdlog::logger& Core();
-    Logger() = delete;
 
     template <typename... Args>
-    void NumTrace(fmt::format_string<Args...> fmt, Args&&... args) {
-        Logger::Core().trace(fmt, std::forward<Args>(args)...);
+    static void NumTrace(fmt::format_string<Args...> fmt, Args&&... args) {
+        Core().trace(fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void NumDebug(fmt::format_string<Args...> fmt, Args&&... args) {
-        Logger::Core().debug(fmt, std::forward<Args>(args)...);
+    static void NumDebug(fmt::format_string<Args...> fmt, Args&&... args) {
+        Core().debug(fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void NumInfo(fmt::format_string<Args...> fmt, Args&&... args) {
-        Logger::Core().info(fmt, std::forward<Args>(args)...);
+    static void NumInfo(fmt::format_string<Args...> fmt, Args&&... args) {
+        Core().info(fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void NumWarn(fmt::format_string<Args...> fmt, Args&&... args) {
-        Logger::Core().warn(fmt, std::forward<Args>(args)...);
+    static void NumWarn(fmt::format_string<Args...> fmt, Args&&... args) {
+        Core().warn(fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void NumError(fmt::format_string<Args...> fmt, Args&&... args) {
-        Logger::Core().error(fmt, std::forward<Args>(args)...);
+    static void NumError(fmt::format_string<Args...> fmt, Args&&... args) {
+        Core().error(fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void NumCritical(fmt::format_string<Args...> fmt, Args&&... args) {
-        Logger::Core().critical(fmt, std::forward<Args>(args)...);
+    static void NumCritical(fmt::format_string<Args...> fmt, Args&&... args) {
+        Core().critical(fmt, std::forward<Args>(args)...);
     }
 };
 
