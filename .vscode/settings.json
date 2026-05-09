@@ -1,0 +1,37 @@
+{
+    "cmake.debugConfig": {
+        "type": "lldb",
+        "request": "launch"
+    },
+    "cmake.ctest.neverDebugTestsWithLaunchConfiguration": true,
+    "testMate.cpp.test.executables": "{build,out}/test_environment",
+
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}/build",
+        "--clang-tidy",
+        "--header-insertion=iwyu",
+        "--background-index",
+        "--completion-style=detailed",
+        "--all-scopes-completion",
+        "--pch-storage=memory"
+    ],
+    "clangd.checkUpdates": false,
+
+    "editor.formatOnSave": true,
+    "[cpp]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+    "[c]": {
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+
+    "files.associations": {
+        "*.hpp": "cpp",
+        "*.tpp": "cpp",
+        "*.ipp": "cpp"
+    },
+
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true
+}

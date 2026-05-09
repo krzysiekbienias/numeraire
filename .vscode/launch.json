@@ -1,0 +1,45 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run: app",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/app",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Run: dev_main",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/dev_main",
+            "args": [],
+            "cwd": "${command:cmake.buildDirectory}/temp"
+        },
+        {
+            "name": "Run: test_environment",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/test_environment",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Run: test_environment (filtered)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/test_environment",
+            "args": ["--gtest_filter=${input:gtestFilter}"],
+            "cwd": "${workspaceFolder}"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "gtestFilter",
+            "type": "promptString",
+            "description": "Google Test filter (e.g. Logger.* or Schedule.GenerateForward)",
+            "default": "*"
+        }
+    ]
+}

@@ -1,0 +1,74 @@
+# ============================================================================
+# Numeraire++ — .gitignore
+# ============================================================================
+
+# --- Compiled artifacts -----------------------------------------------------
+*.d
+*.slo
+*.lo
+*.o
+*.obj
+
+*.gch
+*.pch
+
+*.ilk
+*.pdb
+*.dwo
+
+*.so
+*.dylib
+*.dll
+
+*.mod
+*.smod
+
+*.lai
+*.la
+*.a
+*.lib
+
+*.exe
+*.out
+*.app
+
+# --- Build directories ------------------------------------------------------
+build/
+out/
+cmake-build-*/
+
+# --- CMake generated --------------------------------------------------------
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+
+# --- Editor / IDE -----------------------------------------------------------
+.idea/
+**/.idea/
+.cache/
+.clangd/
+
+# VS Code: track only what we want shared with the team
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# --- Environment / runtime --------------------------------------------------
+.env
+.envrc
+logs/
+data/
+
+# --- macOS ------------------------------------------------------------------
+.DS_Store
+
+# --- Project notes / scratch ------------------------------------------------
+CHECKLIST_NOTES.md
+.cursor/plans
+
+# --- Per-developer smoke test (intentionally local) -------------------------
+unit_tests/test_smoke.cpp

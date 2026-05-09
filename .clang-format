@@ -1,0 +1,61 @@
+---
+# Numeraire++ — clang-format configuration
+# Based on Google C++ Style with project-specific overrides for indentation,
+# line length and include grouping. Naming conventions are enforced separately
+# by .clang-tidy (readability-identifier-naming).
+
+Language: Cpp
+BasedOnStyle: Google
+
+# --- Indentation ------------------------------------------------------------
+UseTab: Never
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 8
+AccessModifierOffset: -4
+NamespaceIndentation: None
+IndentCaseLabels: false
+IndentPPDirectives: AfterHash
+
+# --- Line length ------------------------------------------------------------
+ColumnLimit: 120
+
+# --- Pointers / references --------------------------------------------------
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# --- Short constructs -------------------------------------------------------
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: All
+
+# --- Includes ---------------------------------------------------------------
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+    - { Regex: '^<.*\.h>',                                          Priority: 1 }
+    - { Regex: '^<(spdlog|fmt|nlohmann|gtest|ql|sqlite3|cpr).*>',   Priority: 3 }
+    - { Regex: '^<.*>',                                             Priority: 2 }
+    - { Regex: '^<numeraire/.*>',                                   Priority: 4 }
+    - { Regex: '.*',                                                Priority: 5 }
+
+# --- Templates / namespaces -------------------------------------------------
+SpaceAfterTemplateKeyword: true
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+CompactNamespaces: false
+
+# --- Layout polish ----------------------------------------------------------
+SeparateDefinitionBlocks: Always
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SpacesBeforeTrailingComments: 2
+AlignAfterOpenBracket: Align
+AlignTrailingComments: true
+BinPackArguments: false
+BinPackParameters: false

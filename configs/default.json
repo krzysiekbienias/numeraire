@@ -1,0 +1,33 @@
+{
+    "version": "0.1.0",
+    "logging": {
+        "level": "info",
+        "file": "logs/numeraire.log",
+        "rotation": {
+            "max_size_mb": 10,
+            "max_files": 5
+        }
+    },
+    "schedule": {
+        "default_calendar": "UnitedKingdom",
+        "default_frequency": "Monthly",
+        "default_day_count": "Actual365Fixed",
+        "default_convention": "Following",
+        "default_rule": "Forward"
+    },
+    "pricing": {
+        "default_currency": "USD",
+        "monte_carlo": {
+            "default_paths": 100000,
+            "default_seed": 42
+        }
+    },
+    "database": {
+        "_comment_": "Wired up in Stage 2+ once SQLite repository ships.",
+        "path": "data/numeraire.sqlite"
+    },
+    "market_data": {
+        "_comment_": "Wired up in Stage 3+ once Polygon provider ships.",
+        "provider": "static"
+    }
+}
