@@ -28,6 +28,7 @@ target_compile_definitions(test_environment PRIVATE
 
 target_link_libraries(test_environment
         PRIVATE
+        numeraire_schedule
         numeraire_utils
         GTest::gtest_main
 )
