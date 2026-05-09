@@ -6,8 +6,9 @@ schedule generation where it belongs.
 
 Stage 1 is being built sprint-by-sprint. This README reflects **Sprint 0**
 (layout, CMake modules, tooling), **Sprint 1** (`numeraire_utils`: logging and
-the shared exception hierarchy), and **Sprint 2** (`.env` via `EnvLoader` +
-`configs/default.json` via `Config`).
+the shared exception hierarchy), **Sprint 2** (`.env` via `EnvLoader` +
+`configs/default.json` via `Config`), and **Sprint 3** ([`enums`](include/numeraire/enums/enums.hpp)
+plus [`quantlib_bridge`](include/numeraire/utils/quantlib_bridge.hpp) to QuantLib).
 
 ---
 
@@ -15,7 +16,7 @@ the shared exception hierarchy), and **Sprint 2** (`.env` via `EnvLoader` +
 
 | Path | Purpose |
 |------|---------|
-| [`include/numeraire/`](include/numeraire/) | Public headers (one module subtree per slice) |
+| [`include/numeraire/`](include/numeraire/) | Public headers: [`enums/`](include/numeraire/enums/), [`utils/`](include/numeraire/utils/), … |
 | [`src/`](src/) | Implementation translation units (per-module, e.g. [`src/utils/`](src/utils/)) |
 | [`app/`](app/) | `app` (CLI placeholder) and `dev_main` (sandbox) |
 | [`unit_tests/`](unit_tests/) | GoogleTest sources (`test_*.cpp`, including per-module dirs) |
