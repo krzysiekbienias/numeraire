@@ -5,8 +5,9 @@ instruments, pricing engines, models and market data, with QuantLib-backed
 schedule generation where it belongs.
 
 Stage 1 is being built sprint-by-sprint. This README reflects **Sprint 0**
-(layout, CMake modules, tooling) plus **Sprint 1** (`numeraire_utils`: logging
-and the shared exception hierarchy).
+(layout, CMake modules, tooling), **Sprint 1** (`numeraire_utils`: logging and
+the shared exception hierarchy), and **Sprint 2** (`.env` via `EnvLoader` +
+`configs/default.json` via `Config`).
 
 ---
 
@@ -21,7 +22,7 @@ and the shared exception hierarchy).
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
 | [`cmake/`](cmake/) | `NumeraireCompileOptions.cmake`, `NumeraireDependencies.cmake` |
 | [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, `format.sh`, `clean.sh` |
-| [`configs/`](configs/) | JSON defaults (wired up when `utils::Config` lands) |
+| [`configs/`](configs/) | JSON defaults loaded by [`utils::Config`](include/numeraire/utils/config.hpp) |
 | [`docs/`](docs/) | Architecture and coding style |
 
 ---
@@ -70,6 +71,10 @@ cmake --build build -j
 Binaries (with default options): `build/app`, `build/dev_main`,
 `build/test_environment`.
 
+Run `app` / `dev_main` from the **repository root** so relative paths resolve
+(`.env`, `configs/default.json`). [`scripts/test.sh`](scripts/test.sh) already
+`cd`s to the root before invoking `test_environment`.
+
 ---
 
 ## Tests
@@ -80,7 +85,28 @@ Binaries (with default options): `build/app`, `build/dev_main`,
 ./scripts/test.sh LoggerTest.ReInitIsSafe  # single test
 ```
 
+Some I/O-heavy unit tests (e.g. [`unit_tests/utils/test_env_loader.cpp`](unit_tests/utils/test_env_loader.cpp),
+[`unit_tests/utils/test_config.cpp`](unit_tests/utils/test_config.cpp)) create small `.env` / JSON files under the
+**system temp directory** (`std::filesystem::temp_directory_path()`, e.g. macOS `$TMPDIR`) in uniquely named
+subfolders. They are **not removed** when the test binary exits; look for prefixes like
+`numeraire_env_loader_ut_` or `numeraire_config_ut_` under `$TMPDIR` if you need to inspect leftovers.
+From a terminal (macOS/Linux), run `echo "$TMPDIR"` to see the base path, then e.g.
+`find "$TMPDIR" -maxdepth 3 -type d -name 'numeraire_*_ut_*'` to list those folders.
+
 Integration tests compile only after you add `integration_tests/test_*.cpp`.
+
+---
+
+## Configuration and environment (Sprint 2)
+
+- **`.env`** — optional dotenv-style file at the repo root. [`EnvLoader`](include/numeraire/utils/env_loader.hpp)
+  parses `KEY=value` lines (`#` comments; trim). [`EnvLoader::Get`](include/numeraire/utils/env_loader.hpp)
+  returns a non-empty **`std::getenv(key)`** value when present, otherwise the value from the file
+  (real process environment wins over `.env`). Call **`ApplyToEnvironment()`** before `Logger::Init()` if you
+  want `NUMERAIRE_LOG_LEVEL` and similar to be picked up from `.env` on POSIX (no-op on Windows).
+- **`configs/default.json`** — committed defaults. [`Config::Load`](include/numeraire/utils/config.hpp)
+  reads the file; [`RequireString`](include/numeraire/utils/config.hpp) / `RequireAt` walk dotted paths
+  such as `logging.level`. Missing file or invalid JSON throws `numeraire::ConfigError`.
 
 ---
 
