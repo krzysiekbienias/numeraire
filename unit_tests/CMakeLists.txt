@@ -20,6 +20,12 @@ set_target_properties(test_environment PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
+# Absolute path to repo root so tests can open committed files (e.g. configs/default.json)
+# regardless of the process working directory (IDE often starts from build/).
+target_compile_definitions(test_environment PRIVATE
+        "NUMERAIRE_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\""
+)
+
 target_link_libraries(test_environment
         PRIVATE
         numeraire_utils

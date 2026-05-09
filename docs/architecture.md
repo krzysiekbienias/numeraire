@@ -117,7 +117,9 @@ sequenceDiagram
 
 The first real library is **`numeraire_utils`** ([`src/utils/CMakeLists.txt`](../src/utils/CMakeLists.txt)):
 spdlog-backed [`Logger`](../include/numeraire/utils/logger.hpp), log-level
-parsing, and the [`exception`](../include/numeraire/utils/exception.hpp)
+parsing, [`EnvLoader`](../include/numeraire/utils/env_loader.hpp) (dotenv-style
+`.env` + optional `ApplyToEnvironment` / POSIX `setenv`), [`Config`](../include/numeraire/utils/config.hpp)
+(JSON defaults via nlohmann_json), and the [`exception`](../include/numeraire/utils/exception.hpp)
 types. Executables link this target directly.
 
 ---
@@ -128,7 +130,7 @@ types. Executables link this target directly.
 |--------|--------------|
 | 0 | Build system + layout + style enforcement |
 | 1 | `utils`: Logger (spdlog facade), Exception hierarchy (done) |
-| 2 | `utils`: EnvLoader, Config (nlohmann_json wrapper) |
+| 2 | `utils`: EnvLoader, Config (nlohmann_json wrapper) — **done** |
 | 3 | `enums` + `utils/quantlib_bridge` |
 | 4 | `schedule`: Schedule POD + ScheduleGenerator (QuantLib internally), UT vs raw QuantLib benchmark |
 | 5 | `core`: interfaces (IProduct/IPricer/IModel/IMarketData), PricingEngine, PricingResult |

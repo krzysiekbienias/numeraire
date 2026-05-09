@@ -1,4 +1,6 @@
 add_library(numeraire_utils STATIC
+        config.cpp
+        env_loader.cpp
         log_level.cpp
         logger.cpp
 )
@@ -12,4 +14,5 @@ target_link_libraries(numeraire_utils
         PUBLIC
         spdlog::spdlog
         fmt::fmt
+        nlohmann_json::nlohmann_json
 )
