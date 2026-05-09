@@ -1,6 +1,7 @@
-#include <iostream>
+#include <numeraire/utils/logger.hpp>
 
 int main() {
-    std::cout << "app running\n";
+    numeraire::utils::Logger::Init();
+    NUM_INFO("Numeraire++ app starting (placeholder entry point).");
     return 0;
 }

@@ -115,9 +115,10 @@ sequenceDiagram
   — every `find_package` lives here. Single source of truth for "what we
   use". Per-module CMakeLists then link only the deps they actually need.
 
-Sprint 0 keeps an anchor `core_lib` (one empty .cpp) so the build is green
-while module subdirectories are still empty placeholders. The anchor is
-removed once Sprint 1 ships real `src/utils/CMakeLists.txt`.
+The first real library is **`numeraire_utils`** ([`src/utils/CMakeLists.txt`](../src/utils/CMakeLists.txt)):
+spdlog-backed [`Logger`](../include/numeraire/utils/logger.hpp), log-level
+parsing, and the [`exception`](../include/numeraire/utils/exception.hpp)
+types. Executables link this target directly.
 
 ---
 
@@ -126,7 +127,7 @@ removed once Sprint 1 ships real `src/utils/CMakeLists.txt`.
 | Sprint | Deliverables |
 |--------|--------------|
 | 0 | Build system + layout + style enforcement |
-| 1 | `utils`: Logger (spdlog facade), Exception hierarchy |
+| 1 | `utils`: Logger (spdlog facade), Exception hierarchy (done) |
 | 2 | `utils`: EnvLoader, Config (nlohmann_json wrapper) |
 | 3 | `enums` + `utils/quantlib_bridge` |
 | 4 | `schedule`: Schedule POD + ScheduleGenerator (QuantLib internally), UT vs raw QuantLib benchmark |

@@ -26,7 +26,7 @@ set_target_properties(integration_test_environment PROPERTIES
 
 target_link_libraries(integration_test_environment
         PRIVATE
-        core_lib
+        numeraire_utils
         GTest::gtest_main
 )
 

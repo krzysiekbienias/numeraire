@@ -11,8 +11,8 @@ file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
 )
 
 if(TEST_SOURCES STREQUAL "")
-    message(STATUS "unit_tests: no sources yet (add unit_tests/<module>/test_*.cpp).")
-    return()
+        message(STATUS "unit_tests: no sources yet (add unit_tests/<module>/test_*.cpp).")
+        return()
 endif()
 
 add_executable(test_environment ${TEST_SOURCES})
@@ -22,7 +22,7 @@ set_target_properties(test_environment PROPERTIES
 
 target_link_libraries(test_environment
         PRIVATE
-        core_lib
+        numeraire_utils
         GTest::gtest_main
 )
 

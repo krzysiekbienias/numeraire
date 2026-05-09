@@ -1,6 +1,7 @@
-#include <iostream>
+#include <numeraire/utils/logger.hpp>
 
 int main() {
-    std::cout << "Welcome in dev main 🧪";
+    numeraire::utils::Logger::Init();
+    NUM_INFO("dev_main sandbox starting (DEV_MAIN_BUILD).");
     return 0;
 }

@@ -5,7 +5,8 @@ instruments, pricing engines, models and market data, with QuantLib-backed
 schedule generation where it belongs.
 
 Stage 1 is being built sprint-by-sprint. This README reflects **Sprint 0**
-(build layout, CMake modules, tooling, placeholders for future libraries).
+(layout, CMake modules, tooling) plus **Sprint 1** (`numeraire_utils`: logging
+and the shared exception hierarchy).
 
 ---
 
@@ -14,7 +15,7 @@ Stage 1 is being built sprint-by-sprint. This README reflects **Sprint 0**
 | Path | Purpose |
 |------|---------|
 | [`include/numeraire/`](include/numeraire/) | Public headers (one module subtree per slice) |
-| [`src/`](src/) | Implementation translation units (+ temporary `core_lib.cpp` anchor) |
+| [`src/`](src/) | Implementation translation units (per-module, e.g. [`src/utils/`](src/utils/)) |
 | [`app/`](app/) | `app` (CLI placeholder) and `dev_main` (sandbox) |
 | [`unit_tests/`](unit_tests/) | GoogleTest sources (`test_*.cpp`, including per-module dirs) |
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
@@ -74,12 +75,22 @@ Binaries (with default options): `build/app`, `build/dev_main`,
 ## Tests
 
 ```bash
-./scripts/test.sh                # all unit tests
-./scripts/test.sh Smoke          # suite filter: Smoke.*
-./scripts/test.sh Smoke.ItRuns # single test
+./scripts/test.sh                      # all unit tests
+./scripts/test.sh LoggerTest         # suite filter: LoggerTest.*
+./scripts/test.sh LoggerTest.ReInitIsSafe  # single test
 ```
 
 Integration tests compile only after you add `integration_tests/test_*.cpp`.
+
+---
+
+## Logging (Sprint 1)
+
+Call `numeraire::utils::Logger::Init()` once near process entry (see
+[`app/main.cpp`](app/main.cpp)). Default level is **info** unless
+`NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`, `warn`, `error`,
+`critical`, case-insensitive). Use the `NUM_INFO`, `NUM_WARN`, … macros from
+[`include/numeraire/utils/logger.hpp`](include/numeraire/utils/logger.hpp).
 
 ---
 

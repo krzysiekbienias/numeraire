@@ -20,7 +20,11 @@ if ! command -v clang-format >/dev/null 2>&1; then
     exit 1
 fi
 
-mapfile -t FILES < <(git ls-files '*.hpp' '*.h' '*.cpp' '*.cxx' '*.cc' 2>/dev/null || true)
+mapfile -t RAW < <(git ls-files '*.hpp' '*.h' '*.cpp' '*.cxx' '*.cc' 2>/dev/null || true)
+FILES=()
+for f in "${RAW[@]}"; do
+    [[ -f "$f" ]] && FILES+=("$f")
+done
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
     # Fallback when the tree is not a git repo yet or nothing is staged/tracked.

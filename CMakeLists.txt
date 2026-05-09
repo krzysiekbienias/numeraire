@@ -20,18 +20,6 @@ include(NumeraireCompileOptions)
 include(NumeraireDependencies)
 
 # ---------------------------------------------------------------------------
-# Anchor library (Sprint 0 only)
-# ---------------------------------------------------------------------------
-# This keeps the build green while the per-module libraries (utils, schedule,
-# core, database, market_data) are still empty placeholders. Once Sprint 1
-# ships real sources under src/utils/, the modular libraries take over and
-# core_lib will be removed.
-add_library(core_lib STATIC src/core_lib.cpp)
-target_include_directories(core_lib PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-# ---------------------------------------------------------------------------
 # Modular libraries (gated; activated as each module ships its CMakeLists.txt)
 # ---------------------------------------------------------------------------
 foreach(_module utils schedule core database market_data)
@@ -45,12 +33,12 @@ endforeach()
 # ---------------------------------------------------------------------------
 if(NUMERAIRE_BUILD_APP AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app/main.cpp)
     add_executable(app app/main.cpp)
-    target_link_libraries(app PRIVATE core_lib)
+    target_link_libraries(app PRIVATE numeraire_utils)
 endif()
 
 if(NUMERAIRE_BUILD_DEV_MAIN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app/dev_main.cpp)
     add_executable(dev_main app/dev_main.cpp)
-    target_link_libraries(dev_main PRIVATE core_lib)
+    target_link_libraries(dev_main PRIVATE numeraire_utils)
     target_compile_definitions(dev_main PRIVATE DEV_MAIN_BUILD=1)
 endif()
 
