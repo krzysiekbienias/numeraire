@@ -4,11 +4,17 @@ Modular C++20 framework for derivative pricing: clear separation between
 instruments, pricing engines, models and market data, with QuantLib-backed
 schedule generation where it belongs.
 
-Stage 1 is being built sprint-by-sprint. This README reflects **Sprint 0**
-(layout, CMake modules, tooling), **Sprint 1** (`numeraire_utils`: logging and
-the shared exception hierarchy), **Sprint 2** (`.env` via `EnvLoader` +
-`configs/default.json` via `Config`), and **Sprint 3** ([`enums`](include/numeraire/enums/enums.hpp)
-plus [`quantlib_bridge`](include/numeraire/utils/quantlib_bridge.hpp) to QuantLib).
+Stage 1 is being built sprint-by-sprint. This README reflects the following
+**in order**:
+
+| Sprint | Scope |
+|--------|--------|
+| **0** | Layout, CMake modules, tooling |
+| **1** | `numeraire_utils`: logging + shared exception hierarchy |
+| **2** | `.env` via [`EnvLoader`](include/numeraire/utils/env_loader.hpp) + `configs/default.json` via [`Config`](include/numeraire/utils/config.hpp) |
+| **3** | [`enums`](include/numeraire/enums/enums.hpp) + [`quantlib_bridge`](include/numeraire/utils/quantlib_bridge.hpp) (domain types ↔ QuantLib) |
+| **3.5** | [`ModelType`](include/numeraire/enums/model_type.hpp) vs [`PricingEngineType`](include/numeraire/enums/pricing_engine_type.hpp) — model family vs numerical pricing engine |
+| **4** | [`schedule`](include/numeraire/schedule/schedule_generator.hpp): lightweight [`Schedule`](include/numeraire/schedule/schedule.hpp) POD + `ScheduleGenerator` (QuantLib used internally to build dates) |
 
 ---
 
@@ -16,8 +22,8 @@ plus [`quantlib_bridge`](include/numeraire/utils/quantlib_bridge.hpp) to QuantLi
 
 | Path | Purpose |
 |------|---------|
-| [`include/numeraire/`](include/numeraire/) | Public headers: [`enums/`](include/numeraire/enums/), [`utils/`](include/numeraire/utils/), … |
-| [`src/`](src/) | Implementation translation units (per-module, e.g. [`src/utils/`](src/utils/)) |
+| [`include/numeraire/`](include/numeraire/) | Public headers: [`enums/`](include/numeraire/enums/), [`utils/`](include/numeraire/utils/), [`schedule/`](include/numeraire/schedule/), … |
+| [`src/`](src/) | Implementation TUs per module ([`src/utils/`](src/utils/), [`src/schedule/`](src/schedule/), …) |
 | [`app/`](app/) | `app` (CLI placeholder) and `dev_main` (sandbox) |
 | [`unit_tests/`](unit_tests/) | GoogleTest sources (`test_*.cpp`, including per-module dirs) |
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
@@ -98,6 +104,18 @@ Integration tests compile only after you add `integration_tests/test_*.cpp`.
 
 ---
 
+## Logging (Sprint 1)
+
+Call `Logger::Init()` once near process entry (see [`app/main.cpp`](app/main.cpp);
+there we use `using numeraire::utils::Logger` to keep call sites short). Default
+level is **info** unless `NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`,
+`warn`, `error`, `critical`, case-insensitive). Log with the static helpers
+`Logger::NumInfo`, `Logger::NumWarn`, … from
+[`include/numeraire/utils/logger.hpp`](include/numeraire/utils/logger.hpp)
+(`fmt::format_string`-checked format strings).
+
+---
+
 ## Configuration and environment (Sprint 2)
 
 - **`.env`** — optional dotenv-style file at the repo root. [`EnvLoader`](include/numeraire/utils/env_loader.hpp)
@@ -111,15 +129,33 @@ Integration tests compile only after you add `integration_tests/test_*.cpp`.
 
 ---
 
-## Logging (Sprint 1)
+## Enums and QuantLib bridge (Sprint 3)
 
-Call `Logger::Init()` once near process entry (see [`app/main.cpp`](app/main.cpp);
-there we use `using numeraire::utils::Logger` to keep call sites short). Default
-level is **info** unless `NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`,
-`warn`, `error`, `critical`, case-insensitive). Log with the static helpers
-`Logger::NumInfo`, `Logger::NumWarn`, … from
-[`include/numeraire/utils/logger.hpp`](include/numeraire/utils/logger.hpp)
-(`fmt::format_string`-checked format strings).
+Domain `enum class` types (calendars, day counts, currencies, option style, …)
+live under [`include/numeraire/enums/`](include/numeraire/enums/) (umbrella
+[`enums.hpp`](include/numeraire/enums/enums.hpp)). [`quantlib_bridge`](include/numeraire/utils/quantlib_bridge.hpp)
+maps them to QuantLib calendars, frequencies, conventions, and related types for schedule generation and future pricers.
+
+---
+
+## Model vs pricing engine (Sprint 3.5)
+
+We split **what world you assume** from **how you price in that world**:
+
+- **`ModelType`** ([`model_type.hpp`](include/numeraire/enums/model_type.hpp)) — model / dynamics family (e.g. `kBlackScholes`, `kHeston`). Framework taxonomy; QuantLib mapping stays per concrete engine later.
+- **`PricingEngineType`** ([`pricing_engine_type.hpp`](include/numeraire/enums/pricing_engine_type.hpp)) — numerical engine (e.g. `kAnalytic`, `kMonteCarlo`, `kBinomialTree`, `kFiniteDifference`).
+
+Factories and config can combine a model with an engine when the pair is valid.
+
+---
+
+## Schedules and generation (Sprint 4)
+
+The `schedule` module separates **data** from **generation logic**:
+
+- **`numeraire::schedule::Schedule`** — small POD (`std::vector<Date>` plus `DayCount`). Pass this across modules; it does not depend on QuantLib.
+- **`numeraire::schedule::ScheduleGenerator`** — uses QuantLib internally with a [`ScheduleConfig`](include/numeraire/schedule/schedule_config.hpp) (calendar, generation rule, frequency, …) and returns the lightweight `Schedule`.
+- **Bridge** ([`schedule_quantlib.hpp`](include/numeraire/schedule/schedule_quantlib.hpp)) — `ScheduleToQuantLib` / `ScheduleFromQuantLib` when a pricer needs a full `QuantLib::Schedule`.
 
 ---
 
@@ -153,10 +189,9 @@ settings file already passes `--compile-commands-dir=${workspaceFolder}/build`).
 
 ## Roadmap (high level)
 
-1. **Sprint 1+** — `utils` (logging, exceptions, env, config), then enums,
-   QuantLib bridge, schedule wrapper, core interfaces and factories.
+1. **Sprints 5–6** — `core`: interfaces (`IProduct`, `IPricer`, `IModel`, …), `PricingEngine`, `PricingResult`, factories (see [`docs/architecture.md`](docs/architecture.md)).
 2. **Later** — SQLite trade repository (after schema review), Polygon market
-   data, concrete pricers (analytical / MC / tree), optional Python bindings
+   data, concrete pricers wired to `ModelType` / `PricingEngineType`, optional Python bindings
    and a web tier.
 
 ---
