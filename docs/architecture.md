@@ -125,6 +125,95 @@ types. The [`enums`](../include/numeraire/enums/enums.hpp) module holds domain `
 frequencies, day counters, conventions, currencies, and option/exercise enums. Executables link
 `numeraire_utils` directly (which **PUBLIC**-ly depends on `numeraire_enums` and QuantLib).
 
+The **`numeraire_schedule`** library ([`src/schedule/CMakeLists.txt`](../src/schedule/CMakeLists.txt)) wraps
+QuantLib schedule generation: [`Schedule`](../include/numeraire/schedule/schedule.hpp) (date list + day-count),
+[`ScheduleConfig`](../include/numeraire/schedule/schedule_config.hpp), [`ScheduleGenerator`](../include/numeraire/schedule/schedule_generator.hpp)
+(builder + `Generate` / `YearFraction` / `IsBusinessDay` / `Adjust`), plus [`ScheduleToQuantLib`](../include/numeraire/schedule/schedule_quantlib.hpp) /
+`ScheduleFromQuantLib`. It links **`numeraire_utils`** for `quantlib_bridge` only (QuantLib stays out of `core`).
+
+### `ScheduleGenerator` dependencies
+
+[`ScheduleGenerator`](../include/numeraire/schedule/schedule_generator.hpp) is a thin façade: it owns a
+[`ScheduleConfig`](../include/numeraire/schedule/schedule_config.hpp) (domain enums only in the public header) and,
+in the implementation TU, maps that config to QuantLib via [`quantlib_bridge`](../include/numeraire/utils/quantlib_bridge.hpp)
+and [`ScheduleFromQuantLib`](../include/numeraire/schedule/schedule_quantlib.hpp). Call sites receive a lightweight
+[`Schedule`](../include/numeraire/schedule/schedule.hpp) (dates + `DayCount` tag), not a `QuantLib::Schedule`.
+
+**Types and composition** (solid = header-level ownership / API; dashed = implementation detail in `.cpp`):
+
+```mermaid
+flowchart TB
+    subgraph api["Public API (schedule headers)"]
+        SG[ScheduleGenerator]
+        Builder[ScheduleGenerator.Builder]
+        SC[ScheduleConfig]
+        Sch[Schedule]
+        D[Date]
+    end
+
+    subgraph enums["enums"]
+        CT[CalendarType]
+        FR[Frequency]
+        CN[DateConvention]
+        RG[DateGenerationRule]
+        DC[DayCount]
+    end
+
+    subgraph impl["Implementation .cpp only"]
+        QB[quantlib_bridge]
+        SQL[schedule_quantlib]
+        QL[QuantLib]
+        EX[ScheduleError]
+    end
+
+    SG --> SC
+    Builder --> SC
+    Builder -->|Build| SG
+    SG -->|Generate| Sch
+    SG --> D
+    Sch --> D
+    Sch --> DC
+
+    SC --> CT
+    SC --> FR
+    SC --> CN
+    SC --> RG
+    SC --> DC
+
+    SG -.-> QB
+    SG -.-> SQL
+    SG -.-> EX
+    SQL -.-> QL
+    QB -.-> QL
+    D -.->|ToQuantLibDate / FromQuantLibDate| QL
+```
+
+**`Generate(start, end)`** (conceptual sequence):
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant SG as ScheduleGenerator
+    participant SC as ScheduleConfig
+    participant QB as quantlib_bridge
+    participant QLS as QuantLib Schedule
+    participant SF as ScheduleFromQuantLib
+    participant Out as Schedule
+
+    Client->>SG: Generate(start, end)
+    SG->>SG: validate dates, frequency
+    SG->>SC: read calendar, conventions, rule, frequency, day_count
+    SG->>QB: ToQuantLib(...)
+    SG->>QLS: construct schedule
+    SG->>SF: ScheduleFromQuantLib(ql_schedule, day_count)
+    SF->>Out: dates + DayCount
+    SG-->>Client: Schedule
+```
+
+**Pricing takeaway:** keep stochastic models and numerical engines out of `ScheduleGenerator`; pricers consume
+`Schedule` / `YearFraction` / `Adjust` alongside `IModel` and market data. Note: [`date.hpp`](../include/numeraire/schedule/date.hpp)
+includes QuantLib’s date type for conversions at the schedule module boundary.
+
 ---
 
 ## Sprint plan (Stage 1)
@@ -135,7 +224,8 @@ frequencies, day counters, conventions, currencies, and option/exercise enums. E
 | 1 | `utils`: Logger (spdlog facade), Exception hierarchy (done) |
 | 2 | `utils`: EnvLoader, Config (nlohmann_json wrapper) — **done** |
 | 3 | `enums` + `utils/quantlib_bridge` — **done** |
-| 4 | `schedule`: Schedule POD + ScheduleGenerator (QuantLib internally), UT vs raw QuantLib benchmark |
+| 3.5 | `enums`: [`ModelType`](../include/numeraire/enums/model_type.hpp) vs [`PricingEngineType`](../include/numeraire/enums/pricing_engine_type.hpp) (model / dynamics family vs numerical pricing engine) — **done** |
+| 4 | `schedule`: Schedule POD + ScheduleGenerator (QuantLib internally), UT vs raw QuantLib benchmark — **done** |
 | 5 | `core`: interfaces (IProduct/IPricer/IModel/IMarketData), PricingEngine, PricingResult |
 | 6 | `core`: factories (ProductFactory, PricerFactory) |
 | 7 | `database`: TradeDto, ITradeRepository, InMemoryTradeRepository (SQLite waits for schema) |
