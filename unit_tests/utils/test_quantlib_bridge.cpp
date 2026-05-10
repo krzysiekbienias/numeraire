@@ -32,8 +32,7 @@ TEST(QuantLibBridgeTest, FrequencyRoundTrip) {
 
 TEST(QuantLibBridgeTest, DateConventionRoundTrip) {
     EXPECT_EQ(FromQuantLib(ToQuantLib(DateConvention::kFollowing)), DateConvention::kFollowing);
-    EXPECT_EQ(FromQuantLib(ToQuantLib(DateConvention::kModifiedFollowing)),
-            DateConvention::kModifiedFollowing);
+    EXPECT_EQ(FromQuantLib(ToQuantLib(DateConvention::kModifiedFollowing)), DateConvention::kModifiedFollowing);
 }
 
 TEST(QuantLibBridgeTest, DateGenerationRuleRoundTrip) {

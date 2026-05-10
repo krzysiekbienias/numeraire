@@ -82,7 +82,7 @@ TEST(ScheduleGeneratorTest, AdjustFollowingSkipsWeekend) {
                                           .WithCalendar(CalendarType::kUnitedKingdom)
                                           .WithConvention(DateConvention::kFollowing)
                                           .Build();
-    const Date adjusted = gen.Adjust(Date{2025, 1, 4});  // Saturday
+    const Date adjusted = gen.Adjust(Date{.year = 2025, .month = 1, .day = 4});  // Saturday
     EXPECT_EQ(adjusted.year, 2025);
     EXPECT_EQ(adjusted.month, 1);
     EXPECT_EQ(adjusted.day, 6);  // Monday
