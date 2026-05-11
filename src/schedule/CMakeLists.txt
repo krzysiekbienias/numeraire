@@ -1,5 +1,6 @@
 add_library(numeraire_schedule STATIC
         date.cpp
+        schedule_config_resolver.cpp
         schedule_generator.cpp
         schedule_quantlib.cpp
 )

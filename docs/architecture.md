@@ -214,6 +214,106 @@ sequenceDiagram
 `Schedule` / `YearFraction` / `Adjust` alongside `IModel` and market data. Note: [`date.hpp`](../include/numeraire/schedule/date.hpp)
 includes QuantLib’s date type for conversions at the schedule module boundary.
 
+### Trade row → `ScheduleConfig` (database first, then JSON fallback)
+
+Schedule fields may live on the trade row (e.g. optional `schedule_*` columns on `wiener_tradebook`). **One place**
+must own the merge rule: **use DB strings when present; otherwise fall back to** [`configs/default.json`](../configs/default.json)
+under `schedule` (`default_calendar`, `default_frequency`, …), read through [`Config`](../include/numeraire/utils/config.hpp).
+
+- **Persistence** — SQLite (or any repository) returns a small DTO with `std::optional<std::string>` per column; it does **not**
+  implement fallback logic.
+- **Config** — supplies default strings from JSON; it does **not** know about SQL.
+- **`ScheduleConfigResolver` (target)** — lives in the **`schedule`** module; parses optional DB strings to enums and fills gaps
+  from `Config`. String→enum parsing stays in the resolver’s `.cpp` (or private helpers), not in thin `enum` headers.
+
+**Component view** (single “driver” for merge):
+
+```mermaid
+flowchart LR
+    subgraph persistence["Persistence"]
+        DB[(Trade table e.g. wiener_tradebook)]
+        JSON[configs/default.json]
+    end
+
+    subgraph access["Thin adapters — no merge rule"]
+        Repo[TradeRepository / SQLite]
+        CFG[Config Load]
+    end
+
+    subgraph schedule_mod["schedule — single merge driver"]
+        DRV[ScheduleConfigResolver ResolveScheduleConfig]
+    end
+
+    subgraph consumer["Consumer"]
+        GEN[ScheduleGenerator]
+    end
+
+    DB --> Repo
+    JSON --> CFG
+    Repo -->|TradeScheduleOverrides DTO optional strings| DRV
+    CFG -->|schedule.default_* strings| DRV
+    DRV -->|ScheduleConfig| GEN
+```
+
+**Sequence** (conceptual):
+
+```mermaid
+sequenceDiagram
+    participant App as App / pricer
+    participant Repo as TradeRepository
+    participant DB as SQLite trade row
+    participant CFG as Config default.json
+    participant RES as ScheduleConfigResolver
+    participant GEN as ScheduleGenerator
+
+    App->>Repo: GetTrade(trade_id)
+    Repo->>DB: SELECT schedule_* ...
+    DB-->>Repo: row NULL or strings
+    Repo-->>App: TradeScheduleOverrides DTO
+
+    App->>CFG: Config already loaded
+    App->>RES: Resolve(overrides, config)
+    Note over RES: per field: DB value then parse else Config default
+    RES-->>App: ScheduleConfig
+
+    App->>GEN: generator with resolved ScheduleConfig Generate(start, end)
+```
+
+**Minimal types** (contract sketch):
+
+```mermaid
+classDiagram
+    class TradeScheduleOverrides {
+        <<DTO from DB>>
+        +optional string calendar
+        +optional string frequency
+        +optional string convention
+        +optional string rule
+        +optional string day_count
+    }
+
+    class Config {
+        +Root json
+        +RequireString path
+    }
+
+    class ScheduleConfig {
+        +CalendarType calendar_type
+        +Frequency frequency
+        +DateConvention convention
+        +DateGenerationRule rule
+        +DayCount day_count
+    }
+
+    class ScheduleConfigResolver {
+        +Resolve overrides config ScheduleConfig
+    }
+
+    ScheduleConfigResolver ..> TradeScheduleOverrides : reads
+    ScheduleConfigResolver ..> Config : fallback default_*
+    ScheduleConfigResolver ..> ScheduleConfig : builds
+```
+
 ---
 
 ## Sprint plan (Stage 1)
