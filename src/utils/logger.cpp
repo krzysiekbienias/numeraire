@@ -56,7 +56,7 @@ void Logger::Init(std::optional<LogLevel> level, std::optional<std::filesystem::
 
     auto logger = std::make_shared<spdlog::logger>("numeraire", sinks.begin(), sinks.end());
     logger->set_level(ToSpdlog(resolved));
-    logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] %v");
+    logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] [%t] %v");
     logger->flush_on(spdlog::level::warn);
 
     spdlog::register_logger(logger);
