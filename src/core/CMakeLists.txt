@@ -9,4 +9,5 @@ target_include_directories(numeraire_core
 target_link_libraries(numeraire_core
         INTERFACE
         numeraire_enums
+        numeraire_schedule
 )

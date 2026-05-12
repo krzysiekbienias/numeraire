@@ -3,7 +3,9 @@
 #include <numeraire/database/dtos.hpp>
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/enums/option_type.hpp>
+#include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/product_factory.hpp>
+#include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/utils/exception.hpp>
 
 TEST(ProductFactoryTest, BuildsVanillaEuropeanFromCatalogRows) {
@@ -97,6 +99,30 @@ TEST(ProductFactoryTest, NonEquityAssetKindThrows) {
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
                  numeraire::ValidationError);
+}
+
+TEST(ProductFactoryTest, AssetOrNothingCatalogBuildsDedicatedProductType) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "P_BABA_008";
+    product.option_side = "PUT";
+    product.strike = 130.0;
+    product.attributes_json = R"({"instrument_type": "AssetOrNothingOption"})";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "P_BABA_008";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "BABA";
+    equity.expiry_date = "2025-11-07";
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr);
+
+    ASSERT_NE(instrument, nullptr);
+    EXPECT_NE(dynamic_cast<numeraire::products::EquityAssetOrNothingProduct*>(instrument.get()), nullptr);
+    EXPECT_EQ(dynamic_cast<numeraire::products::VanillaEquityOptionProduct*>(instrument.get()), nullptr);
+    EXPECT_EQ(instrument->OptionKind(), numeraire::OptionType::kPut);
+    EXPECT_DOUBLE_EQ(instrument->Strike(), 130.0);
+    EXPECT_EQ(instrument->UnderlyingId(), "BABA");
 }
 
 TEST(ProductFactoryTest, AsianOptionAttributesThrowsUntilSupported) {

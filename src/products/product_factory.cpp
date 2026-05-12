@@ -1,6 +1,7 @@
 #include <numeraire/products/product_factory.hpp>
 
 #include <numeraire/enums/exercise_style.hpp>
+#include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/utils/exception.hpp>
 
@@ -8,11 +9,17 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <sstream>
 #include <string>
 
 namespace {
+
+enum class EquityCatalogInstrumentKind : std::uint8_t {
+    kVanilla,
+    kAssetOrNothing,
+};
 
 [[nodiscard]] std::string TrimCopy(std::string s) {
     const auto not_space = [](const unsigned char ch) { return !std::isspace(ch); };
@@ -28,6 +35,14 @@ namespace {
         }
     }
     return s;
+}
+
+[[nodiscard]] std::string NormalizeInstrumentTypeKey(std::string t) {
+    t = ToLowerAscii(TrimCopy(std::move(t)));
+    t.erase(std::remove_if(t.begin(), t.end(),
+                           [](const unsigned char c) { return c == '_' || std::isspace(c) != 0; }),
+            t.end());
+    return t;
 }
 
 [[nodiscard]] numeraire::schedule::Date ParseIsoDate(const std::string& raw) {
@@ -50,7 +65,7 @@ namespace {
 
 [[nodiscard]] numeraire::OptionType ParseOptionSide(const std::optional<std::string>& side) {
     if (!side.has_value()) {
-        throw numeraire::ValidationError("vanilla product requires option_side (CALL/PUT)");
+        throw numeraire::ValidationError("equity catalog product requires option_side (CALL/PUT)");
     }
     const std::string k = ToLowerAscii(TrimCopy(*side));
     if (k == "call") {
@@ -62,10 +77,10 @@ namespace {
     throw numeraire::ValidationError("option_side must be CALL or PUT, got: " + *side);
 }
 
-void EnsureVanillaAttributesJson(const std::string& attributes_json) {
+[[nodiscard]] EquityCatalogInstrumentKind ParseEquityInstrumentKind(const std::string& attributes_json) {
     const std::string trimmed = TrimCopy(attributes_json);
     if (trimmed.empty() || trimmed == "{}") {
-        return;
+        return EquityCatalogInstrumentKind::kVanilla;
     }
 
     const auto j = nlohmann::json::parse(trimmed, nullptr, false);
@@ -78,15 +93,18 @@ void EnsureVanillaAttributesJson(const std::string& attributes_json) {
 
     const auto it = j.find("instrument_type");
     if (it == j.end() || it->is_null()) {
-        return;
+        return EquityCatalogInstrumentKind::kVanilla;
     }
     if (!it->is_string()) {
         throw numeraire::ValidationError("instrument_type must be a string");
     }
 
-    const std::string t = ToLowerAscii(TrimCopy(it->get<std::string>()));
-    if (t.empty() || t == "vanilla" || t == "vanillaoption") {
-        return;
+    const std::string key = NormalizeInstrumentTypeKey(it->get<std::string>());
+    if (key.empty() || key == "vanilla" || key == "vanillaoption") {
+        return EquityCatalogInstrumentKind::kVanilla;
+    }
+    if (key == "assetornothingoption" || key == "assetornothing") {
+        return EquityCatalogInstrumentKind::kAssetOrNothing;
     }
 
     std::ostringstream oss;
@@ -115,7 +133,7 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(const data
                                                                       const database::TradeDto* trade) {
     EnsureMatchingProductIds(product.product_id, equity.product_id);
     EnsureEquityKind(equity.asset_kind);
-    EnsureVanillaAttributesJson(product.attributes_json);
+    const EquityCatalogInstrumentKind kind = ParseEquityInstrumentKind(product.attributes_json);
 
     const schedule::Date expiry = ParseIsoDate(equity.expiry_date);
     const schedule::Date trade_date =
@@ -123,11 +141,18 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(const data
 
     const OptionType opt = ParseOptionSide(product.option_side);
     if (!product.strike.has_value()) {
-        throw ValidationError("vanilla product requires strike");
+        throw ValidationError("equity option product requires strike (barrier level K)");
     }
 
-    return std::make_unique<VanillaEquityOptionProduct>(equity.underlying_id, opt, ExerciseStyle::kEuropean,
-                                                        *product.strike, trade_date, expiry);
+    switch (kind) {
+        case EquityCatalogInstrumentKind::kVanilla:
+            return std::make_unique<VanillaEquityOptionProduct>(
+                    equity.underlying_id, opt, ExerciseStyle::kEuropean, *product.strike, trade_date, expiry);
+        case EquityCatalogInstrumentKind::kAssetOrNothing:
+            return std::make_unique<EquityAssetOrNothingProduct>(
+                    equity.underlying_id, opt, ExerciseStyle::kEuropean, *product.strike, trade_date, expiry);
+    }
+    throw ValidationError("internal: unhandled equity instrument kind");
 }
 
 }  // namespace numeraire::products
