@@ -331,3 +331,19 @@ classDiagram
 | 7 | `database`: TradeDto, ITradeRepository, InMemoryTradeRepository (SQLite waits for schema) |
 | 8 | `market_data`: MarketSnapshot, IMarketDataProvider, StaticMarketDataProvider (Polygon waits) |
 | 9 | Polish: CI, tightening checks as needed |
+
+---
+
+## Stage 2 — pricing path (living plan)
+
+| Track | Goal |
+|--------|------|
+| **Closed-form pricers** | Implement NPV and greeks from **explicit formulas** in library code (readable, debuggable). Keeps ownership of the maths in-repo; QuantLib is **not** the source of truth inside pricer TUs. |
+| **QuantLib in tests** | Use QuantLib engines/calculators (e.g. `BlackCalculator`) as **benchmarks** in unit tests to lock parity on conventions (day count, forward mapping). Same pattern as schedule UTs vs raw QuantLib. |
+| **Time axis** | Shared calendar helpers stay in `schedule` (e.g. [`Act365FixedYearFraction`](../include/numeraire/schedule/date.hpp)); pricers depend on domain dates and year fractions, not on sprinkling `ql/*` in every executable. |
+| **Orchestration** | `PricingEngine`, factories, persistence / market expansion per earlier module graph. |
+
+Concrete shipped in Stage 2 so far:
+
+- [`PricingEngine`](../include/numeraire/core/pricing_engine.hpp) — thin dispatch.
+- [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) — European vanilla on spot: closed-form d₁/d₂, Φ, NPV, textbook greeks; UT vs `QuantLib::BlackCalculator`.
