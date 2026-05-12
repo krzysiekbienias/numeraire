@@ -69,3 +69,10 @@ data/
 # --- Project notes / scratch ------------------------------------------------
 CHECKLIST_NOTES.md
 .cursor/plans
+
+# --- DB---
+db.sqlite3
+*.session.sql
+
+# --- cached data ---
+cached_market_data
