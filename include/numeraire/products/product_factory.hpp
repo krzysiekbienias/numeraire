@@ -7,10 +7,11 @@
 
 namespace numeraire::products {
 
-/// Builds `core::IProduct` instances from persisted catalog rows. Parsing of
-/// `attributes_json` is intentionally narrow for now: empty object or omitted
-/// `instrument_type` maps to a single-leg vanilla; exotic keys throw
-/// `ValidationError` until dedicated product types exist.
+/// Builds `core::IProduct` instances from persisted catalog rows. Parses
+/// `instrument_type` inside `attributes_json`: omitted / vanilla maps to
+/// `VanillaEquityOptionProduct`; `AssetOrNothingOption` maps to
+/// `EquityAssetOrNothingProduct`. Other values throw `ValidationError` until
+/// wired.
 class ProductFactory {
    public:
     [[nodiscard]] static std::unique_ptr<core::IProduct> MakeFromEquityCatalog(
