@@ -15,7 +15,7 @@
             "request": "launch",
             "program": "${command:cmake.buildDirectory}/dev_main",
             "args": [],
-            "cwd": "${command:cmake.buildDirectory}/temp"
+            "cwd": "${workspaceFolder}"
         },
         {
             "name": "Run: test_environment",
@@ -30,7 +30,9 @@
             "type": "lldb",
             "request": "launch",
             "program": "${command:cmake.buildDirectory}/test_environment",
-            "args": ["--gtest_filter=${input:gtestFilter}"],
+            "args": [
+                "--gtest_filter=${input:gtestFilter}"
+            ],
             "cwd": "${workspaceFolder}"
         }
     ],
