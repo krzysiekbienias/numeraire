@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.20)
 project(numeraire
-        LANGUAGES CXX
-        VERSION   0.1.0
-        DESCRIPTION "Numeraire++ — modular C++ derivative pricing framework"
+    LANGUAGES CXX
+    VERSION 0.1.0
+    DESCRIPTION "Numeraire++ — modular C++ derivative pricing framework"
 )
 
 # ---------------------------------------------------------------------------
 # Project options
 # ---------------------------------------------------------------------------
-option(NUMERAIRE_BUILD_TESTS    "Build unit + integration tests"           ON)
-option(NUMERAIRE_BUILD_APP      "Build the production app entry point"     ON)
-option(NUMERAIRE_BUILD_DEV_MAIN "Build the dev_main sandbox entry point"   ON)
+option(NUMERAIRE_BUILD_TESTS "Build unit + integration tests" ON)
+option(NUMERAIRE_BUILD_APP "Build the production app entry point" ON)
+option(NUMERAIRE_BUILD_DEV_MAIN "Build the dev_main sandbox entry point" ON)
 
 # ---------------------------------------------------------------------------
 # Compile options + external dependencies
@@ -22,7 +22,7 @@ include(NumeraireDependencies)
 # ---------------------------------------------------------------------------
 # Modular libraries (gated; activated as each module ships its CMakeLists.txt)
 # ---------------------------------------------------------------------------
-foreach(_module enums utils schedule core database products market_data)
+foreach(_module enums utils schedule core database products market_data pricers)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/${_module}/CMakeLists.txt)
         add_subdirectory(src/${_module})
     endif()
@@ -39,6 +39,7 @@ endif()
 if(NUMERAIRE_BUILD_DEV_MAIN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app/dev_main.cpp)
     add_executable(dev_main app/dev_main.cpp)
     target_link_libraries(dev_main PRIVATE numeraire_utils)
+    target_link_libraries(dev_main PRIVATE numeraire_schedule)
     target_compile_definitions(dev_main PRIVATE DEV_MAIN_BUILD=1)
 endif()
 

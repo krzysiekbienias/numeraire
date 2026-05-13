@@ -31,6 +31,7 @@ target_link_libraries(test_environment
         numeraire_core
         numeraire_database
         numeraire_market_data
+        numeraire_pricers
         numeraire_products
         numeraire_schedule
         numeraire_utils
