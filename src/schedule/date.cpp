@@ -1,5 +1,7 @@
 #include <numeraire/schedule/date.hpp>
 
+#include <ql/time/daycounters/actual365fixed.hpp>
+
 namespace numeraire::schedule {
 
 QuantLib::Date ToQuantLibDate(const Date& date) {
@@ -9,6 +11,10 @@ QuantLib::Date ToQuantLibDate(const Date& date) {
 
 Date FromQuantLibDate(const QuantLib::Date& date) {
     return Date{static_cast<int>(date.year()), static_cast<int>(date.month()), static_cast<int>(date.dayOfMonth())};
+}
+
+double Act365FixedYearFraction(const Date& start, const Date& end) {
+    return QuantLib::Actual365Fixed().yearFraction(ToQuantLibDate(start), ToQuantLibDate(end));
 }
 
 }  // namespace numeraire::schedule

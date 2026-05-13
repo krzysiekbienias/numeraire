@@ -4,6 +4,8 @@
         "request": "launch"
     },
     "cmake.ctest.neverDebugTestsWithLaunchConfiguration": true,
+    "variableDisplayType.variableView": true,
+    "variableDisplayType.watchView": true,
     "testMate.cpp.test.executables": "{build,out}/test_environment",
     "clangd.arguments": [
         "--compile-commands-dir=${workspaceFolder}/build",
