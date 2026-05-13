@@ -1,4 +1,4 @@
-# Persistence-facing DTOs and repositories (header-only until SQLite lands).
+# Persistence-facing DTOs and repositories (ITradeRepository header; SQLite impl TBD).
 add_library(numeraire_database INTERFACE)
 
 target_include_directories(numeraire_database
