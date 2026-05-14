@@ -10,13 +10,17 @@
 
 namespace numeraire::database {
 
-/// Snapshot of the standalone **product** row (payoff template). `option_side`
-/// / `strike` may be empty for multi-leg structures; details live in
-/// `attributes_json` until a parser maps them to concrete `IProduct` types.
+/// Snapshot of the standalone **equity-product** facet (`products_equity` JOIN).
+/// `option_side` / `strike` may be empty for multi-leg structures.
+/// `catalog_instrument_type` / `catalog_exercise_style` mirror DB columns when
+/// loaded by `SqliteTradeRepository`; `attributes_json` is `structured_params`
+/// payload (extras only once `instrument_type` lives mostly on the catalog row).
 struct ProductDto {
     std::string product_id;
     std::optional<std::string> option_side;
     std::optional<double> strike;
+    std::optional<std::string> catalog_instrument_type;
+    std::optional<std::string> catalog_exercise_style;
     std::string attributes_json;
 };
 

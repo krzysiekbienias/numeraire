@@ -6,8 +6,8 @@ TEST(DatabaseDtosTest, ProductDtoDefaultAggregates) {
     const numeraire::database::ProductDto p{};
     EXPECT_TRUE(p.product_id.empty());
     EXPECT_FALSE(p.option_side.has_value());
-    EXPECT_FALSE(p.strike.has_value());
-    EXPECT_TRUE(p.attributes_json.empty());
+    EXPECT_FALSE(p.catalog_instrument_type.has_value());
+    EXPECT_FALSE(p.catalog_exercise_style.has_value());
 }
 
 TEST(DatabaseDtosTest, TradeDtoRoundTripSampleShape) {
