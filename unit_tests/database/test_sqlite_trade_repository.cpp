@@ -52,7 +52,7 @@ void SeedFixtureDb(const std::string& db_path) {
             "'Actual365Fixed', 'UnitedStates');");
 
     db.exec(
-            "INSERT INTO products_equity VALUES "
+            "INSERT INTO products_equity (product_id, option_type, strike, structured_params) VALUES "
             "('P_AAPL_001', 'CALL', 233, '{}');");
 
     db.exec(

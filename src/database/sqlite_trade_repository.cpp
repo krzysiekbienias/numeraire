@@ -23,7 +23,7 @@ constexpr const char* kSelectCatalogSql =
         "t.trade_id, t.product_id, t.booking_timestamp, t.trade_date, t.updated_at, "
         "t.status, t.direction, t.quantity, t.commission, "
         "p.product_id, p.asset_kind, p.underlying_id, p.expiry_date, p.settlement, p.day_count, p.calendar, "
-        "e.option_type, e.strike, e.structured_params "
+        "e.option_type, e.strike, e.instrument_type, e.exercise_style, e.structured_params "
         "FROM trades t "
         "INNER JOIN products p ON p.product_id = t.product_id "
         "INNER JOIN products_equity e ON e.product_id = t.product_id "
@@ -48,7 +48,9 @@ enum class CatalogCol : int {
     kCalendar = 15,
     kOptionType = 16,
     kStrike = 17,
-    kStructuredParams = 18,
+    kInstrumentType = 18,
+    kExerciseStyle = 19,
+    kStructuredParams = 20,
 };
 
 [[nodiscard]] std::string TrimCopy(std::string s) {
@@ -179,6 +181,23 @@ enum class CatalogCol : int {
     } else {
         b.product.strike = st.getColumn(static_cast<int>(CatalogCol::kStrike)).getDouble();
     }
+
+    if (ColumnIsNull(st, static_cast<int>(CatalogCol::kInstrumentType))) {
+        b.product.catalog_instrument_type = std::nullopt;
+    } else {
+        const std::string ti = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kInstrumentType)));
+        b.product.catalog_instrument_type =
+                ti.empty() ? std::nullopt : std::optional<std::string>(std::move(ti));
+    }
+
+    if (ColumnIsNull(st, static_cast<int>(CatalogCol::kExerciseStyle))) {
+        b.product.catalog_exercise_style = std::nullopt;
+    } else {
+        const std::string xe = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kExerciseStyle)));
+        b.product.catalog_exercise_style =
+                xe.empty() ? std::nullopt : std::optional<std::string>(std::move(xe));
+    }
+
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kStructuredParams))) {
         b.product.attributes_json = "{}";
     } else {
