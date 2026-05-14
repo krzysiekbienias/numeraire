@@ -21,7 +21,7 @@ class SqliteTradeRepository final : public ITradeRepository {
     SqliteTradeRepository(SqliteTradeRepository&&) = delete;
     SqliteTradeRepository& operator=(SqliteTradeRepository&&) = delete;
 
-    [[nodiscard]] TradeCatalogBundle GetCatalogForTrade(std::string_view trade_id) override;
+    [[nodiscard]] TradeCatalogBundle GetCatalogForTrade(std::string_view trade_id) const override;
 
    private:
     struct Impl;

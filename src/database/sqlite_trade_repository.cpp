@@ -232,7 +232,7 @@ SqliteTradeRepository::SqliteTradeRepository(std::string database_file_path)
 
 SqliteTradeRepository::~SqliteTradeRepository() = default;
 
-TradeCatalogBundle SqliteTradeRepository::GetCatalogForTrade(const std::string_view trade_id) {
+TradeCatalogBundle SqliteTradeRepository::GetCatalogForTrade(const std::string_view trade_id) const {
     try {
         SQLite::Statement& st = *impl_->select_catalog;
         st.reset();
