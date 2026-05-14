@@ -73,6 +73,7 @@ CHECKLIST_NOTES.md
 # --- DB---
 db.sqlite3
 *.session.sql
+refactor.sql
 
 # --- cached data ---
 cached_market_data
