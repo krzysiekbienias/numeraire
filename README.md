@@ -4,6 +4,13 @@ Modular C++20 framework for derivative pricing: clear separation between
 instruments, pricing engines, models and market data, with QuantLib-backed
 schedule generation where it belongs.
 
+This repository is also deployed on **Hetzner** (Linux): we run two server-side
+environments, **development** and **production**, so feature work can be
+validated before promoting config, binaries, and data to the live tier. Paths,
+service names, and credentials are environment-specific and are **not**
+checked into this repo (use `.env` locally and your orchestration secrets on
+the host).
+
 Stage 1 is being built sprint-by-sprint. This README reflects the following
 **in order**:
 
@@ -81,6 +88,30 @@ Binaries (with default options): `build/app`, `build/dev_main`,
 Run `app` / `dev_main` from the **repository root** so relative paths resolve
 (`.env`, `configs/default.json`). [`scripts/test.sh`](scripts/test.sh) already
 `cd`s to the root before invoking `test_environment`.
+
+### `dev_main`: price one trade from SQLite
+
+The `dev_main` binary loads `.env` (via [`EnvLoader`](include/numeraire/utils/env_loader.hpp)),
+opens the DB at [`NUMERAIRE_DB_PATH`](.env.example) (default [`db.sqlite3`](.gitignore)),
+applies [`sql/schema_v1.sql`](sql/schema_v1.sql) if tables are missing, then
+loads a single trade and runs **analytic Black–Scholes** using synthetic quotes
+from the `NUMERAIRE_DEV_*` variables in `.env`.
+
+- **Trade id**: first CLI argument wins, otherwise `NUMERAIRE_DEV_TRADE_ID`
+  (see [.env.example](.env.example)).
+- **Market**: `NUMERAIRE_DEV_SPOT`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`,
+  `NUMERAIRE_DEV_DIV_YIELD` — applied to the underlying id read from the trade
+  row.
+
+Example (from repo root, after `./scripts/build.sh`):
+
+```bash
+./build/dev_main TRD_001
+```
+
+You need matching rows in `trades`, `products`, and `products_equity`. The
+inserts in [`unit_tests/database/test_sqlite_trade_repository.cpp`](unit_tests/database/test_sqlite_trade_repository.cpp)
+(`TRD_001` / `P_AAPL_001`) are a convenient reference when seeding `db.sqlite3`.
 
 ---
 
