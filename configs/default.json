@@ -24,7 +24,7 @@
     },
     "database": {
         "_comment_": "Wired up in Stage 2+ once SQLite repository ships.",
-        "path": "data/numeraire.sqlite"
+        "path": "db.sqlite3"
     },
     "market_data": {
         "_comment_": "Wired up in Stage 3+ once Polygon provider ships.",

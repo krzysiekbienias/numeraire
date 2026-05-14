@@ -33,7 +33,7 @@ class ITradeRepository {
     ITradeRepository(ITradeRepository&&) = delete;
     ITradeRepository& operator=(ITradeRepository&&) = delete;
 
-    [[nodiscard]] virtual TradeCatalogBundle GetCatalogForTrade(std::string_view trade_id) = 0;
+    [[nodiscard]] virtual TradeCatalogBundle GetCatalogForTrade(std::string_view trade_id) const = 0;
 };
 
 }  // namespace numeraire::database
