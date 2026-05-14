@@ -77,7 +77,21 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     throw numeraire::ValidationError("option_side must be CALL or PUT, got: " + *side);
 }
 
-[[nodiscard]] EquityCatalogInstrumentKind ParseEquityInstrumentKind(const std::string& attributes_json) {
+[[nodiscard]] EquityCatalogInstrumentKind KindFromNormalizedInstrumentTypeKey(const std::string& key) {
+    if (key.empty() || key == "vanilla" || key == "vanillaoption" ||
+        key == "plainvanillaeuropeanoption") {
+        return EquityCatalogInstrumentKind::kVanilla;
+    }
+    if (key == "assetornothingoption" || key == "assetornothing") {
+        return EquityCatalogInstrumentKind::kAssetOrNothing;
+    }
+    std::ostringstream oss;
+    oss << "unsupported instrument_type: \"" << key << "\"";
+    throw numeraire::ValidationError(oss.str());
+}
+
+[[nodiscard]] EquityCatalogInstrumentKind ParseEquityInstrumentKindFromAttributesJson(
+        const std::string& attributes_json) {
     const std::string trimmed = TrimCopy(attributes_json);
     if (trimmed.empty() || trimmed == "{}") {
         return EquityCatalogInstrumentKind::kVanilla;
@@ -100,16 +114,39 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     }
 
     const std::string key = NormalizeInstrumentTypeKey(it->get<std::string>());
-    if (key.empty() || key == "vanilla" || key == "vanillaoption") {
-        return EquityCatalogInstrumentKind::kVanilla;
+    try {
+        return KindFromNormalizedInstrumentTypeKey(key);
+    } catch (const numeraire::ValidationError&) {
+        std::ostringstream oss;
+        oss << "unsupported instrument_type for equity catalog: \"" << it->get<std::string>() << "\"";
+        throw numeraire::ValidationError(oss.str());
     }
-    if (key == "assetornothingoption" || key == "assetornothing") {
-        return EquityCatalogInstrumentKind::kAssetOrNothing;
-    }
+}
 
-    std::ostringstream oss;
-    oss << "unsupported instrument_type for equity catalog: \"" << it->get<std::string>() << "\"";
-    throw numeraire::ValidationError(oss.str());
+[[nodiscard]] EquityCatalogInstrumentKind ResolveEquityInstrumentKind(
+        const std::optional<std::string>& catalog_type, const std::string& attributes_json) {
+    if (catalog_type.has_value()) {
+        const std::string t = TrimCopy(*catalog_type);
+        if (!t.empty()) {
+            return KindFromNormalizedInstrumentTypeKey(NormalizeInstrumentTypeKey(t));
+        }
+    }
+    return ParseEquityInstrumentKindFromAttributesJson(attributes_json);
+}
+
+[[nodiscard]] numeraire::ExerciseStyle ResolveCatalogExerciseStyle(
+        const std::optional<std::string>& catalog_exercise) {
+    if (!catalog_exercise.has_value()) {
+        return numeraire::ExerciseStyle::kEuropean;
+    }
+    const std::string k = ToLowerAscii(TrimCopy(*catalog_exercise));
+    if (k.empty() || k == "european") {
+        return numeraire::ExerciseStyle::kEuropean;
+    }
+    if (k == "american") {
+        throw numeraire::ValidationError("ProductFactory: american exercise_style is not implemented yet");
+    }
+    throw numeraire::ValidationError("ProductFactory: unsupported exercise_style: " + *catalog_exercise);
 }
 
 void EnsureMatchingProductIds(const std::string& a, const std::string& b) {
@@ -133,7 +170,9 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(const data
                                                                       const database::TradeDto* trade) {
     EnsureMatchingProductIds(product.product_id, equity.product_id);
     EnsureEquityKind(equity.asset_kind);
-    const EquityCatalogInstrumentKind kind = ParseEquityInstrumentKind(product.attributes_json);
+    const EquityCatalogInstrumentKind kind =
+            ResolveEquityInstrumentKind(product.catalog_instrument_type, product.attributes_json);
+    const ExerciseStyle exercise = ResolveCatalogExerciseStyle(product.catalog_exercise_style);
 
     const schedule::Date expiry = ParseIsoDate(equity.expiry_date);
     const schedule::Date trade_date =
@@ -147,10 +186,10 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(const data
     switch (kind) {
         case EquityCatalogInstrumentKind::kVanilla:
             return std::make_unique<VanillaEquityOptionProduct>(
-                    equity.underlying_id, opt, ExerciseStyle::kEuropean, *product.strike, trade_date, expiry);
+                    equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
         case EquityCatalogInstrumentKind::kAssetOrNothing:
             return std::make_unique<EquityAssetOrNothingProduct>(
-                    equity.underlying_id, opt, ExerciseStyle::kEuropean, *product.strike, trade_date, expiry);
+                    equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
     }
     throw ValidationError("internal: unhandled equity instrument kind");
 }
