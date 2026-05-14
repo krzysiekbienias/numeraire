@@ -20,12 +20,14 @@ CREATE TABLE IF NOT EXISTS products (
     calendar TEXT NOT NULL
 );
 
--- Example row: P_AAPL_001 | CALL | 233 | {}
--- option_type / strike may be NULL for multi-leg rows (ProductFactory may reject for vanilla pricers).
+-- Example row: P_AAPL_001 | call | 233 | plain_vanilla_european_option | european | {}
+-- option_type / strike may be NULL for multi-leg structures.
 CREATE TABLE IF NOT EXISTS products_equity (
     product_id TEXT PRIMARY KEY,
     option_type TEXT,
     strike REAL,
+    instrument_type TEXT NOT NULL DEFAULT 'plain_vanilla_european_option',
+    exercise_style TEXT NOT NULL DEFAULT 'european',
     structured_params TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (product_id) REFERENCES products (product_id)
 );
