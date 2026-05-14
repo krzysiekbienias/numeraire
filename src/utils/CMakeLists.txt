@@ -1,5 +1,6 @@
 add_library(numeraire_utils STATIC
         config.cpp
+        database_path.cpp
         env_loader.cpp
         log_level.cpp
         logger.cpp

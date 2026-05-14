@@ -1,4 +1,5 @@
 add_library(numeraire_database STATIC
+        sqlite_schema.cpp
         sqlite_trade_repository.cpp
 )
 
