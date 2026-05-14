@@ -42,7 +42,7 @@ add_compile_options(
 
 # --- Per-config flags -------------------------------------------------------
 add_compile_options(
-        "$<$<CONFIG:Debug>:-O0;-g3;-fno-omit-frame-pointer;-fno-limit-debug-info>"
+        "$<$<CONFIG:Debug>:-O0;-g3;-fno-omit-frame-pointer>"
         "$<$<CONFIG:RelWithDebInfo>:-O2;-g>"
         "$<$<CONFIG:Release>:-O3;-DNDEBUG>"
         "$<$<CONFIG:MinSizeRel>:-Os;-DNDEBUG>"
