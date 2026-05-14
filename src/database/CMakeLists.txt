@@ -1,12 +1,16 @@
-# Persistence-facing DTOs and repositories (ITradeRepository header; SQLite impl TBD).
-add_library(numeraire_database INTERFACE)
+add_library(numeraire_database STATIC
+        sqlite_trade_repository.cpp
+)
 
 target_include_directories(numeraire_database
-        INTERFACE
+        PUBLIC
         ${CMAKE_SOURCE_DIR}/include
 )
 
 target_link_libraries(numeraire_database
-        INTERFACE
+        PUBLIC
         numeraire_enums
+        numeraire_utils
+        PRIVATE
+        SQLiteCpp
 )

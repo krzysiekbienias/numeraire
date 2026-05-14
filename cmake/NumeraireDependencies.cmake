@@ -11,8 +11,21 @@ find_package(spdlog        CONFIG REQUIRED)   # logging
 find_package(fmt           CONFIG REQUIRED)   # used by spdlog and directly
 find_package(nlohmann_json CONFIG REQUIRED)   # JSON config + payloads
 
-# --- SQLite (used by Stage 2+ trade repository) -----------------------------
-find_package(SQLite3              REQUIRED)
+# --- SQLite + SQLiteCpp (Stage 2+ trade repository) ------------------------
+find_package(SQLite3 REQUIRED)
+
+include(FetchContent)
+set(SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE)
+set(SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE)
+set(SQLITECPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SQLITECPP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SQLITECPP_INTERNAL_SQLITE OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(SQLiteCpp
+        GIT_REPOSITORY https://github.com/SRombauts/SQLiteCpp.git
+        GIT_TAG 3.3.2
+        GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SQLiteCpp)
 
 # --- QuantLib ---------------------------------------------------------------
 # Homebrew currently ships QuantLib without a CMake config (as of 1.37), so we
