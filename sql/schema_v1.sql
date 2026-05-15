@@ -1,49 +1,60 @@
--- Numeraire++ — reference SQLite schema (v1)
+-- Numeraire++ — reference SQLite schema (v1, trade legs + product catalog)
 --
 -- Purpose:
 --   - Single place documenting table/column names the C++ repository layer expects
---   - Bootstrapping empty DBs; unit tests can apply this to :memory: + INSERT fixtures
+--   - Bootstrapping empty DBs; unit tests apply this to :memory: + INSERT fixtures
 --
--- Does not replace your existing db.sqlite3 — compare with `sqlite3 file.db ".schema"` if needed.
 -- Application should use: PRAGMA foreign_keys = ON; after open.
+-- Safe to run repeatedly: CREATE TABLE / INDEX IF NOT EXISTS (no DROP).
 
 PRAGMA foreign_keys = ON;
 
--- Example row: product_id | EQUITY | AAPL | 2025-11-04 | PHYSICAL | Actual365Fixed | UnitedStates
 CREATE TABLE IF NOT EXISTS products (
     product_id TEXT PRIMARY KEY,
     asset_kind TEXT NOT NULL,
     underlying_id TEXT NOT NULL,
-    expiry_date TEXT NOT NULL,
-    settlement TEXT NOT NULL,
-    day_count TEXT NOT NULL,
-    calendar TEXT NOT NULL
+    expiry_date TEXT,
+    settlement TEXT NOT NULL DEFAULT 'CASH',
+    currency TEXT NOT NULL DEFAULT 'USD',
+    contract_size REAL NOT NULL DEFAULT 100.0,
+    day_count TEXT NOT NULL DEFAULT 'Actual365Fixed',
+    calendar TEXT NOT NULL DEFAULT 'UnitedStates'
 );
 
--- Example row: P_AAPL_001 | call | 233 | plain_vanilla_european_option | european | {}
--- option_type / strike may be NULL for multi-leg structures.
 CREATE TABLE IF NOT EXISTS products_equity (
     product_id TEXT PRIMARY KEY,
-    option_type TEXT,
+    instrument_type TEXT NOT NULL,
+    option_type TEXT CHECK (
+        option_type IS NULL
+        OR option_type IN ('call', 'put')
+    ),
     strike REAL,
-    instrument_type TEXT NOT NULL DEFAULT 'plain_vanilla_european_option',
-    exercise_style TEXT NOT NULL DEFAULT 'european',
+    exercise_style TEXT DEFAULT 'european',
     structured_params TEXT NOT NULL DEFAULT '{}',
-    FOREIGN KEY (product_id) REFERENCES products (product_id)
+    FOREIGN KEY (product_id) REFERENCES products (product_id) ON DELETE CASCADE
 );
 
--- Example row: TRD_001 | P_AAPL_001 | booking_ts | trade_date | updated_at | LIVE | LONG | 100 | 0
 CREATE TABLE IF NOT EXISTS trades (
     trade_id TEXT PRIMARY KEY,
+    portfolio_id TEXT NOT NULL,
+    strategy_type TEXT NOT NULL,
+    booking_timestamp TEXT,
+    trade_date TEXT,
+    updated_at TEXT,
+    status TEXT NOT NULL DEFAULT 'LIVE'
+);
+
+CREATE TABLE IF NOT EXISTS trade_legs (
+    leg_id TEXT PRIMARY KEY,
+    trade_id TEXT NOT NULL,
     product_id TEXT NOT NULL,
-    booking_timestamp TEXT NOT NULL,
-    trade_date TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    status TEXT NOT NULL,
-    direction TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK (direction IN ('LONG', 'SHORT')),
     quantity REAL NOT NULL,
-    commission REAL,
+    execution_price REAL NOT NULL,
+    commission REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products (product_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_trades_product_id ON trades (product_id);
+CREATE INDEX IF NOT EXISTS idx_trade_legs_trade_id ON trade_legs (trade_id);
+CREATE INDEX IF NOT EXISTS idx_trade_legs_product_id ON trade_legs (product_id);
