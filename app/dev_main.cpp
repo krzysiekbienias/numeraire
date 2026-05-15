@@ -1,3 +1,7 @@
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
@@ -13,16 +17,11 @@
 #include <numeraire/utils/env_loader.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <numeraire/utils/logger.hpp>
-
-#include <nlohmann/json.hpp>
-
-#include <cstdlib>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
@@ -92,8 +91,8 @@ void PrintUsage() {
         }
         arr = &t;
     } else {
-        throw numeraire::ValidationError(
-                "JSON must be [\"TRD_1\",...] or {\"trade_ids\":[\"TRD_1\",...]} : " + path.string());
+        throw numeraire::ValidationError("JSON must be [\"TRD_1\",...] or {\"trade_ids\":[\"TRD_1\",...]} : " +
+                                         path.string());
     }
 
     out.reserve(arr->size());
@@ -113,9 +112,9 @@ void PrintUsage() {
 }
 
 void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
-        const TradeCatalogBundle& bundle,
-        const double default_spot,
-        const double dividend_yield) {
+                                 const TradeCatalogBundle& bundle,
+                                 const double default_spot,
+                                 const double dividend_yield) {
     for (const auto& row : bundle.legs) {
         const std::string& u = row.equity.underlying_id;
         if (snap.spots.find(u) == snap.spots.end()) {
@@ -128,17 +127,15 @@ void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
 }
 
 [[nodiscard]] double BookNpvForBundle(const TradeCatalogBundle& bundle,
-        const numeraire::core::IMarketData& mkt,
-        const numeraire::core::IPricer& pricer) {
+                                      const numeraire::core::IMarketData& mkt,
+                                      const numeraire::core::IPricer& pricer) {
     double total_npv = 0.0;
     for (const auto& row : bundle.legs) {
-        const auto product =
-                ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
+        const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
         if (product == nullptr) {
             throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
         }
-        numeraire::core::PricingResult result =
-                numeraire::core::PricingEngine::Price(*product, pricer, mkt);
+        numeraire::core::PricingResult result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
 
         if (!result.Npv().has_value()) {
             throw numeraire::PersistenceError("Pricer returned no NPV for leg " + row.leg.leg_id);
@@ -177,16 +174,17 @@ void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
 
     StaticMarketDataProvider market(std::move(snap));
     const auto mkt_handle = market.CreateMarketData();
-    auto pricer =
-            PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
+    auto pricer = PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
 
     for (size_t i = 0; i < trade_ids.size(); ++i) {
         const std::string& tid = trade_ids[i];
         const auto& bundle = bundles[i];
-        Logger::NumInfo(
-                "Loaded trade_id={} legs={} portfolio_id={} first_leg_product={} underlying={}.", tid,
-                bundle.legs.size(), bundle.trade.portfolio_id, bundle.legs.front().leg.product_id,
-                bundle.legs.front().equity.underlying_id);
+        Logger::NumInfo("Loaded trade_id={} legs={} portfolio_id={} first_leg_product={} underlying={}.",
+                        tid,
+                        bundle.legs.size(),
+                        bundle.trade.portfolio_id,
+                        bundle.legs.front().leg.product_id,
+                        bundle.legs.front().equity.underlying_id);
 
         const double total_npv = BookNpvForBundle(bundle, *mkt_handle, *pricer);
         Logger::NumInfo("Book NPV (summed legs, Black–Scholes analytic) trade_id={} → {}.", tid, total_npv);
@@ -220,8 +218,7 @@ void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
         return RunWithTradeIds(repo, {std::string(argv[1])});
     }
 
-    if (const char* v = std::getenv("NUMERAIRE_DEV_TRADE_ID");
-            v != nullptr && v[0] != '\0') {
+    if (const char* v = std::getenv("NUMERAIRE_DEV_TRADE_ID"); v != nullptr && v[0] != '\0') {
         return RunWithTradeIds(repo, {std::string(v)});
     }
 
