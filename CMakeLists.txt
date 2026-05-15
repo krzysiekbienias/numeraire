@@ -16,6 +16,9 @@ option(NUMERAIRE_BUILD_DEV_MAIN "Build the dev_main sandbox entry point" ON)
 # Compile options + external dependencies
 # ---------------------------------------------------------------------------
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+add_compile_options(-gdwarf-4)
+
 include(NumeraireCompileOptions)
 include(NumeraireDependencies)
 
