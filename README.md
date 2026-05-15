@@ -35,7 +35,8 @@ Stage 1 is being built sprint-by-sprint. This README reflects the following
 | [`unit_tests/`](unit_tests/) | GoogleTest sources (`test_*.cpp`, including per-module dirs) |
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
 | [`cmake/`](cmake/) | `NumeraireCompileOptions.cmake`, `NumeraireDependencies.cmake` |
-| [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, `format.sh`, `clean.sh` |
+| [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, `format.sh`, `clean.sh`, [`import_trade_bundle.py`](scripts/import_trade_bundle.py) |
+| [`trades/incoming/`](trades/incoming/) | Draft trade bundle JSON for import (only [`trade_bundle.sample.json`](trades/incoming/trade_bundle.sample.json) tracked; other `*.json` ignored) |
 | [`configs/`](configs/) | JSON defaults loaded by [`utils::Config`](include/numeraire/utils/config.hpp) |
 | [`docs/`](docs/) | Architecture and coding style |
 
@@ -112,6 +113,16 @@ Example (from repo root, after `./scripts/build.sh`):
 You need matching rows in `trades`, `products`, and `products_equity`. The
 inserts in [`unit_tests/database/test_sqlite_trade_repository.cpp`](unit_tests/database/test_sqlite_trade_repository.cpp)
 (`TRD_001` / `P_AAPL_001`) are a convenient reference when seeding `db.sqlite3`.
+
+To load a **full bundle** (product + `products_equity` + trade) from JSON on a
+host where only the DB is available, use Python 3 stdlib only:
+
+```bash
+python3 scripts/import_trade_bundle.py trades/incoming/trade_bundle.sample.json
+```
+
+Uses `NUMERAIRE_DB_PATH` when set (same as `dev_main`), or `--db path/to/db.sqlite3`.
+Tables must already exist (`sql/schema_v1.sql`; `dev_main` applies it when missing).
 
 ---
 

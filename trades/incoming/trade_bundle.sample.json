@@ -1,0 +1,30 @@
+{
+  "product": {
+    "product_id": "P_AAPL_SAMPLE",
+    "asset_kind": "EQUITY",
+    "underlying_id": "AAPL",
+    "expiry_date": "2025-11-04",
+    "settlement": "PHYSICAL",
+    "day_count": "Actual365Fixed",
+    "calendar": "UnitedStates"
+  },
+  "equity": {
+    "product_id": "P_AAPL_SAMPLE",
+    "option_type": "CALL",
+    "strike": 233,
+    "instrument_type": "plain_vanilla_european_option",
+    "exercise_style": "european",
+    "structured_params": {}
+  },
+  "trade": {
+    "trade_id": "TRD_SAMPLE_001",
+    "product_id": "P_AAPL_SAMPLE",
+    "booking_timestamp": "2025-08-04 10:00:00",
+    "trade_date": "2025-08-06",
+    "updated_at": "2026-05-15 12:00:00",
+    "status": "LIVE",
+    "direction": "long",
+    "quantity": 100,
+    "commission": null
+  }
+}

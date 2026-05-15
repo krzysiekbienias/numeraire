@@ -77,3 +77,13 @@ refactor.sql
 
 # --- cached data ---
 cached_market_data
+
+# --- Trade bundle drafts (sample stays committed) ---
+trades/incoming/*.json
+!trades/incoming/trade_bundle.sample.json
+
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
