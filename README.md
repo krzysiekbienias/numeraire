@@ -99,8 +99,11 @@ loads a **trade header + all legs** from SQLite and runs **analytic Black–Scho
 per leg, summing book NPV (`sign × quantity × unit NPV`) using synthetic quotes
 from the `NUMERAIRE_DEV_*` variables in `.env`.
 
-- **Trade id**: first CLI argument wins, otherwise `NUMERAIRE_DEV_TRADE_ID`
-  (see [.env.example](.env.example)).
+- **Which trades**: `dev_main <trade_id>` — one id; `dev_main --all` — every row in
+  `trades` (sorted); `dev_main --trades-json path.json` — list as
+  `["TRD_1",...]` or `{"trade_ids":[...]}` (see
+  [`trades/incoming/pricing_batch.sample.json`](trades/incoming/pricing_batch.sample.json)).
+  With no arguments, `NUMERAIRE_DEV_TRADE_ID` from [.env](.env.example) if set.
 - **Market**: `NUMERAIRE_DEV_SPOT`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`,
   `NUMERAIRE_DEV_DIV_YIELD` — default spot/dividend are applied per underlying
   found on the trade’s legs.
@@ -109,6 +112,8 @@ Example (from repo root, after `./scripts/build.sh`):
 
 ```bash
 ./build/dev_main TRD_001
+./build/dev_main --all
+./build/dev_main --trades-json trades/incoming/pricing_batch.sample.json
 ```
 
 You need matching rows in `trades`, `trade_legs`, `products`, and `products_equity`. The
