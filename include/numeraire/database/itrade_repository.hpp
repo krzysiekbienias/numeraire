@@ -3,24 +3,29 @@
 #include <numeraire/database/dtos.hpp>
 
 #include <string_view>
+#include <vector>
 
 namespace numeraire::database {
 
-/// Single trade with the catalog rows needed to build `core::IProduct` via
-/// `ProductFactory::MakeFromEquityCatalog`. Loaded atomically by `ITradeRepository`.
-struct TradeCatalogBundle {
-    TradeDto trade;
+/// One leg with the catalog rows needed to build `core::IProduct` for that leg.
+struct TradeLegCatalogRow {
+    TradeLegDto leg;
     ProductDto product;
     ProductEquityDto equity;
+};
+
+/// Trade header plus all legs (each with product + equity facet for pricing).
+struct TradeCatalogBundle {
+    TradeHeaderDto trade;
+    std::vector<TradeLegCatalogRow> legs;
 };
 
 /// Persistence port for trade + product catalog reads. Implementations (SQLite,
 /// in-memory, …) live under `src/database/`.
 ///
 /// `GetCatalogForTrade`:
-/// — **0 rows** → `PersistenceError` (trade unknown or incomplete join).
-/// — **1 row** → filled bundle.
-/// — **>1 row** → `PersistenceError` (data integrity).
+/// — **0 legs** / no trade → `PersistenceError` (trade unknown or incomplete join).
+/// — **≥1 leg** → bundle with shared header and one row per leg.
 class ITradeRepository {
    protected:
     ITradeRepository() = default;
