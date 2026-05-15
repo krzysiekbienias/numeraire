@@ -47,18 +47,26 @@ void SeedFixtureDb(const std::string& db_path) {
     db.exec(ReadSchemaFile());
 
     db.exec(
-            "INSERT INTO products VALUES "
+            "INSERT INTO products (product_id, asset_kind, underlying_id, expiry_date, settlement, "
+            "currency, contract_size, day_count, calendar) VALUES "
             "('P_AAPL_001', 'EQUITY', 'AAPL', '2025-11-04', 'PHYSICAL', "
-            "'Actual365Fixed', 'UnitedStates');");
+            "'USD', 100.0, 'Actual365Fixed', 'UnitedStates');");
 
     db.exec(
-            "INSERT INTO products_equity (product_id, option_type, strike, structured_params) VALUES "
-            "('P_AAPL_001', 'CALL', 233, '{}');");
+            "INSERT INTO products_equity (product_id, instrument_type, option_type, strike, "
+            "exercise_style, structured_params) VALUES "
+            "('P_AAPL_001', 'plain_vanilla_european_option', 'call', 233, 'european', '{}');");
 
     db.exec(
-            "INSERT INTO trades VALUES "
-            "('TRD_001', 'P_AAPL_001', '2025-08-04 10:00:00', '2025-08-06', "
-            "'2026-05-11 16:34:30', 'LIVE', 'LONG', 100, NULL);");
+            "INSERT INTO trades (trade_id, portfolio_id, strategy_type, booking_timestamp, trade_date, "
+            "updated_at, status) VALUES "
+            "('TRD_001', 'BOOK_1', 'VANILLA_OPTION', '2025-08-04 10:00:00', '2025-08-06', "
+            "'2026-05-11 16:34:30', 'LIVE');");
+
+    db.exec(
+            "INSERT INTO trade_legs (leg_id, trade_id, product_id, direction, quantity, "
+            "execution_price, commission) VALUES "
+            "('TRD_001_L1', 'TRD_001', 'P_AAPL_001', 'LONG', 100, 12.5, 0);");
 }
 
 }  // namespace
@@ -71,19 +79,23 @@ TEST(SqliteTradeRepositoryTest, LoadsCatalogAndBuildsProduct) {
     const auto bundle = repo.GetCatalogForTrade("TRD_001");
 
     EXPECT_EQ(bundle.trade.trade_id, "TRD_001");
-    EXPECT_EQ(bundle.trade.product_id, "P_AAPL_001");
-    EXPECT_EQ(bundle.product.product_id, "P_AAPL_001");
-    ASSERT_TRUE(bundle.product.option_side.has_value());
-    EXPECT_EQ(*bundle.product.option_side, "CALL");
-    ASSERT_TRUE(bundle.product.strike.has_value());
-    EXPECT_DOUBLE_EQ(*bundle.product.strike, 233.0);
-    EXPECT_EQ(bundle.equity.underlying_id, "AAPL");
-    ASSERT_TRUE(bundle.equity.settlement.has_value());
-    ASSERT_TRUE(bundle.equity.day_count.has_value());
-    ASSERT_TRUE(bundle.equity.calendar.has_value());
+    EXPECT_EQ(bundle.trade.portfolio_id, "BOOK_1");
+    ASSERT_EQ(bundle.legs.size(), 1U);
+    EXPECT_EQ(bundle.legs[0].leg.product_id, "P_AAPL_001");
+    EXPECT_EQ(bundle.legs[0].product.product_id, "P_AAPL_001");
+    ASSERT_TRUE(bundle.legs[0].product.option_side.has_value());
+    EXPECT_EQ(*bundle.legs[0].product.option_side, "call");
+    ASSERT_TRUE(bundle.legs[0].product.strike.has_value());
+    EXPECT_DOUBLE_EQ(*bundle.legs[0].product.strike, 233.0);
+    EXPECT_EQ(bundle.legs[0].equity.underlying_id, "AAPL");
+    ASSERT_TRUE(bundle.legs[0].equity.expiry_date.has_value());
+    EXPECT_EQ(*bundle.legs[0].equity.expiry_date, "2025-11-04");
+    ASSERT_TRUE(bundle.legs[0].equity.settlement.has_value());
+    ASSERT_TRUE(bundle.legs[0].equity.day_count.has_value());
+    ASSERT_TRUE(bundle.legs[0].equity.calendar.has_value());
 
     const auto instrument = numeraire::products::ProductFactory::MakeFromEquityCatalog(
-            bundle.product, bundle.equity, &bundle.trade);
+            bundle.legs[0].product, bundle.legs[0].equity, &bundle.trade);
     ASSERT_NE(instrument, nullptr);
     EXPECT_EQ(instrument->UnderlyingId(), "AAPL");
 

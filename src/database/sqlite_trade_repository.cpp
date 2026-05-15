@@ -8,6 +8,7 @@
 #include <cctype>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 namespace numeraire::database {
 
@@ -20,37 +21,47 @@ namespace {
 
 constexpr const char* kSelectCatalogSql =
         "SELECT "
-        "t.trade_id, t.product_id, t.booking_timestamp, t.trade_date, t.updated_at, "
-        "t.status, t.direction, t.quantity, t.commission, "
-        "p.product_id, p.asset_kind, p.underlying_id, p.expiry_date, p.settlement, p.day_count, p.calendar, "
+        "t.trade_id, t.portfolio_id, t.strategy_type, t.booking_timestamp, t.trade_date, "
+        "t.updated_at, t.status, "
+        "tl.leg_id, tl.product_id, tl.direction, tl.quantity, tl.execution_price, tl.commission, "
+        "p.product_id, p.asset_kind, p.underlying_id, p.expiry_date, p.settlement, p.currency, "
+        "p.contract_size, p.day_count, p.calendar, "
         "e.option_type, e.strike, e.instrument_type, e.exercise_style, e.structured_params "
         "FROM trades t "
-        "INNER JOIN products p ON p.product_id = t.product_id "
-        "INNER JOIN products_equity e ON e.product_id = t.product_id "
-        "WHERE t.trade_id = ?";
+        "INNER JOIN trade_legs tl ON tl.trade_id = t.trade_id "
+        "INNER JOIN products p ON p.product_id = tl.product_id "
+        "LEFT JOIN products_equity e ON e.product_id = tl.product_id "
+        "WHERE t.trade_id = ? "
+        "ORDER BY tl.leg_id";
 
 enum class CatalogCol : int {
     kTradeId = 0,
-    kTradeProductId = 1,
-    kBookingTs = 2,
-    kTradeDate = 3,
-    kUpdatedAt = 4,
-    kStatus = 5,
-    kDirection = 6,
-    kQuantity = 7,
-    kCommission = 8,
-    kProductId = 9,
-    kAssetKind = 10,
-    kUnderlyingId = 11,
-    kExpiryDate = 12,
-    kSettlement = 13,
-    kDayCount = 14,
-    kCalendar = 15,
-    kOptionType = 16,
-    kStrike = 17,
-    kInstrumentType = 18,
-    kExerciseStyle = 19,
-    kStructuredParams = 20,
+    kPortfolioId = 1,
+    kStrategyType = 2,
+    kBookingTs = 3,
+    kTradeDate = 4,
+    kUpdatedAt = 5,
+    kStatus = 6,
+    kLegId = 7,
+    kLegProductId = 8,
+    kDirection = 9,
+    kQuantity = 10,
+    kExecPrice = 11,
+    kCommission = 12,
+    kProductId = 13,
+    kAssetKind = 14,
+    kUnderlyingId = 15,
+    kExpiryDate = 16,
+    kSettlement = 17,
+    kCurrency = 18,
+    kContractSize = 19,
+    kDayCount = 20,
+    kCalendar = 21,
+    kOptionType = 22,
+    kStrike = 23,
+    kInstrumentType = 24,
+    kExerciseStyle = 25,
+    kStructuredParams = 26,
 };
 
 [[nodiscard]] std::string TrimCopy(std::string s) {
@@ -153,85 +164,120 @@ enum class CatalogCol : int {
     throw PersistenceError("invalid direction in DB: " + raw);
 }
 
-[[nodiscard]] TradeCatalogBundle MapRowToBundle(SQLite::Statement const& st) {
-    TradeCatalogBundle b{};
-    b.trade.trade_id = ColumnText(st, static_cast<int>(CatalogCol::kTradeId));
-    b.trade.product_id = ColumnText(st, static_cast<int>(CatalogCol::kTradeProductId));
-    b.trade.booking_timestamp = ColumnText(st, static_cast<int>(CatalogCol::kBookingTs));
-    b.trade.trade_date = ColumnText(st, static_cast<int>(CatalogCol::kTradeDate));
-    b.trade.updated_at = ColumnText(st, static_cast<int>(CatalogCol::kUpdatedAt));
-    b.trade.status = ColumnText(st, static_cast<int>(CatalogCol::kStatus));
-    b.trade.direction = ParseDirection(ColumnText(st, static_cast<int>(CatalogCol::kDirection)));
-    b.trade.quantity = st.getColumn(static_cast<int>(CatalogCol::kQuantity)).getDouble();
+[[nodiscard]] TradeHeaderDto ReadTradeHeader(SQLite::Statement const& st) {
+    TradeHeaderDto h{};
+    h.trade_id = ColumnText(st, static_cast<int>(CatalogCol::kTradeId));
+    h.portfolio_id = ColumnText(st, static_cast<int>(CatalogCol::kPortfolioId));
+    h.strategy_type = ColumnText(st, static_cast<int>(CatalogCol::kStrategyType));
+    h.booking_timestamp = ColumnText(st, static_cast<int>(CatalogCol::kBookingTs));
+    h.trade_date = ColumnText(st, static_cast<int>(CatalogCol::kTradeDate));
+    h.updated_at = ColumnText(st, static_cast<int>(CatalogCol::kUpdatedAt));
+    h.status = ColumnText(st, static_cast<int>(CatalogCol::kStatus));
+    return h;
+}
 
+void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& expected) {
+    const TradeHeaderDto h = ReadTradeHeader(st);
+    if (h.trade_id != expected.trade_id || h.portfolio_id != expected.portfolio_id ||
+        h.strategy_type != expected.strategy_type || h.booking_timestamp != expected.booking_timestamp ||
+        h.trade_date != expected.trade_date || h.updated_at != expected.updated_at ||
+        h.status != expected.status) {
+        throw PersistenceError("SqliteTradeRepository: inconsistent trade header across legs for trade_id: " +
+                               expected.trade_id);
+    }
+}
+
+[[nodiscard]] TradeLegCatalogRow MapLegCatalogRow(SQLite::Statement const& st) {
+    TradeLegCatalogRow row{};
+
+    row.leg.leg_id = ColumnText(st, static_cast<int>(CatalogCol::kLegId));
+    row.leg.trade_id = ColumnText(st, static_cast<int>(CatalogCol::kTradeId));
+    row.leg.product_id = ColumnText(st, static_cast<int>(CatalogCol::kLegProductId));
+    row.leg.direction = ParseDirection(ColumnText(st, static_cast<int>(CatalogCol::kDirection)));
+    row.leg.quantity = st.getColumn(static_cast<int>(CatalogCol::kQuantity)).getDouble();
+    row.leg.execution_price =
+            st.getColumn(static_cast<int>(CatalogCol::kExecPrice)).getDouble();
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kCommission))) {
-        b.trade.commission = std::nullopt;
+        row.leg.commission = std::nullopt;
     } else {
-        b.trade.commission = st.getColumn(static_cast<int>(CatalogCol::kCommission)).getDouble();
+        row.leg.commission = st.getColumn(static_cast<int>(CatalogCol::kCommission)).getDouble();
     }
 
-    b.product.product_id = ColumnText(st, static_cast<int>(CatalogCol::kProductId));
+    const std::string pid = ColumnText(st, static_cast<int>(CatalogCol::kProductId));
+    row.product.product_id = pid;
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kOptionType))) {
-        b.product.option_side = std::nullopt;
+        row.product.option_side = std::nullopt;
     } else {
-        b.product.option_side = ColumnText(st, static_cast<int>(CatalogCol::kOptionType));
+        row.product.option_side = ColumnText(st, static_cast<int>(CatalogCol::kOptionType));
     }
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kStrike))) {
-        b.product.strike = std::nullopt;
+        row.product.strike = std::nullopt;
     } else {
-        b.product.strike = st.getColumn(static_cast<int>(CatalogCol::kStrike)).getDouble();
+        row.product.strike = st.getColumn(static_cast<int>(CatalogCol::kStrike)).getDouble();
     }
 
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kInstrumentType))) {
-        b.product.catalog_instrument_type = std::nullopt;
+        row.product.catalog_instrument_type = std::nullopt;
     } else {
         const std::string ti = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kInstrumentType)));
-        b.product.catalog_instrument_type =
-                ti.empty() ? std::nullopt : std::optional<std::string>(std::move(ti));
+        row.product.catalog_instrument_type =
+                ti.empty() ? std::nullopt : std::optional<std::string>(ti);
     }
 
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kExerciseStyle))) {
-        b.product.catalog_exercise_style = std::nullopt;
+        row.product.catalog_exercise_style = std::nullopt;
     } else {
         const std::string xe = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kExerciseStyle)));
-        b.product.catalog_exercise_style =
-                xe.empty() ? std::nullopt : std::optional<std::string>(std::move(xe));
+        row.product.catalog_exercise_style =
+                xe.empty() ? std::nullopt : std::optional<std::string>(xe);
     }
 
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kStructuredParams))) {
-        b.product.attributes_json = "{}";
+        row.product.attributes_json = "{}";
     } else {
-        b.product.attributes_json = ColumnText(st, static_cast<int>(CatalogCol::kStructuredParams));
-        if (b.product.attributes_json.empty()) {
-            b.product.attributes_json = "{}";
+        row.product.attributes_json = ColumnText(st, static_cast<int>(CatalogCol::kStructuredParams));
+        if (row.product.attributes_json.empty()) {
+            row.product.attributes_json = "{}";
         }
     }
 
-    b.equity.product_id = ColumnText(st, static_cast<int>(CatalogCol::kProductId));
-    b.equity.asset_kind = ColumnText(st, static_cast<int>(CatalogCol::kAssetKind));
-    b.equity.underlying_id = ColumnText(st, static_cast<int>(CatalogCol::kUnderlyingId));
-    b.equity.expiry_date = ColumnText(st, static_cast<int>(CatalogCol::kExpiryDate));
+    row.equity.product_id = pid;
+    row.equity.asset_kind = ColumnText(st, static_cast<int>(CatalogCol::kAssetKind));
+    row.equity.underlying_id = ColumnText(st, static_cast<int>(CatalogCol::kUnderlyingId));
+    row.equity.currency = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCurrency)));
+    if (row.equity.currency.empty()) {
+        row.equity.currency = "USD";
+    }
+    row.equity.contract_size =
+            st.getColumn(static_cast<int>(CatalogCol::kContractSize)).getDouble();
+
+    if (ColumnIsNull(st, static_cast<int>(CatalogCol::kExpiryDate))) {
+        row.equity.expiry_date = std::nullopt;
+    } else {
+        const std::string ex = ColumnText(st, static_cast<int>(CatalogCol::kExpiryDate));
+        row.equity.expiry_date = ex.empty() ? std::nullopt : std::optional<std::string>(ex);
+    }
 
     const std::string settlement_txt = ColumnText(st, static_cast<int>(CatalogCol::kSettlement));
     const std::string day_count_txt = ColumnText(st, static_cast<int>(CatalogCol::kDayCount));
     const std::string calendar_txt = ColumnText(st, static_cast<int>(CatalogCol::kCalendar));
     if (settlement_txt.empty()) {
-        b.equity.settlement = std::nullopt;
+        row.equity.settlement = std::nullopt;
     } else {
-        b.equity.settlement = ParseSettlement(settlement_txt);
+        row.equity.settlement = ParseSettlement(settlement_txt);
     }
     if (day_count_txt.empty()) {
-        b.equity.day_count = std::nullopt;
+        row.equity.day_count = std::nullopt;
     } else {
-        b.equity.day_count = ParseDayCount(day_count_txt);
+        row.equity.day_count = ParseDayCount(day_count_txt);
     }
     if (calendar_txt.empty()) {
-        b.equity.calendar = std::nullopt;
+        row.equity.calendar = std::nullopt;
     } else {
-        b.equity.calendar = ParseCalendar(calendar_txt);
+        row.equity.calendar = ParseCalendar(calendar_txt);
     }
 
-    return b;
+    return row;
 }
 
 }  // namespace
@@ -259,15 +305,29 @@ TradeCatalogBundle SqliteTradeRepository::GetCatalogForTrade(const std::string_v
         st.bind(1, std::string(trade_id));
 
         if (!st.executeStep()) {
-            throw PersistenceError("SqliteTradeRepository: trade not found or catalog join incomplete: " +
+            throw PersistenceError("SqliteTradeRepository: trade not found or no legs: " +
                                    std::string(trade_id));
         }
 
-        TradeCatalogBundle bundle = MapRowToBundle(st);
+        TradeCatalogBundle bundle{};
+        bundle.trade = ReadTradeHeader(st);
+        std::unordered_set<std::string> seen_legs;
 
-        if (st.executeStep()) {
-            throw PersistenceError("SqliteTradeRepository: duplicate trade_id in database: " +
-                                   std::string(trade_id));
+        TradeLegCatalogRow first = MapLegCatalogRow(st);
+        if (!seen_legs.insert(first.leg.leg_id).second) {
+            throw PersistenceError("SqliteTradeRepository: duplicate leg_id in database: " +
+                                   first.leg.leg_id);
+        }
+        bundle.legs.push_back(std::move(first));
+
+        while (st.executeStep()) {
+            AssertSameTradeHeader(st, bundle.trade);
+            TradeLegCatalogRow row = MapLegCatalogRow(st);
+            if (!seen_legs.insert(row.leg.leg_id).second) {
+                throw PersistenceError("SqliteTradeRepository: duplicate leg_id in database: " +
+                                       row.leg.leg_id);
+            }
+            bundle.legs.push_back(std::move(row));
         }
 
         return bundle;
