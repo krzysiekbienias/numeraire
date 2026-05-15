@@ -1,47 +1,124 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run: app",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/app",
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Run: dev_main — trade id (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": ["${input:devMainTradeId}"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
         {
-            "name": "Run: app",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${command:cmake.buildDirectory}/app",
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Run: dev_main",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${command:cmake.buildDirectory}/dev_main",
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Run: test_environment",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${command:cmake.buildDirectory}/test_environment",
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Run: test_environment (filtered)",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${command:cmake.buildDirectory}/test_environment",
-            "args": [
-                "--gtest_filter=${input:gtestFilter}"
-            ],
-            "cwd": "${workspaceFolder}"
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
         }
-    ],
-    "inputs": [
+      ]
+    },
+    {
+      "name": "Run: dev_main — --all (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": ["--all"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
         {
-            "id": "gtestFilter",
-            "type": "promptString",
-            "description": "Google Test filter (e.g. Logger.* or Schedule.GenerateForward)",
-            "default": "*"
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
         }
-    ]
+      ]
+    },
+    {
+      "name": "Run: dev_main — --trades-json (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": [
+        "--trades-json",
+        "${workspaceFolder}/trades/incoming/pricing_batch.sample.json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
+        {
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "Run: dev_main — trade id (lldb)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": ["${input:devMainTradeId}"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Run: dev_main — --all (lldb)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": ["--all"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Run: dev_main — --trades-json (lldb)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": [
+        "--trades-json",
+        "${workspaceFolder}/trades/incoming/pricing_batch.sample.json"
+      ],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Run: test_environment",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/test_environment",
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Run: test_environment (filtered)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/test_environment",
+      "args": ["--gtest_filter=${input:gtestFilter}"],
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "devMainTradeId",
+      "type": "promptString",
+      "description": "trade_id dla dev_main (np. TRD_SAMPLE_001)",
+      "default": "TRD_SAMPLE_001"
+    },
+    {
+      "id": "gtestFilter",
+      "type": "promptString",
+      "description": "Google Test filter (e.g. Logger.*)",
+      "default": "*"
+    }
+  ]
 }

@@ -1,4 +1,8 @@
 {
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.autocomplete": "disabled",
+    "lldb.evaluateForHovers": false,
+    "lldb.showDisassembly": "never",
     "cmake.debugConfig": {
         "type": "lldb",
         "request": "launch"
