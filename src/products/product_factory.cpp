@@ -165,18 +165,24 @@ void EnsureEquityKind(const std::string& asset_kind) {
 
 namespace numeraire::products {
 
-std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(const database::ProductDto& product,
-                                                                      const database::ProductEquityDto& equity,
-                                                                      const database::TradeDto* trade) {
+std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
+        const database::ProductDto& product,
+        const database::ProductEquityDto& equity,
+        const database::TradeHeaderDto* trade_header) {
     EnsureMatchingProductIds(product.product_id, equity.product_id);
     EnsureEquityKind(equity.asset_kind);
     const EquityCatalogInstrumentKind kind =
             ResolveEquityInstrumentKind(product.catalog_instrument_type, product.attributes_json);
     const ExerciseStyle exercise = ResolveCatalogExerciseStyle(product.catalog_exercise_style);
 
-    const schedule::Date expiry = ParseIsoDate(equity.expiry_date);
+    if (!equity.expiry_date.has_value() || TrimCopy(*equity.expiry_date).empty()) {
+        throw ValidationError("equity catalog requires expiry_date for this instrument");
+    }
+    const schedule::Date expiry = ParseIsoDate(*equity.expiry_date);
     const schedule::Date trade_date =
-            trade != nullptr ? ParseIsoDate(trade->trade_date) : expiry;
+            trade_header != nullptr && !TrimCopy(trade_header->trade_date).empty()
+                    ? ParseIsoDate(trade_header->trade_date)
+                    : expiry;
 
     const OptionType opt = ParseOptionSide(product.option_side);
     if (!product.strike.has_value()) {

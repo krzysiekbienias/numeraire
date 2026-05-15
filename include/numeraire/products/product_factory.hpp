@@ -16,7 +16,7 @@ class ProductFactory {
    public:
     [[nodiscard]] static std::unique_ptr<core::IProduct> MakeFromEquityCatalog(
             const database::ProductDto& product, const database::ProductEquityDto& equity,
-            const database::TradeDto* trade);
+            const database::TradeHeaderDto* trade_header);
 };
 
 }  // namespace numeraire::products

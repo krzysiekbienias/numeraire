@@ -19,15 +19,14 @@ TEST(ProductFactoryTest, BuildsVanillaEuropeanFromCatalogRows) {
     equity.product_id = "P_AAPL_001";
     equity.asset_kind = "EQUITY";
     equity.underlying_id = "AAPL";
-    equity.expiry_date = "2025-11-04";
+    equity.expiry_date = std::string{"2025-11-04"};
 
-    numeraire::database::TradeDto trade{};
-    trade.trade_id = "TRD_001";
-    trade.product_id = "P_AAPL_001";
-    trade.trade_date = "2025-08-06";
+    numeraire::database::TradeHeaderDto header{};
+    header.trade_id = "TRD_001";
+    header.trade_date = "2025-08-06";
 
     const auto instrument =
-            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &trade);
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &header);
 
     ASSERT_NE(instrument, nullptr);
     EXPECT_EQ(instrument->UnderlyingId(), "AAPL");
@@ -54,7 +53,7 @@ TEST(ProductFactoryTest, NullTradeUsesExpiryAsTradeDate) {
     equity.product_id = "P_X_001";
     equity.asset_kind = "equity";
     equity.underlying_id = "XOM";
-    equity.expiry_date = "2026-02-06";
+    equity.expiry_date = std::string{"2026-02-06"};
 
     const auto instrument =
             numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr);
@@ -76,7 +75,7 @@ TEST(ProductFactoryTest, MismatchedProductIdThrows) {
     equity.product_id = "P_B";
     equity.asset_kind = "EQUITY";
     equity.underlying_id = "IBM";
-    equity.expiry_date = "2025-01-02";
+    equity.expiry_date = std::string{"2025-01-02"};
 
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
@@ -94,7 +93,7 @@ TEST(ProductFactoryTest, NonEquityAssetKindThrows) {
     equity.product_id = "P_1";
     equity.asset_kind = "FX";
     equity.underlying_id = "EURUSD";
-    equity.expiry_date = "2025-01-02";
+    equity.expiry_date = std::string{"2025-01-02"};
 
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
@@ -112,7 +111,7 @@ TEST(ProductFactoryTest, AssetOrNothingCatalogBuildsDedicatedProductType) {
     equity.product_id = "P_BABA_008";
     equity.asset_kind = "EQUITY";
     equity.underlying_id = "BABA";
-    equity.expiry_date = "2025-11-07";
+    equity.expiry_date = std::string{"2025-11-07"};
 
     const auto instrument =
             numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr);
@@ -136,7 +135,7 @@ TEST(ProductFactoryTest, AsianOptionAttributesThrowsUntilSupported) {
     equity.product_id = "P_NVDA_007";
     equity.asset_kind = "EQUITY";
     equity.underlying_id = "NVDA";
-    equity.expiry_date = "2025-11-07";
+    equity.expiry_date = std::string{"2025-11-07"};
 
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
