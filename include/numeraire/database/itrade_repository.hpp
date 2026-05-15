@@ -39,6 +39,9 @@ class ITradeRepository {
     ITradeRepository& operator=(ITradeRepository&&) = delete;
 
     [[nodiscard]] virtual TradeCatalogBundle GetCatalogForTrade(std::string_view trade_id) const = 0;
+
+    /// All `trade_id` values in `trades`, sorted ascending (for batch / dev tooling).
+    [[nodiscard]] virtual std::vector<std::string> ListAllTradeIds() const = 0;
 };
 
 }  // namespace numeraire::database

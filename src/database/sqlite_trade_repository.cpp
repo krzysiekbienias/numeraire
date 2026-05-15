@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace numeraire::database {
 
@@ -296,6 +297,19 @@ SqliteTradeRepository::SqliteTradeRepository(std::string database_file_path)
 }
 
 SqliteTradeRepository::~SqliteTradeRepository() = default;
+
+std::vector<std::string> SqliteTradeRepository::ListAllTradeIds() const {
+    try {
+        SQLite::Statement st(*impl_->db, "SELECT trade_id FROM trades ORDER BY trade_id");
+        std::vector<std::string> out;
+        while (st.executeStep()) {
+            out.push_back(st.getColumn(0).getString());
+        }
+        return out;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(std::string{"SqliteTradeRepository::ListAllTradeIds: "} + e.what());
+    }
+}
 
 TradeCatalogBundle SqliteTradeRepository::GetCatalogForTrade(const std::string_view trade_id) const {
     try {

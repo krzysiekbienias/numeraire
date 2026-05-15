@@ -102,6 +102,18 @@ TEST(SqliteTradeRepositoryTest, LoadsCatalogAndBuildsProduct) {
     fs::remove(path);
 }
 
+TEST(SqliteTradeRepositoryTest, ListAllTradeIdsOrdered) {
+    std::string const path = TempSqlitePath();
+    SeedFixtureDb(path);
+
+    numeraire::database::SqliteTradeRepository repo(path);
+    const auto ids = repo.ListAllTradeIds();
+    ASSERT_EQ(ids.size(), 1U);
+    EXPECT_EQ(ids[0], "TRD_001");
+
+    fs::remove(path);
+}
+
 TEST(SqliteTradeRepositoryTest, MissingTradeThrows) {
     std::string const path = TempSqlitePath();
     SeedFixtureDb(path);

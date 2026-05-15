@@ -23,6 +23,8 @@ class SqliteTradeRepository final : public ITradeRepository {
 
     [[nodiscard]] TradeCatalogBundle GetCatalogForTrade(std::string_view trade_id) const override;
 
+    [[nodiscard]] std::vector<std::string> ListAllTradeIds() const override;
+
    private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
