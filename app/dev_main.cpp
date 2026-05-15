@@ -86,24 +86,28 @@ int main(const int argc, char** argv) {
         }
 
         const auto bundle = repo.GetCatalogForTrade(trade_id);
-        Logger::NumInfo("Loaded trade_id={} product_id={} underlying={}.", bundle.trade.trade_id,
-                bundle.trade.product_id, bundle.equity.underlying_id);
-
-        const auto product =
-                ProductFactory::MakeFromEquityCatalog(bundle.product, bundle.equity, &bundle.trade);
-        if (product == nullptr) {
-            Logger::NumError("ProductFactory returned null for {}.", trade_id);
+        if (bundle.legs.empty()) {
+            Logger::NumError("Trade {} has no legs in database.", trade_id);
             return 1;
         }
+        Logger::NumInfo("Loaded trade_id={} legs={} portfolio_id={} first_leg_product={} underlying={}.",
+                bundle.trade.trade_id, bundle.legs.size(), bundle.trade.portfolio_id,
+                bundle.legs.front().leg.product_id, bundle.legs.front().equity.underlying_id);
 
         MarketSnapshot snap;
-        snap.spots[std::string(product->UnderlyingId())] =
-                EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
         snap.risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
         snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
         const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
-        if (q != 0.0) {
-            snap.dividend_yields[std::string(product->UnderlyingId())] = q;
+        const double default_spot = EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
+
+        for (const auto& row : bundle.legs) {
+            const std::string& u = row.equity.underlying_id;
+            if (snap.spots.find(u) == snap.spots.end()) {
+                snap.spots[u] = default_spot;
+            }
+            if (q != 0.0 && snap.dividend_yields.find(u) == snap.dividend_yields.end()) {
+                snap.dividend_yields[u] = q;
+            }
         }
 
         StaticMarketDataProvider market(std::move(snap));
@@ -112,21 +116,27 @@ int main(const int argc, char** argv) {
         const auto pricer =
                 PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
 
-        numeraire::core::PricingResult result =
-                numeraire::core::PricingEngine::Price(*product, *pricer, *mkt_handle);
+        double total_npv = 0.0;
+        for (const auto& row : bundle.legs) {
+            const auto product =
+                    ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
+            if (product == nullptr) {
+                Logger::NumError("ProductFactory returned null for leg {}.", row.leg.leg_id);
+                return 1;
+            }
+            numeraire::core::PricingResult result =
+                    numeraire::core::PricingEngine::Price(*product, *pricer, *mkt_handle);
 
-        if (!result.Npv().has_value()) {
-            Logger::NumError("Pricer returned no NPV for {}.", trade_id);
-            return 1;
+            if (!result.Npv().has_value()) {
+                Logger::NumError("Pricer returned no NPV for leg {}.", row.leg.leg_id);
+                return 1;
+            }
+
+            const double unit_npv = *result.Npv();
+            total_npv += PositionSign(row.leg.direction) * row.leg.quantity * unit_npv;
         }
 
-        const double unit_npv = *result.Npv();
-        const double total_npv = PositionSign(bundle.trade.direction) * bundle.trade.quantity * unit_npv;
-
-        Logger::NumInfo(
-                "Unit NPV={} ({}, Black–Scholes analytic); scaled by qty={} direction={} → book NPV={}.", unit_npv,
-                bundle.equity.underlying_id, bundle.trade.quantity,
-                bundle.trade.direction == PositionDirection::kShort ? "SHORT" : "LONG", total_npv);
+        Logger::NumInfo("Book NPV (summed legs, Black–Scholes analytic) trade_id={} → {}.", trade_id, total_npv);
 
     } catch (const numeraire::NumeraireException& ex) {
         Logger::NumError("{}", ex.what());

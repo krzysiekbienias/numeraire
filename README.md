@@ -95,14 +95,15 @@ Run `app` / `dev_main` from the **repository root** so relative paths resolve
 The `dev_main` binary loads `.env` (via [`EnvLoader`](include/numeraire/utils/env_loader.hpp)),
 opens the DB at [`NUMERAIRE_DB_PATH`](.env.example) (default [`db.sqlite3`](.gitignore)),
 applies [`sql/schema_v1.sql`](sql/schema_v1.sql) if tables are missing, then
-loads a single trade and runs **analytic Black–Scholes** using synthetic quotes
+loads a **trade header + all legs** from SQLite and runs **analytic Black–Scholes**
+per leg, summing book NPV (`sign × quantity × unit NPV`) using synthetic quotes
 from the `NUMERAIRE_DEV_*` variables in `.env`.
 
 - **Trade id**: first CLI argument wins, otherwise `NUMERAIRE_DEV_TRADE_ID`
   (see [.env.example](.env.example)).
 - **Market**: `NUMERAIRE_DEV_SPOT`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`,
-  `NUMERAIRE_DEV_DIV_YIELD` — applied to the underlying id read from the trade
-  row.
+  `NUMERAIRE_DEV_DIV_YIELD` — default spot/dividend are applied per underlying
+  found on the trade’s legs.
 
 Example (from repo root, after `./scripts/build.sh`):
 
@@ -110,11 +111,11 @@ Example (from repo root, after `./scripts/build.sh`):
 ./build/dev_main TRD_001
 ```
 
-You need matching rows in `trades`, `products`, and `products_equity`. The
+You need matching rows in `trades`, `trade_legs`, `products`, and `products_equity`. The
 inserts in [`unit_tests/database/test_sqlite_trade_repository.cpp`](unit_tests/database/test_sqlite_trade_repository.cpp)
 (`TRD_001` / `P_AAPL_001`) are a convenient reference when seeding `db.sqlite3`.
 
-To load a **full bundle** (product + `products_equity` + trade) from JSON on a
+To load a **full bundle** (product + `products_equity` + trade header + legs) from JSON on a
 host where only the DB is available, use Python 3 stdlib only:
 
 ```bash
