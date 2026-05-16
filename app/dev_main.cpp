@@ -10,6 +10,7 @@
 #include <numeraire/enums/pricing_engine_type.hpp>
 #include <numeraire/market_data/market_snapshot.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
+#include <numeraire/market_data_providers/polygon_daily_eod_fetch.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/utils/config.hpp>
@@ -35,6 +36,8 @@ using numeraire::utils::Config;
 using numeraire::utils::EnvLoader;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
+using numeraire::market_data_providers::PrintFetchUsageLines;
+using numeraire::market_data_providers::TryRunPolygonDailyEodFetch;
 
 namespace {
 
@@ -57,15 +60,18 @@ namespace {
 
 void PrintUsage() {
     const char* const msg =
-            "dev_main — price trade(s) from SQLite (Black–Scholes analytic per leg).\n"
+            "dev_main — price trade(s) from SQLite, or ingest Polygon EOD bars.\n"
             "Usage:\n"
             "  dev_main <trade_id>              Price one trade (e.g. TRD_SAMPLE_001).\n"
             "  dev_main --all                   Price every trade_id in `trades` (sorted).\n"
             "  dev_main --trades-json <path>    Price ids from JSON: [\"TRD_1\",...] or "
             "{\"trade_ids\":[\"TRD_1\",...]}.\n"
+            "  dev_main --fetch-eod-daily ...   Ingest daily aggs into `equity_daily_eod` "
+            "(see --help).\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade).\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
+    PrintFetchUsageLines();
 }
 
 [[nodiscard]] std::vector<std::string> LoadTradeIdsFromJsonFile(const std::filesystem::path& path) {
@@ -240,6 +246,11 @@ int main(const int argc, char** argv) {
     try {
         const Config cfg = Config::Load("configs/default.json");
         Logger::NumInfo("dev_main (config version={}).", cfg.RequireString("version"));
+
+        const int fetch_rc = TryRunPolygonDailyEodFetch(argc, argv, cfg);
+        if (fetch_rc >= 0) {
+            return fetch_rc;
+        }
 
         const std::filesystem::path db_path = ResolveDatabasePath(cfg);
         BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
