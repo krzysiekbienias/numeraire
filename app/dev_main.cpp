@@ -11,6 +11,8 @@
 #include <numeraire/market_data/market_snapshot.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
 #include <numeraire/market_data_providers/polygon_daily_eod_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_index_daily_eod_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_option_contract_fetch.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/utils/config.hpp>
@@ -30,14 +32,18 @@ using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
+using numeraire::market_data_providers::PrintFetchUsageLines;
+using numeraire::market_data_providers::PrintIndexFetchUsageLines;
+using numeraire::market_data_providers::TryRunPolygonDailyEodFetch;
+using numeraire::market_data_providers::TryRunPolygonIndexDailyEodFetch;
+using numeraire::market_data_providers::PrintOptionContractFetchUsageLines;
+using numeraire::market_data_providers::TryRunPolygonOptionContractFetch;
 using numeraire::pricers::PricerFactory;
 using numeraire::products::ProductFactory;
 using numeraire::utils::Config;
 using numeraire::utils::EnvLoader;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
-using numeraire::market_data_providers::PrintFetchUsageLines;
-using numeraire::market_data_providers::TryRunPolygonDailyEodFetch;
 
 namespace {
 
@@ -66,12 +72,18 @@ void PrintUsage() {
             "  dev_main --all                   Price every trade_id in `trades` (sorted).\n"
             "  dev_main --trades-json <path>    Price ids from JSON: [\"TRD_1\",...] or "
             "{\"trade_ids\":[\"TRD_1\",...]}.\n"
-            "  dev_main --fetch-eod-daily ...   Ingest daily aggs into `equity_daily_eod` "
+            "  dev_main --fetch-eod-daily ...     Ingest daily aggs into `equity_daily_eod` "
+            "(see --help).\n"
+            "  dev_main --fetch-index-eod-daily ... Ingest index daily aggs into `index_daily_eod` "
+            "(see --help).\n"
+            "  dev_main --fetch-option-contracts ... Ingest options reference into `option_contract` "
             "(see --help).\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade).\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
     PrintFetchUsageLines();
+    PrintIndexFetchUsageLines();
+    PrintOptionContractFetchUsageLines();
 }
 
 [[nodiscard]] std::vector<std::string> LoadTradeIdsFromJsonFile(const std::filesystem::path& path) {
@@ -247,9 +259,17 @@ int main(const int argc, char** argv) {
         const Config cfg = Config::Load("configs/default.json");
         Logger::NumInfo("dev_main (config version={}).", cfg.RequireString("version"));
 
+        const int index_fetch_rc = TryRunPolygonIndexDailyEodFetch(argc, argv, cfg);
+        if (index_fetch_rc >= 0) {
+            return index_fetch_rc;
+        }
         const int fetch_rc = TryRunPolygonDailyEodFetch(argc, argv, cfg);
         if (fetch_rc >= 0) {
             return fetch_rc;
+        }
+        const int option_contract_rc = TryRunPolygonOptionContractFetch(argc, argv, cfg);
+        if (option_contract_rc >= 0) {
+            return option_contract_rc;
         }
 
         const std::filesystem::path db_path = ResolveDatabasePath(cfg);
