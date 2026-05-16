@@ -1,9 +1,5 @@
 #include <SQLiteCpp/SQLiteCpp.h>
-#include <cpr/cpr.h>
-#include <cpr/util.h>
 
-#include <cctype>
-#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -11,12 +7,12 @@
 #include <filesystem>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/market_data_providers/polygon_daily_eod_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_ingest_common.hpp>
 #include <numeraire/utils/config.hpp>
 #include <numeraire/utils/database_path.hpp>
 #include <numeraire/utils/logger.hpp>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -26,83 +22,16 @@ namespace numeraire::market_data_providers {
 using numeraire::database::BootstrapTradeDatabaseSchema;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
+using numeraire::market_data_providers::polygon_ingest::AsOfIsoFromPolygonBarMs;
+using numeraire::market_data_providers::polygon_ingest::DataSourceLabelForBaseUrl;
+using numeraire::market_data_providers::polygon_ingest::FetchJsonPage;
+using numeraire::market_data_providers::polygon_ingest::IsoUtcNow;
+using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
+using numeraire::market_data_providers::polygon_ingest::PolygonApiKey;
+using numeraire::market_data_providers::polygon_ingest::PolygonBaseUrl;
+using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonCall;
 
 namespace {
-
-[[nodiscard]] int SleepSecAfterPolygonCall() noexcept {
-    const char* raw = std::getenv("NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL");
-    if (raw == nullptr || raw[0] == '\0') {
-        return 13;
-    }
-    char* end = nullptr;
-    const long v = std::strtol(raw, &end, 10);
-    if (end == raw || v < 0) {
-        return 13;
-    }
-    if (v > 3600) {
-        return 3600;
-    }
-    return static_cast<int>(v);
-}
-
-[[nodiscard]] std::string PolygonBaseUrl() {
-    const char* raw = std::getenv("POLYGON_BASE_URL");
-    if (raw == nullptr || raw[0] == '\0') {
-        return "https://api.polygon.io";
-    }
-    std::string s(raw);
-    while (!s.empty() && s.back() == '/') {
-        s.pop_back();
-    }
-    return s;
-}
-
-[[nodiscard]] const char* PolygonApiKey() {
-    return std::getenv("POLYGON_API_KEY");
-}
-
-[[nodiscard]] bool LooksIsoDate(const std::string& s) {
-    if (s.size() != 10) {
-        return false;
-    }
-    for (size_t i = 0; i < s.size(); ++i) {
-        const char c = s[i];
-        if (i == 4 || i == 7) {
-            if (c != '-') {
-                return false;
-            }
-        } else if (!std::isdigit(static_cast<unsigned char>(c))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-[[nodiscard]] std::string AsOfIsoFromPolygonBarMs(const std::int64_t t_ms) {
-    const auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(
-            std::chrono::milliseconds{t_ms});
-    const time_t tt = std::chrono::system_clock::to_time_t(tp);
-    std::tm tm{};
-    gmtime_r(&tt, &tm);
-    char buf[16]{};
-    strftime(buf, sizeof(buf), "%Y-%m-%d", &tm);
-    return std::string(buf);
-}
-
-[[nodiscard]] std::string IsoUtcNow() {
-    const time_t tt = std::time(nullptr);
-    std::tm tm{};
-    gmtime_r(&tt, &tm);
-    char buf[32]{};
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return std::string(buf);
-}
-
-void ThrottleAfterCall(const int sleep_sec) {
-    if (sleep_sec > 0) {
-        std::this_thread::sleep_for(std::chrono::seconds(sleep_sec));
-    }
-}
 
 [[nodiscard]] std::string BuildAggsUrl(const std::string& base,
                                        const std::string& ticker,
@@ -115,62 +44,11 @@ void ThrottleAfterCall(const int sleep_sec) {
     return oss.str();
 }
 
-/// libcPR joins `Parameters` as `base + "?" + encoded`, so a base URL that already
-/// contains `?adjusted=...` becomes `...?...?apiKey=...` and Polygon ignores the key.
-[[nodiscard]] std::string UrlWithApiKey(const std::string& url, const char* api_key) {
-    if (url.find("apiKey=") != std::string::npos) {
-        return url;
-    }
-    std::string out = url;
-    out += (url.find('?') == std::string::npos) ? '?' : '&';
-    out += "apiKey=";
-    out += cpr::util::urlEncode(std::string(api_key));
-    return out;
-}
-
-[[nodiscard]] int FetchAndParsePage(const std::string& url,
-                                    const char* api_key,
-                                    const int throttle_sec,
-                                    nlohmann::json& out_j,
-                                    std::string& next_url_full) {
-    next_url_full.clear();
-
-    const std::string request_url = UrlWithApiKey(url, api_key);
-    const auto resp = cpr::Get(cpr::Url{request_url});
-
-    ThrottleAfterCall(throttle_sec);
-
-    if (resp.status_code != 200) {
-        Logger::NumError("Polygon HTTP {} for URL {}", resp.status_code, url);
-        return 1;
-    }
-
-    try {
-        out_j = nlohmann::json::parse(resp.text);
-    } catch (const std::exception& e) {
-        Logger::NumError("Polygon JSON parse: {}", e.what());
-        return 1;
-    }
-
-    const std::string st = out_j.value("status", "");
-    if (st != "OK") {
-        Logger::NumError("Polygon status={} body_snip={}", st, resp.text.substr(0, 200));
-        return 1;
-    }
-
-    if (out_j.contains("next_url") && out_j["next_url"].is_string()) {
-        next_url_full = out_j["next_url"].get<std::string>();
-        if (!next_url_full.empty()) {
-            next_url_full = UrlWithApiKey(next_url_full, api_key);
-        }
-    }
-    return 0;
-}
-
 [[nodiscard]] int UpsertBars(SQLite::Database& db,
                              const std::string& ticker,
                              const nlohmann::json& results,
                              const bool adjusted_flag,
+                             const std::string& source_label,
                              const std::string& ingested_at) {
     if (!results.is_array()) {
         return 0;
@@ -226,7 +104,7 @@ void ThrottleAfterCall(const int sleep_sec) {
         } else {
             st.bind(11);
         }
-        st.bind(12, std::string("polygon"));
+        st.bind(12, source_label);
         st.bind(13, std::string("1d"));
         st.bind(14, adjusted_flag ? 1 : 0);
         st.bind(15, t_ms);
@@ -249,6 +127,7 @@ void ThrottleAfterCall(const int sleep_sec) {
                                     const std::string& to_iso,
                                     const bool adjusted,
                                     const int throttle_sec) {
+    const std::string source_label = DataSourceLabelForBaseUrl(base_url);
     std::string url = BuildAggsUrl(base_url, ticker, from_iso, to_iso, adjusted);
     int total_upserted = 0;
     const std::string ingested_at = IsoUtcNow();
@@ -256,14 +135,14 @@ void ThrottleAfterCall(const int sleep_sec) {
     for (;;) {
         nlohmann::json j;
         std::string next_url;
-        if (FetchAndParsePage(url, api_key, throttle_sec, j, next_url) != 0) {
+        if (FetchJsonPage(url, api_key, throttle_sec, j, next_url) != 0) {
             return 1;
         }
         if (!j.contains("results") || !j["results"].is_array() || j["results"].empty()) {
             Logger::NumWarn("Polygon: no daily results for {} in range {}..{}.", ticker, from_iso, to_iso);
             break;
         }
-        const int chunk = UpsertBars(db, ticker, j["results"], adjusted, ingested_at);
+        const int chunk = UpsertBars(db, ticker, j["results"], adjusted, source_label, ingested_at);
         total_upserted += chunk;
         Logger::NumInfo("Polygon: upserted {} row(s) for {} (chunk running total {}).", chunk, ticker, total_upserted);
         if (next_url.empty()) {
@@ -284,6 +163,7 @@ void PrintFetchUsageLines() {
             "[--ticker SYM2 ...] [--raw]\n"
             "    Upsert Polygon v2/aggs 1/day into `equity_daily_eod` (needs POLYGON_API_KEY).\n"
             "    Default adjusted=true; pass --raw for adjusted=false.\n"
+            "    Base URL: POLYGON_BASE_URL (default https://api.polygon.io; e.g. https://api.massive.com).\n"
             "    Throttle: NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL (default 13) between HTTP calls.");
 }
 
