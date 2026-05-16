@@ -1,4 +1,4 @@
-# Optional HTTP ingest (Polygon / Massive, …) — linked from dev_main or future jobs.
+# Optional HTTP ingest (Polygon REST — polygon.io or rebranded massive.com) — dev_main / jobs.
 include(FetchContent)
 set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CPR_BUILD_CLI OFF CACHE BOOL "" FORCE)
@@ -15,7 +15,9 @@ if(TARGET cpr)
 endif()
 
 add_library(numeraire_market_data_providers STATIC
+        polygon_ingest_common.cpp
         polygon_daily_eod_fetch.cpp
+        polygon_index_daily_eod_fetch.cpp
 )
 
 target_include_directories(numeraire_market_data_providers
