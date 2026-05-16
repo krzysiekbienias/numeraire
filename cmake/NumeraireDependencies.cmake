@@ -56,6 +56,7 @@ if(NUMERAIRE_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
 endif()
 
-# --- Stage 3+ dependencies (uncomment when modules ship) --------------------
-# find_package(cpr     CONFIG REQUIRED)   # HTTP client for Polygon.io
+# --- Stage 3+ (Polygon / Massive HTTP ingest) ---------------------------------
+# CPR is pulled in by `src/market_data_providers/CMakeLists.txt` when
+# NUMERAIRE_BUILD_DEV_MAIN is ON (dev_main links `numeraire_market_data_providers`).
 # find_package(pugixml CONFIG REQUIRED)   # XML parsing if needed
