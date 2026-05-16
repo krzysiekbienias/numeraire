@@ -1,5 +1,6 @@
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <cpr/cpr.h>
+#include <cpr/util.h>
 
 #include <cctype>
 #include <chrono>
@@ -114,6 +115,19 @@ void ThrottleAfterCall(const int sleep_sec) {
     return oss.str();
 }
 
+/// libcPR joins `Parameters` as `base + "?" + encoded`, so a base URL that already
+/// contains `?adjusted=...` becomes `...?...?apiKey=...` and Polygon ignores the key.
+[[nodiscard]] std::string UrlWithApiKey(const std::string& url, const char* api_key) {
+    if (url.find("apiKey=") != std::string::npos) {
+        return url;
+    }
+    std::string out = url;
+    out += (url.find('?') == std::string::npos) ? '?' : '&';
+    out += "apiKey=";
+    out += cpr::util::urlEncode(std::string(api_key));
+    return out;
+}
+
 [[nodiscard]] int FetchAndParsePage(const std::string& url,
                                     const char* api_key,
                                     const int throttle_sec,
@@ -121,9 +135,8 @@ void ThrottleAfterCall(const int sleep_sec) {
                                     std::string& next_url_full) {
     next_url_full.clear();
 
-    const auto resp = (url.find("apiKey=") != std::string::npos)
-                              ? cpr::Get(cpr::Url{url})
-                              : cpr::Get(cpr::Url{url}, cpr::Parameters{{"apiKey", api_key}});
+    const std::string request_url = UrlWithApiKey(url, api_key);
+    const auto resp = cpr::Get(cpr::Url{request_url});
 
     ThrottleAfterCall(throttle_sec);
 
@@ -147,13 +160,8 @@ void ThrottleAfterCall(const int sleep_sec) {
 
     if (out_j.contains("next_url") && out_j["next_url"].is_string()) {
         next_url_full = out_j["next_url"].get<std::string>();
-        if (!next_url_full.empty() && next_url_full.find("apiKey=") == std::string::npos) {
-            if (next_url_full.find('?') != std::string::npos) {
-                next_url_full += "&apiKey=";
-            } else {
-                next_url_full += "?apiKey=";
-            }
-            next_url_full += api_key;
+        if (!next_url_full.empty()) {
+            next_url_full = UrlWithApiKey(next_url_full, api_key);
         }
     }
     return 0;
