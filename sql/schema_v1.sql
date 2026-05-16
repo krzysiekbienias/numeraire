@@ -80,3 +80,32 @@ CREATE TABLE IF NOT EXISTS equity_daily_eod (
     UNIQUE (ticker, as_of, timespan, adjusted)
 );
 CREATE INDEX IF NOT EXISTS idx_equity_daily_eod_ticker_as_of ON equity_daily_eod (ticker, as_of);
+-- End-of-day OHLC for benchmark / cash indices (e.g. Massive/Polygon `v2/aggs` `1/day`, ticker `I:NDX`).
+--
+-- Diff vs `equity_daily_eod`:
+--   Provider bars are often OHLC + `t` only — `volume` / `vwap` / `trade_count` typically NULL.
+--   `adjusted` is retained for schema parity with equity ingest; for pure index levels it is not
+--   “split-adjusted” like stocks — store `1` unless the provider exposes an explicit adjusted series.
+--
+-- Time semantics: same as `equity_daily_eod` (`as_of`, `session_calendar`, `provider_timestamp_utc_ms`, `ingested_at`).
+CREATE TABLE IF NOT EXISTS index_daily_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    volume REAL,
+    vwap REAL,
+    trade_count INTEGER,
+    source TEXT NOT NULL,
+    timespan TEXT NOT NULL DEFAULT '1d',
+    adjusted INTEGER NOT NULL CHECK (adjusted IN (0, 1)) DEFAULT 1,
+    provider_timestamp_utc_ms INTEGER,
+    ingested_at TEXT NOT NULL,
+    UNIQUE (ticker, as_of, timespan, adjusted)
+);
+CREATE INDEX IF NOT EXISTS idx_index_daily_eod_ticker_as_of ON index_daily_eod (ticker, as_of);
