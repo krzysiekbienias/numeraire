@@ -1,13 +1,11 @@
+#include <SQLiteCpp/SQLiteCpp.h>
 #include <gtest/gtest.h>
 
-#include <SQLiteCpp/SQLiteCpp.h>
-
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
-
-#include <filesystem>
 
 namespace fs = std::filesystem;
 
@@ -25,11 +23,10 @@ namespace {
 }
 
 void InsertSampleBar(SQLite::Database& db) {
-    SQLite::Statement ins(
-            db,
-            "INSERT INTO equity_daily_eod (ticker, as_of, session_calendar, open, high, low, "
-            "close, currency, volume, vwap, trade_count, source, timespan, adjusted, "
-            "provider_timestamp_utc_ms, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    SQLite::Statement ins(db,
+                          "INSERT INTO equity_daily_eod (ticker, as_of, session_calendar, open, high, low, "
+                          "close, currency, volume, vwap, trade_count, source, timespan, adjusted, "
+                          "provider_timestamp_utc_ms, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
     ins.bind(1, "AAPL");
     ins.bind(2, "2026-05-15");
     ins.bind(3, "America/New_York");
@@ -56,10 +53,9 @@ TEST(EquityDailyEodSchemaTest, InsertAndQueryRoundTrip) {
     db.exec(ReadSchemaFile());
     InsertSampleBar(db);
 
-    SQLite::Statement q(
-            db,
-            "SELECT as_of, close, session_calendar, provider_timestamp_utc_ms FROM equity_daily_eod "
-            "WHERE ticker = 'AAPL'");
+    SQLite::Statement q(db,
+                        "SELECT as_of, close, session_calendar, provider_timestamp_utc_ms FROM equity_daily_eod "
+                        "WHERE ticker = 'AAPL'");
     ASSERT_TRUE(q.executeStep());
     EXPECT_EQ(q.getColumn(0).getString(), std::string("2026-05-15"));
     EXPECT_DOUBLE_EQ(q.getColumn(1).getDouble(), 300.23);
