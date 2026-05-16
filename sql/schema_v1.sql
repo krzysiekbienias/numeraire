@@ -109,3 +109,31 @@ CREATE TABLE IF NOT EXISTS index_daily_eod (
     UNIQUE (ticker, as_of, timespan, adjusted)
 );
 CREATE INDEX IF NOT EXISTS idx_index_daily_eod_ticker_as_of ON index_daily_eod (ticker, as_of);
+-- Option contract definitions from provider reference (e.g. Polygon `v3/reference/options/contracts`).
+--
+-- `listing_as_of` — parametr `as_of` w zapytaniu: dzień kalendarzowy snapshotu łańcucha / katalogu
+--     kontraktów (jakie kontrakty istniały w reference tego dnia). To nie jest dzień sesji OHLC opcji;
+--     ten będzie w przyszłej tabeli barów opcji jako `as_of`.
+CREATE TABLE IF NOT EXISTS option_contract (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    option_ticker TEXT NOT NULL,
+    listing_as_of TEXT NOT NULL,
+    underlying_ticker TEXT NOT NULL,
+    expiration_date TEXT NOT NULL,
+    strike_price REAL NOT NULL,
+    contract_type TEXT NOT NULL CHECK (contract_type IN ('call', 'put', 'other')),
+    exercise_style TEXT NOT NULL,
+    shares_per_contract INTEGER NOT NULL DEFAULT 100,
+    primary_exchange TEXT,
+    cfi TEXT,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    source TEXT NOT NULL,
+    ingested_at TEXT NOT NULL,
+    UNIQUE (option_ticker, listing_as_of)
+);
+CREATE INDEX IF NOT EXISTS idx_option_contract_underlying_listing ON option_contract (underlying_ticker, listing_as_of);
+CREATE INDEX IF NOT EXISTS idx_option_contract_expiry ON option_contract (
+    underlying_ticker,
+    listing_as_of,
+    expiration_date
+);
