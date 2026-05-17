@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <numeraire/core/pricing_engine.hpp>
+#include <numeraire/database/equity_daily_eod_lookup.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
 #include <numeraire/enums/model_type.hpp>
@@ -12,6 +13,7 @@
 #include <numeraire/market_data/static_market_data_provider.hpp>
 #include <numeraire/market_data_providers/polygon_daily_eod_fetch.hpp>
 #include <numeraire/market_data_providers/polygon_index_daily_eod_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_ingest_common.hpp>
 #include <numeraire/market_data_providers/polygon_option_contract_fetch.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/product_factory.hpp>
@@ -21,7 +23,7 @@
 #include <numeraire/utils/exception.hpp>
 #include <numeraire/utils/logger.hpp>
 #include <sstream>
-#include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -30,6 +32,7 @@ using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
 using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
+using numeraire::database::LookupEquityDailyClose;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -45,6 +48,8 @@ using numeraire::utils::EnvLoader;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
 
+using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
+
 namespace {
 
 [[nodiscard]] double EnvDouble(const char* key, const double default_value) noexcept {
@@ -58,6 +63,99 @@ namespace {
         return default_value;
     }
     return v;
+}
+
+[[nodiscard]] int EnvInt(const char* key, const int default_value) noexcept {
+    const char* raw = std::getenv(key);
+    if (raw == nullptr || raw[0] == '\0') {
+        return default_value;
+    }
+    char* end = nullptr;
+    const long v = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return default_value;
+    }
+    return static_cast<int>(v);
+}
+
+[[nodiscard]] bool EqualsAsciiIgnoreCase(const std::string_view a,
+                                         const std::string_view b) noexcept {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); ++i) {
+        const auto ca = static_cast<unsigned char>(a[i]);
+        const auto cb = static_cast<unsigned char>(b[i]);
+        if (std::tolower(ca) != std::tolower(cb)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct DevMainMarketQuotesConfig {
+    enum SpotSourceKind { kEnv, kDb };
+    SpotSourceKind spot_source{kEnv};
+    double env_fallback_spot{240.0};
+    std::string as_of_iso;
+    int equity_eod_adjusted{1};
+};
+
+[[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(
+        const std::optional<std::string>& cli_as_of) {
+    DevMainMarketQuotesConfig c;
+    const char* const src_raw = std::getenv("NUMERAIRE_DEV_SPOT_SOURCE");
+    if (src_raw != nullptr && src_raw[0] != '\0') {
+        const std::string_view sv{src_raw};
+        if (EqualsAsciiIgnoreCase(sv, "db")) {
+            c.spot_source = DevMainMarketQuotesConfig::kDb;
+        } else if (EqualsAsciiIgnoreCase(sv, "env")) {
+            c.spot_source = DevMainMarketQuotesConfig::kEnv;
+        } else {
+            throw numeraire::ValidationError(
+                    std::string{"NUMERAIRE_DEV_SPOT_SOURCE must be 'env' or 'db' (got: "} + src_raw +
+                    ")");
+        }
+    }
+
+    c.env_fallback_spot = EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
+    if (cli_as_of.has_value()) {
+        c.as_of_iso = *cli_as_of;
+    } else if (const char* ao = std::getenv("NUMERAIRE_DEV_AS_OF"); ao != nullptr && ao[0] != '\0') {
+        c.as_of_iso = ao;
+    }
+    const int adj_raw = EnvInt("NUMERAIRE_DEV_SPOT_ADJUSTED", 1);
+    c.equity_eod_adjusted = (adj_raw != 0) ? 1 : 0;
+
+    if (c.spot_source == DevMainMarketQuotesConfig::kDb) {
+        if (c.as_of_iso.empty() || !LooksIsoDate(c.as_of_iso)) {
+            throw numeraire::ValidationError(
+                    "NUMERAIRE_DEV_SPOT_SOURCE=db requires a valuation date: pass "
+                    "`--as-of YYYY-MM-DD` or set NUMERAIRE_DEV_AS_OF.");
+        }
+    }
+    return c;
+}
+
+struct PricingArgvScan {
+    std::optional<std::string> as_of;
+    std::vector<std::string> positional;
+};
+
+/// Strips `--as-of YYYY-MM-DD` pairs anywhere in argv so remaining tokens follow the legacy layout.
+[[nodiscard]] PricingArgvScan ScanPricingArgv(const int argc, char** argv) {
+    PricingArgvScan out;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--as-of") == 0) {
+            if (i + 1 >= argc || argv[i + 1] == nullptr || argv[i + 1][0] == '\0') {
+                throw numeraire::ValidationError("--as-of requires YYYY-MM-DD.");
+            }
+            out.as_of = std::string(argv[++i]);
+            continue;
+        }
+        out.positional.emplace_back(argv[i]);
+    }
+    return out;
 }
 
 [[nodiscard]] double PositionSign(const PositionDirection direction) noexcept {
@@ -78,7 +176,12 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --fetch-option-contracts ... Ingest options reference into `option_contract` "
             "(see --help).\n"
+            "  dev_main [--as-of YYYY-MM-DD] <trade_id> | --all | --trades-json <path>   (flags may appear in "
+            "any order)\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade).\n"
+            "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close; "
+            "needs --as-of or NUMERAIRE_DEV_AS_OF). Rate/vol still from NUMERAIRE_DEV_RATE / "
+            "NUMERAIRE_DEV_VOL.\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
     PrintFetchUsageLines();
@@ -129,17 +232,59 @@ void PrintUsage() {
     return out;
 }
 
-void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
-                                 const TradeCatalogBundle& bundle,
-                                 const double default_spot,
-                                 const double dividend_yield) {
-    for (const auto& row : bundle.legs) {
-        const std::string& u = row.equity.underlying_id;
-        if (snap.spots.find(u) == snap.spots.end()) {
-            snap.spots[u] = default_spot;
+void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
+                                      const std::vector<TradeCatalogBundle>& bundles,
+                                      const std::filesystem::path& db_path_file,
+                                      const DevMainMarketQuotesConfig& mq) {
+    std::unordered_set<std::string> seen;
+    for (const TradeCatalogBundle& bundle : bundles) {
+        for (const auto& row : bundle.legs) {
+            const std::string& u = row.equity.underlying_id;
+            if (seen.count(u) != 0u) {
+                continue;
+            }
+            seen.insert(u);
+
+            if (mq.spot_source == DevMainMarketQuotesConfig::kEnv) {
+                snap.spots[u] = mq.env_fallback_spot;
+                Logger::NumInfo(
+                        "Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
+                        u,
+                        mq.env_fallback_spot);
+                continue;
+            }
+
+            const std::optional<double> close =
+                    LookupEquityDailyClose(db_path_file.string(), u, mq.as_of_iso, mq.equity_eod_adjusted);
+            if (!close.has_value()) {
+                throw numeraire::ValidationError(
+                        "equity_daily_eod: missing row for ticker=" + u + " as_of=" + mq.as_of_iso +
+                        " adjusted=" + std::to_string(mq.equity_eod_adjusted) +
+                        " — ingest daily bars before pricing with NUMERAIRE_DEV_SPOT_SOURCE=db.");
+            }
+            snap.spots[u] = *close;
+            Logger::NumInfo(
+                    "Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
+                    u,
+                    *close,
+                    mq.as_of_iso,
+                    mq.equity_eod_adjusted);
         }
-        if (dividend_yield != 0.0 && snap.dividend_yields.find(u) == snap.dividend_yields.end()) {
-            snap.dividend_yields[u] = dividend_yield;
+    }
+}
+
+void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
+                                     const std::vector<TradeCatalogBundle>& bundles,
+                                     const double dividend_yield) {
+    if (dividend_yield == 0.0) {
+        return;
+    }
+    for (const TradeCatalogBundle& bundle : bundles) {
+        for (const auto& row : bundle.legs) {
+            const std::string& u = row.equity.underlying_id;
+            if (snap.dividend_yields.find(u) == snap.dividend_yields.end()) {
+                snap.dividend_yields[u] = dividend_yield;
+            }
         }
     }
 }
@@ -165,7 +310,10 @@ void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
     return total_npv;
 }
 
-[[nodiscard]] int RunWithTradeIds(const SqliteTradeRepository& repo, std::vector<std::string> trade_ids) {
+[[nodiscard]] int RunWithTradeIds(const SqliteTradeRepository& repo,
+                                  const std::filesystem::path& db_path,
+                                  std::vector<std::string> trade_ids,
+                                  const DevMainMarketQuotesConfig& mq) {
     if (trade_ids.empty()) {
         Logger::NumError("No trades to price (empty list).");
         return 1;
@@ -185,10 +333,17 @@ void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
     snap.risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
     snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
     const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
-    const double default_spot = EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
-    for (const auto& bundle : bundles) {
-        UpsertMarketQuotesForBundle(snap, bundle, default_spot, q);
-    }
+
+    FillUnderlyingSpotsAcrossBundles(snap, bundles, db_path, mq);
+    FillDividendYieldsAcrossBundles(snap, bundles, q);
+
+    Logger::NumInfo(
+            "Quotes: risk_free_rate={} (env) flat_iv={} (env) dividends={} (env); spot_source={} as_of={}.",
+            snap.risk_free_rate,
+            snap.flat_implied_volatility,
+            q,
+            mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
+            mq.spot_source == DevMainMarketQuotesConfig::kDb ? mq.as_of_iso : std::string{"n/a"});
 
     StaticMarketDataProvider market(std::move(snap));
     const auto mkt_handle = market.CreateMarketData();
@@ -212,39 +367,76 @@ void UpsertMarketQuotesForBundle(MarketSnapshot& snap,
     return 0;
 }
 
-[[nodiscard]] int ParseArgsAndRun(int argc, char** argv, const SqliteTradeRepository& repo) {
-    if (argc >= 2) {
-        if (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0) {
-            PrintUsage();
-            return 0;
+[[nodiscard]] int ParseArgsAndRun(int argc,
+                                  char** argv,
+                                  const SqliteTradeRepository& repo,
+                                  const std::filesystem::path& db_path) {
+    PricingArgvScan scan;
+    try {
+        scan = ScanPricingArgv(argc, argv);
+    } catch (const numeraire::ValidationError& ex) {
+        Logger::NumError("{}", ex.what());
+        return 1;
+    }
+
+    DevMainMarketQuotesConfig mq;
+    try {
+        mq = LoadDevMainMarketQuotesConfig(scan.as_of);
+    } catch (const numeraire::ValidationError& ex) {
+        Logger::NumError("{}", ex.what());
+        return 1;
+    }
+
+    const std::vector<std::string>& tok = scan.positional;
+    if (!tok.empty() && (tok[0] == "--help" || tok[0] == "-h")) {
+        PrintUsage();
+        return 0;
+    }
+
+    if (tok.empty()) {
+        if (const char* v = std::getenv("NUMERAIRE_DEV_TRADE_ID"); v != nullptr && v[0] != '\0') {
+            return RunWithTradeIds(repo, db_path, {std::string(v)}, mq);
         }
-        if (std::strcmp(argv[1], "--all") == 0) {
-            return RunWithTradeIds(repo, repo.ListAllTradeIds());
-        }
-        if (std::strcmp(argv[1], "--trades-json") == 0) {
-            if (argc < 3 || argv[2] == nullptr || argv[2][0] == '\0') {
-                Logger::NumError("--trades-json requires a file path.");
-                return 1;
-            }
-            return RunWithTradeIds(repo, LoadTradeIdsFromJsonFile(argv[2]));
-        }
-        if (argv[1][0] == '-') {
-            Logger::NumError("Unknown option: {}.", argv[1]);
+        Logger::NumError(
+                "No trade specified: pass <trade_id>, --all, or --trades-json <path>, or set "
+                "NUMERAIRE_DEV_TRADE_ID.");
+        PrintUsage();
+        return 1;
+    }
+
+    if (tok[0] == "--all") {
+        if (tok.size() != 1u) {
+            Logger::NumError("`--all` must be the only pricing argument.");
             PrintUsage();
             return 1;
         }
-        return RunWithTradeIds(repo, {std::string(argv[1])});
+        return RunWithTradeIds(repo, db_path, repo.ListAllTradeIds(), mq);
     }
 
-    if (const char* v = std::getenv("NUMERAIRE_DEV_TRADE_ID"); v != nullptr && v[0] != '\0') {
-        return RunWithTradeIds(repo, {std::string(v)});
+    if (tok[0] == "--trades-json") {
+        if (tok.size() < 2u || tok[1].empty()) {
+            Logger::NumError("--trades-json requires a file path.");
+            return 1;
+        }
+        if (tok.size() > 2u) {
+            Logger::NumError("--trades-json expects exactly one JSON path.");
+            return 1;
+        }
+        return RunWithTradeIds(repo, db_path, LoadTradeIdsFromJsonFile(tok[1]), mq);
     }
 
-    Logger::NumError(
-            "No trade specified: pass <trade_id>, --all, or --trades-json <path>, or set "
-            "NUMERAIRE_DEV_TRADE_ID.");
-    PrintUsage();
-    return 1;
+    if (!tok[0].empty() && tok[0][0] == '-') {
+        Logger::NumError("Unknown option: {}.", tok[0]);
+        PrintUsage();
+        return 1;
+    }
+
+    if (tok.size() != 1u) {
+        Logger::NumError("Expected exactly one trade_id positional argument.");
+        PrintUsage();
+        return 1;
+    }
+    return RunWithTradeIds(repo, db_path, {tok[0]}, mq);
 }
 
 }  // namespace
@@ -277,7 +469,7 @@ int main(const int argc, char** argv) {
         const SqliteTradeRepository repo(db_path.string());
         Logger::NumInfo("SQLite trade repository at {}.", db_path.string());
 
-        const int rc = ParseArgsAndRun(argc, argv, repo);
+        const int rc = ParseArgsAndRun(argc, argv, repo, db_path);
         if (rc != 0) {
             return rc;
         }
