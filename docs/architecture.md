@@ -1,6 +1,6 @@
 # Numeraire++ — architecture
 
-Living document. Updated as each sprint ships.
+Living document. Updated as the codebase evolves. **Sprint/stage history:** [`development.md`](development.md).
 
 ## Vision
 
@@ -29,7 +29,7 @@ flowchart TB
     utils[utils<br/>Logger, Config, EnvLoader,<br/>Exception, time, string,<br/>quantlib_bridge]
     schedule[schedule<br/>ScheduleGenerator,<br/>Schedule POD]
     core[core<br/>IProduct, IPricer, IModel,<br/>IMarketData, PricingEngine,<br/>PricingResult, Factories]
-    database[database<br/>ITradeRepository,<br/>TradeDto,<br/>InMemoryTradeRepository]
+    database[database<br/>ITradeRepository,<br/>TradeDto,<br/>SqliteTradeRepository]
     marketData[market_data<br/>IMarketDataProvider,<br/>MarketSnapshot,<br/>StaticMarketDataProvider]
     app[app<br/>main / dev_main]
     tests[unit_tests<br/>integration_tests]
@@ -316,34 +316,132 @@ classDiagram
 
 ---
 
-## Sprint plan (Stage 1)
+## SQLite schema & Polygon market-data pipeline *(current stage)*
 
-| Sprint | Deliverables |
-|--------|--------------|
-| 0 | Build system + layout + style enforcement |
-| 1 | `utils`: Logger (spdlog facade), Exception hierarchy (done) |
-| 2 | `utils`: EnvLoader, Config (nlohmann_json wrapper) — **done** |
-| 3 | `enums` + `utils/quantlib_bridge` — **done** |
-| 3.5 | `enums`: [`ModelType`](../include/numeraire/enums/model_type.hpp) vs [`PricingEngineType`](../include/numeraire/enums/pricing_engine_type.hpp) (model / dynamics family vs numerical pricing engine) — **done** |
-| 4 | `schedule`: Schedule POD + ScheduleGenerator (QuantLib internally), UT vs raw QuantLib benchmark — **done** |
-| 5 | `core`: interfaces (IProduct/IPricer/IModel/IMarketData), PricingEngine, PricingResult |
-| 6 | `core`: factories (ProductFactory, PricerFactory) |
-| 7 | `database`: TradeDto, ITradeRepository, InMemoryTradeRepository (SQLite waits for schema) |
-| 8 | `market_data`: MarketSnapshot, IMarketDataProvider, StaticMarketDataProvider (Polygon waits) |
-| 9 | Polish: CI, tightening checks as needed |
+> **Note:** This subsection describes the **persisted catalog, trades, and market-data tables plus HTTP ingest from Polygon.io** as implemented **today**. It will evolve as DB-backed `IMarketData` and richer surfaces ship. See [`sql/schema_v1.sql`](../sql/schema_v1.sql) for the authoritative DDL.
+
+### Tables at a glance
+
+- **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded like any repository-backed book (fixtures, migrations, ops tooling).
+- **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via [`dev_main`](../app/dev_main.cpp).
+
+There are **no foreign keys** from the Polygon-fed tables into `products` / `trades`. Business joins are by convention (e.g. `products.underlying_id` aligned with `equity_daily_eod.ticker`).
+
+### Logical ER diagram
+
+```mermaid
+erDiagram
+    products ||--|| products_equity : product_id
+    trades ||--o{ trade_legs : trade_id
+    products ||--o{ trade_legs : product_id
+
+    equity_daily_eod {
+        int id PK
+        text ticker
+        text as_of
+        real close
+        text source
+        text ingested_at
+    }
+
+    index_daily_eod {
+        int id PK
+        text ticker
+        text as_of
+        real close
+        text source
+    }
+
+    option_contract {
+        int id PK
+        text option_ticker
+        text listing_as_of
+        text underlying_ticker
+        real strike_price
+        text contract_type
+        text source
+    }
+
+    products {
+        text product_id PK
+        text underlying_id
+        text asset_kind
+    }
+
+    products_equity {
+        text product_id PK
+        text instrument_type
+        text option_type
+        real strike
+    }
+
+    trades {
+        text trade_id PK
+        text portfolio_id
+        text strategy_type
+        text status
+    }
+
+    trade_legs {
+        text leg_id PK
+        text trade_id FK
+        text product_id FK
+        text direction
+        real quantity
+        real execution_price
+    }
+```
+
+### Polygon.io → SQLite ingest
+
+Bulk endpoints target the same SQLite file configured under `database.path` (see [`configs/default.json`](../configs/default.json)). Credentials and throttle use environment variables (`POLYGON_API_KEY`, optional `POLYGON_BASE_URL`, `NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL`), documented alongside the ingest code under [`src/market_data_providers/`](../src/market_data_providers/).
+
+```mermaid
+flowchart LR
+    subgraph Polygon["Polygon REST"]
+        A1["v2/aggs daily"]
+        A2["v3/reference/options/contracts"]
+    end
+
+    subgraph DB["SQLite schema_v1"]
+        EOD[equity_daily_eod]
+        IDX[index_daily_eod]
+        OPT[option_contract]
+        TR[trades + trade_legs]
+        CAT[products + products_equity]
+    end
+
+    A1 -->|listed equity tickers| EOD
+    A1 -->|index tickers e.g. I:SPX| IDX
+    IDX -->|strike band uses index close| OPT
+    A2 --> OPT
+
+    TR --> CAT
+```
+
+**Ordering detail:** loading `option_contract` uses an **index level** already present in `index_daily_eod` (e.g. close for strike-window logic). In practice, **ingest index daily EOD before option contract reference** for a given valuation date window.
+
+### From book + market snapshot to NPV *(today’s `dev_main` path)*
+
+Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-target)** earlier in this document: `SqliteTradeRepository` assembles a `TradeCatalogBundle` per `trade_id`; `ProductFactory` and `PricingEngine` price each leg.
+
+For market inputs, **`dev_main` currently builds a `MarketSnapshot` and wraps it with `StaticMarketDataProvider`**, with spots, rate, dividend yield, and flat vol driven by environment defaults (`NUMERAIRE_DEV_*`). **Quotes from `equity_daily_eod` are not yet read automatically into `IMarketData`** — persisting Polygon bars lays the groundwork for a future SQLite- or provider-backed implementation of `IMarketDataProvider`.
+
+```mermaid
+flowchart LR
+    subgraph Persisted["SQLite"]
+        TR[trades + trade_legs + catalog]
+        MD[equity_daily_eod index_daily_eod option_contract]
+    end
+
+    TR -->|GetCatalogForTrade| PR[PricingEngine + factories]
+    ENV[ENV NUMERAIRE_DEV_* / StaticMarketDataProvider] -->|IMarketData today| PR
+    MD -.->|planned wiring to IMarketData| PR
+    PR --> NPV[Book NPV per trade]
+```
 
 ---
 
-## Stage 2 — pricing path (living plan)
+## Delivery status
 
-| Track | Goal |
-|--------|------|
-| **Closed-form pricers** | Implement NPV and greeks from **explicit formulas** in library code (readable, debuggable). Keeps ownership of the maths in-repo; QuantLib is **not** the source of truth inside pricer TUs. |
-| **QuantLib in tests** | Use QuantLib engines/calculators (e.g. `BlackCalculator`) as **benchmarks** in unit tests to lock parity on conventions (day count, forward mapping). Same pattern as schedule UTs vs raw QuantLib. |
-| **Time axis** | Shared calendar helpers stay in `schedule` (e.g. [`Act365FixedYearFraction`](../include/numeraire/schedule/date.hpp)); pricers depend on domain dates and year fractions, not on sprinkling `ql/*` in every executable. |
-| **Orchestration** | `PricingEngine`, factories, persistence / market expansion per earlier module graph. |
-
-Concrete shipped in Stage 2 so far:
-
-- [`PricingEngine`](../include/numeraire/core/pricing_engine.hpp) — thin dispatch.
-- [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) — European vanilla on spot: closed-form d₁/d₂, Φ, NPV, textbook greeks; UT vs `QuantLib::BlackCalculator`.
+Sprint checklist, Stage 2 pricing tracks, SQLite/Polygon milestones, and gaps are maintained in **[`development.md`](development.md)** so this file stays focused on structure and diagrams.

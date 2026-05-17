@@ -11,17 +11,7 @@ service names, and credentials are environment-specific and are **not**
 checked into this repo (use `.env` locally and your orchestration secrets on
 the host).
 
-Stage 1 is being built sprint-by-sprint. This README reflects the following
-**in order**:
-
-| Sprint | Scope |
-|--------|--------|
-| **0** | Layout, CMake modules, tooling |
-| **1** | `numeraire_utils`: logging + shared exception hierarchy |
-| **2** | `.env` via [`EnvLoader`](include/numeraire/utils/env_loader.hpp) + `configs/default.json` via [`Config`](include/numeraire/utils/config.hpp) |
-| **3** | [`enums`](include/numeraire/enums/enums.hpp) + [`quantlib_bridge`](include/numeraire/utils/quantlib_bridge.hpp) (domain types ↔ QuantLib) |
-| **3.5** | [`ModelType`](include/numeraire/enums/model_type.hpp) vs [`PricingEngineType`](include/numeraire/enums/pricing_engine_type.hpp) — model family vs numerical pricing engine |
-| **4** | [`schedule`](include/numeraire/schedule/schedule_generator.hpp): lightweight [`Schedule`](include/numeraire/schedule/schedule.hpp) POD + `ScheduleGenerator` (QuantLib used internally to build dates) |
+Sprint history and what is actually shipped (including SQLite schema and Polygon ingest) live in **[`docs/development.md`](docs/development.md)** so this README stays oriented toward setup and daily use.
 
 ---
 
@@ -31,14 +21,14 @@ Stage 1 is being built sprint-by-sprint. This README reflects the following
 |------|---------|
 | [`include/numeraire/`](include/numeraire/) | Public headers: [`enums/`](include/numeraire/enums/), [`utils/`](include/numeraire/utils/), [`schedule/`](include/numeraire/schedule/), … |
 | [`src/`](src/) | Implementation TUs per module ([`src/utils/`](src/utils/), [`src/schedule/`](src/schedule/), …) |
-| [`app/`](app/) | `app` (CLI placeholder) and `dev_main` (sandbox) |
+| [`app/`](app/) | `app` (CLI placeholder) and `dev_main` (pricing + Polygon ingest modes) |
 | [`unit_tests/`](unit_tests/) | GoogleTest sources (`test_*.cpp`, including per-module dirs) |
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
 | [`cmake/`](cmake/) | `NumeraireCompileOptions.cmake`, `NumeraireDependencies.cmake` |
 | [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, `format.sh`, `clean.sh`, [`import_trade_bundle.py`](scripts/import_trade_bundle.py) |
 | [`trades/incoming/`](trades/incoming/) | Draft trade bundle JSON for import (only [`trade_bundle.sample.json`](trades/incoming/trade_bundle.sample.json) tracked; other `*.json` ignored) |
 | [`configs/`](configs/) | JSON defaults loaded by [`utils::Config`](include/numeraire/utils/config.hpp) |
-| [`docs/`](docs/) | Architecture and coding style |
+| [`docs/`](docs/) | [`architecture.md`](docs/architecture.md), [`development.md`](docs/development.md) (sprints / stages), [`coding_style.md`](docs/coding_style.md) |
 
 ---
 
@@ -90,14 +80,29 @@ Run `app` / `dev_main` from the **repository root** so relative paths resolve
 (`.env`, `configs/default.json`). [`scripts/test.sh`](scripts/test.sh) already
 `cd`s to the root before invoking `test_environment`.
 
-### `dev_main`: price one trade from SQLite
+### `dev_main`: pricing + Polygon ingest
 
-The `dev_main` binary loads `.env` (via [`EnvLoader`](include/numeraire/utils/env_loader.hpp)),
+[`dev_main`](app/dev_main.cpp) is one executable with **four capabilities**:
+
+| Mode | argv pattern | Writes / reads |
+|------|----------------|----------------|
+| **Index daily EOD** (Polygon) | `--fetch-index-eod-daily …` | Upserts [`index_daily_eod`](sql/schema_v1.sql) |
+| **Equity daily EOD** (Polygon) | `--fetch-eod-daily …` | Upserts [`equity_daily_eod`](sql/schema_v1.sql) |
+| **Option contracts reference** (Polygon) | `--fetch-option-contracts …` | Upserts [`option_contract`](sql/schema_v1.sql) |
+| **Price trades** (SQLite + env quotes) | `<trade_id>`, `--all`, `--trades-json`, or env `NUMERAIRE_DEV_TRADE_ID` | Reads `trades` + catalog; NPV via Black–Scholes |
+
+**Dispatch:** ingest handlers are checked **in order**: `--fetch-index-eod-daily` → `--fetch-eod-daily` → `--fetch-option-contracts`. The first matching branch runs and exits. If argv matches none of those, `dev_main` opens the SQLite repo and runs **pricing**.
+
+Always run from the **repository root** so `.env` and `configs/default.json` resolve. Full flags for ingest are printed on failure or via `./build/dev_main --help`.
+
+#### Pricing trades from SQLite
+
+The binary loads `.env` (via [`EnvLoader`](include/numeraire/utils/env_loader.hpp)),
 opens the DB at [`NUMERAIRE_DB_PATH`](.env.example) (default [`db.sqlite3`](.gitignore)),
 applies [`sql/schema_v1.sql`](sql/schema_v1.sql) if tables are missing, then
 loads a **trade header + all legs** from SQLite and runs **analytic Black–Scholes**
 per leg, summing book NPV (`sign × quantity × unit NPV`) using synthetic quotes
-from the `NUMERAIRE_DEV_*` variables in `.env`.
+from the `NUMERAIRE_DEV_*` variables in `.env` (quotes are **not** yet pulled from `equity_daily_eod`; see [`docs/architecture.md`](docs/architecture.md)).
 
 - **Which trades**: `dev_main <trade_id>` — one id; `dev_main --all` — every row in
   `trades` (sorted); `dev_main --trades-json path.json` — list as
@@ -108,7 +113,7 @@ from the `NUMERAIRE_DEV_*` variables in `.env`.
   `NUMERAIRE_DEV_DIV_YIELD` — default spot/dividend are applied per underlying
   found on the trade’s legs.
 
-Example (from repo root, after `./scripts/build.sh`):
+Examples:
 
 ```bash
 ./build/dev_main TRD_001
@@ -129,6 +134,23 @@ python3 scripts/import_trade_bundle.py trades/incoming/trade_bundle.sample.json
 
 Uses `NUMERAIRE_DB_PATH` when set (same as `dev_main`), or `--db path/to/db.sqlite3`.
 Tables must already exist (`sql/schema_v1.sql`; `dev_main` applies it when missing).
+
+#### Polygon ingest (optional HTTP jobs)
+
+Requires **`POLYGON_API_KEY`** in `.env`. Optional: **`POLYGON_BASE_URL`** (default `https://api.polygon.io`), **`NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL`** (throttle between requests). Equity ingest accepts **`--raw`** for unadjusted bars (`adjusted=false`). Implementation lives under [`src/market_data_providers/`](src/market_data_providers/).
+
+**Suggested order for option-chain ingest:** load **index** daily bars first (`index_daily_eod`), then **`--fetch-option-contracts`**, which reads index **close** from SQLite for the strike window.
+
+```bash
+# Listed equities → equity_daily_eod (repeat --ticker for more symbols)
+./build/dev_main --fetch-eod-daily --from 2025-01-02 --to 2025-01-31 --ticker AAPL
+
+# Indices → index_daily_eod (defaults to I:SPX if you omit --ticker)
+./build/dev_main --fetch-index-eod-daily --from 2025-01-02 --to 2025-01-31 --ticker I:NDX
+
+# Options reference → option_contract (--underlying / --index-ticker / --strike-band per --help)
+./build/dev_main --fetch-option-contracts --from 2025-01-02 --to 2025-01-02 --underlying NDX
+```
 
 ---
 
@@ -152,7 +174,7 @@ Integration tests compile only after you add `integration_tests/test_*.cpp`.
 
 ---
 
-## Logging (Sprint 1)
+## Logging
 
 Call `Logger::Init()` once near process entry (see [`app/main.cpp`](app/main.cpp);
 there we use `using numeraire::utils::Logger` to keep call sites short). Default
@@ -164,7 +186,7 @@ level is **info** unless `NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`,
 
 ---
 
-## Configuration and environment (Sprint 2)
+## Configuration and environment
 
 - **`.env`** — optional dotenv-style file at the repo root. [`EnvLoader`](include/numeraire/utils/env_loader.hpp)
   parses `KEY=value` lines (`#` comments; trim). [`EnvLoader::Get`](include/numeraire/utils/env_loader.hpp)
@@ -177,7 +199,7 @@ level is **info** unless `NUMERAIRE_LOG_LEVEL` is set (`trace`, `debug`, `info`,
 
 ---
 
-## Enums and QuantLib bridge (Sprint 3)
+## Enums and QuantLib bridge
 
 Domain `enum class` types (calendars, day counts, currencies, option style, …)
 live under [`include/numeraire/enums/`](include/numeraire/enums/) (umbrella
@@ -186,7 +208,7 @@ maps them to QuantLib calendars, frequencies, conventions, and related types for
 
 ---
 
-## Model vs pricing engine (Sprint 3.5)
+## Model vs pricing engine
 
 We split **what world you assume** from **how you price in that world**:
 
@@ -197,7 +219,7 @@ Factories and config can combine a model with an engine when the pair is valid.
 
 ---
 
-## Schedules and generation (Sprint 4)
+## Schedules and generation
 
 The `schedule` module separates **data** from **generation logic**:
 
@@ -237,13 +259,13 @@ settings file already passes `--compile-commands-dir=${workspaceFolder}/build`).
 
 ## Roadmap (high level)
 
-1. **Sprints 5–6** — `core`: interfaces (`IProduct`, `IPricer`, `IModel`, …), `PricingEngine`, `PricingResult`, factories (see [`docs/architecture.md`](docs/architecture.md)).
-2. **Later** — SQLite trade repository (after schema review), Polygon market
-   data, concrete pricers wired to `ModelType` / `PricingEngineType`, optional Python bindings
-   and a web tier.
+See **[`docs/development.md`](docs/development.md)** for sprint/table status (what is done vs pending).
+
+1. **Pricing / models** — more instruments and engines via `ModelType` / `PricingEngineType`; wire persisted quotes into `IMarketData` (today: Polygon bars in SQLite; `dev_main` NPV still uses env/static snapshot).
+2. **Later** — optional Python bindings, service layer / web tier if needed.
 
 ---
 
 ## License
 
-(To be chosen — not set in Sprint 0.)
+(To be chosen.)

@@ -3,15 +3,13 @@
 This directory hosts integration tests that exercise components which cannot
 be tested in pure isolation. Examples:
 
-- **SQLite trade repository** (Stage 2+) — real database round-trips against
-  the on-disk schema imported from the previous project.
-- **Polygon.io market data provider** (Stage 3+) — real HTTP calls, gated by
-  the `POLYGON_API_KEY` environment variable.
-- **Market environment cache** (Stage 3+) — file system + DB interactions for
-  the cache layer used by repeatable simulations.
+- **SQLite trade repository** — round-trips against [`sql/schema_v1.sql`](../sql/schema_v1.sql) / [`SqliteTradeRepository`](../include/numeraire/database/sqlite_trade_repository.hpp); heavy paths today live mostly in unit tests + [`dev_main`](../README.md).
+- **Polygon HTTP ingest** — real outbound REST calls (same stack as [`dev_main --fetch-*`](../README.md)), gated by `POLYGON_API_KEY`; candidate for `integration_tests/` once we add non-placeholder binaries here.
+- **Market environment cache** (future) — file system + DB interactions for repeatable simulations.
 
-Sprint 0 ships only this placeholder so the CMake structure is wired up and
-ready to compile real tests as soon as the corresponding modules land.
+Progress vs sprint labels is summarized in **[`docs/development.md`](../docs/development.md)**.
+
+The CMake wiring below shipped early so adding `test_*.cpp` stays friction-free once tests land:
 
 ## Adding a test later
 
