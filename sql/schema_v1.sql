@@ -137,3 +137,57 @@ CREATE INDEX IF NOT EXISTS idx_option_contract_expiry ON option_contract (
     listing_as_of,
     expiration_date
 );
+----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS catalog_instrument_type (
+    code TEXT NOT NULL PRIMARY KEY,
+    family TEXT NOT NULL,
+    maps_to_instrument_type TEXT NOT NULL,
+    description_en TEXT NOT NULL,
+    example_product_id TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ref_instrument_kind_family ON ref_instrument_kind (family);
+------------------------------------------------------------------------
+-- EOD mark-to-model per trade leg (batch C++).
+-- Multiple rows per (leg_id, as_of) allowed when pricing_engine differs (e.g. analytic vs MC).
+CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    as_of TEXT NOT NULL,
+    -- valuation session date YYYY-MM-DD
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    trade_id TEXT NOT NULL,
+    -- denormalized; convenience for trade-level rollups
+    leg_id TEXT NOT NULL,
+    -- Market snapshot used by the batch (audit / reproducibility)
+    underlying_spot REAL NOT NULL,
+    risk_free_rate REAL NOT NULL,
+    dividend_yield REAL NOT NULL DEFAULT 0,
+    implied_vol_used REAL NOT NULL,
+    years_to_maturity REAL NOT NULL,
+    -- Valuation outputs
+    numeraire_currency TEXT NOT NULL DEFAULT 'USD',
+    pv_unit REAL NOT NULL,
+    pv_total REAL NOT NULL,
+    pnl_daily REAL,
+    pnl_inception REAL,
+    -- Greeks (convention: same scale as pv_unit — document in app/docs)
+    delta REAL NOT NULL,
+    gamma REAL NOT NULL,
+    vega REAL NOT NULL,
+    theta REAL NOT NULL,
+    rho REAL NOT NULL,
+    pricing_engine TEXT NOT NULL,
+    -- e.g. analytic_black_scholes, monte_carlo_gbm_v1
+    batch_run_id TEXT,
+    calculated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    remarks TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
+    FOREIGN KEY (leg_id) REFERENCES trade_legs (leg_id) ON DELETE CASCADE,
+    UNIQUE (leg_id, as_of, pricing_engine)
+);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_leg_asof_engine ON trade_leg_mtm_eod (leg_id, as_of, pricing_engine);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_asof ON trade_leg_mtm_eod (as_of);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_trade_asof ON trade_leg_mtm_eod (trade_id, as_of);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_engine ON trade_leg_mtm_eod (pricing_engine);
