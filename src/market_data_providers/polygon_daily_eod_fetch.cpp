@@ -20,8 +20,6 @@
 namespace numeraire::market_data_providers {
 
 using numeraire::database::BootstrapTradeDatabaseSchema;
-using numeraire::utils::Logger;
-using numeraire::utils::ResolveDatabasePath;
 using numeraire::market_data_providers::polygon_ingest::AsOfIsoFromPolygonBarMs;
 using numeraire::market_data_providers::polygon_ingest::DataSourceLabelForBaseUrl;
 using numeraire::market_data_providers::polygon_ingest::FetchJsonPage;
@@ -30,6 +28,8 @@ using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
 using numeraire::market_data_providers::polygon_ingest::PolygonApiKey;
 using numeraire::market_data_providers::polygon_ingest::PolygonBaseUrl;
 using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonCall;
+using numeraire::utils::Logger;
+using numeraire::utils::ResolveDatabasePath;
 
 namespace {
 

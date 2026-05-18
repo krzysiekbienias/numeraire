@@ -1,11 +1,17 @@
+#include <array>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <numeraire/core/pricing_engine.hpp>
+#include <numeraire/core/pricing_result.hpp>
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
+#include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
+#include <numeraire/database/trade_leg_mtm_eod_row.hpp>
+#include <numeraire/schedule/date.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
@@ -22,7 +28,9 @@
 #include <numeraire/utils/env_loader.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <numeraire/utils/logger.hpp>
+#include <optional>
 #include <sstream>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -30,9 +38,12 @@
 
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
+using numeraire::database::SqliteTradeLegMtmRepository;
 using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
+using numeraire::database::TradeLegMtmEodRow;
 using numeraire::database::LookupEquityDailyClose;
+using numeraire::schedule::Act365FixedYearFraction;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -51,6 +62,8 @@ using numeraire::utils::ResolveDatabasePath;
 using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
 
 namespace {
+
+constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
 
 [[nodiscard]] double EnvDouble(const char* key, const double default_value) noexcept {
     const char* raw = std::getenv(key);
@@ -162,6 +175,122 @@ struct PricingArgvScan {
     return direction == PositionDirection::kShort ? -1.0 : 1.0;
 }
 
+[[nodiscard]] std::string MakeBatchRunId() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_buf{};
+#if defined(_WIN32)
+    gmtime_s(&tm_buf, &t);
+#else
+    gmtime_r(&t, &tm_buf);
+#endif
+    std::array<char, 32> buf{};
+    if (std::strftime(buf.data(), buf.size(), "run-%Y%m%dT%H%M%SZ", &tm_buf) == 0U) {
+        return "run-unknown";
+    }
+    return std::string(buf.data());
+}
+
+[[nodiscard]] bool ShouldPersistMtmEod(const DevMainMarketQuotesConfig& mq) {
+    return !mq.as_of_iso.empty() && LooksIsoDate(mq.as_of_iso);
+}
+
+[[nodiscard]] std::string BuildMtmRemarks(const DevMainMarketQuotesConfig& mq) {
+    std::ostringstream oss;
+    if (mq.spot_source == DevMainMarketQuotesConfig::kDb) {
+        oss << "SPOT_DB;";
+    } else {
+        oss << "SPOT_ENV;";
+    }
+    oss << "IV_ENV;R_ENV;Q_ENV";
+    return oss.str();
+}
+
+[[nodiscard]] double GreekOrZero(const std::optional<double>& g) noexcept {
+    return g.has_value() ? *g : 0.0;
+}
+
+[[nodiscard]] double DividendYieldForUnderlying(const MarketSnapshot& snap,
+                                                const std::string& underlying_id) {
+    const auto it = snap.dividend_yields.find(underlying_id);
+    if (it == snap.dividend_yields.end()) {
+        return 0.0;
+    }
+    return it->second;
+}
+
+[[nodiscard]] double BookNpvAndPersistMtmForBundle(
+        const TradeCatalogBundle& bundle,
+        const numeraire::core::IMarketData& mkt,
+        const MarketSnapshot& snap,
+        const numeraire::core::IPricer& pricer,
+        SqliteTradeLegMtmRepository* mtm_repo,
+        const DevMainMarketQuotesConfig& mq,
+        const std::string& batch_run_id,
+        const std::string& remarks) {
+    double total_npv = 0.0;
+    for (const auto& row : bundle.legs) {
+        const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
+        if (product == nullptr) {
+            throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
+        }
+        numeraire::core::PricingResult result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
+
+        if (!result.Npv().has_value()) {
+            throw numeraire::PersistenceError("Pricer returned no NPV for leg " + row.leg.leg_id);
+        }
+
+        const double unit_npv = *result.Npv();
+        const double pv_total = PositionSign(row.leg.direction) * row.leg.quantity * unit_npv;
+        total_npv += pv_total;
+
+        if (mtm_repo == nullptr) {
+            continue;
+        }
+
+        const std::string& underlying = row.equity.underlying_id;
+        const double spot_used = mkt.Spot(underlying);
+        const double years_to_maturity =
+                Act365FixedYearFraction(product->TradeDate(), product->ExpiryDate());
+
+        TradeLegMtmEodRow mtm{};
+        mtm.as_of = mq.as_of_iso;
+        mtm.trade_id = bundle.trade.trade_id;
+        mtm.leg_id = row.leg.leg_id;
+        mtm.batch_run_id = batch_run_id;
+        mtm.underlying_spot = spot_used;
+        mtm.risk_free_rate = snap.risk_free_rate;
+        mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
+        mtm.implied_vol_used = snap.flat_implied_volatility;
+        mtm.years_to_maturity = years_to_maturity;
+        mtm.numeraire_currency = row.equity.currency.empty() ? "USD" : row.equity.currency;
+        mtm.pv_unit = unit_npv;
+        mtm.pv_total = pv_total;
+
+        if (const auto& greeks = result.Greeks()) {
+            mtm.delta = GreekOrZero(greeks->delta);
+            mtm.gamma = GreekOrZero(greeks->gamma);
+            mtm.vega = GreekOrZero(greeks->vega);
+            mtm.theta = GreekOrZero(greeks->theta);
+            mtm.rho = GreekOrZero(greeks->rho);
+        }
+
+        mtm.pricing_engine = kMtmPricingEngine;
+        mtm.remarks = remarks;
+        mtm_repo->Upsert(mtm);
+
+        Logger::NumInfo(
+                "MTM persisted leg_id={} as_of={} pv_unit={} pv_total={} batch_run_id={} "
+                "(official + archive).",
+                mtm.leg_id,
+                mtm.as_of,
+                mtm.pv_unit,
+                mtm.pv_total,
+                *mtm.batch_run_id);
+    }
+    return total_npv;
+}
+
 void PrintUsage() {
     const char* const msg =
             "dev_main — price trade(s) from SQLite, or ingest Polygon EOD bars.\n"
@@ -182,6 +311,8 @@ void PrintUsage() {
             "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close; "
             "needs --as-of or NUMERAIRE_DEV_AS_OF). Rate/vol still from NUMERAIRE_DEV_RATE / "
             "NUMERAIRE_DEV_VOL.\n"
+            "MTM persist: writes one row per leg into trade_leg_mtm_eod when --as-of or "
+            "NUMERAIRE_DEV_AS_OF is set (same batch_run_id for the whole run).\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
     PrintFetchUsageLines();
@@ -289,27 +420,6 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     }
 }
 
-[[nodiscard]] double BookNpvForBundle(const TradeCatalogBundle& bundle,
-                                      const numeraire::core::IMarketData& mkt,
-                                      const numeraire::core::IPricer& pricer) {
-    double total_npv = 0.0;
-    for (const auto& row : bundle.legs) {
-        const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
-        if (product == nullptr) {
-            throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
-        }
-        numeraire::core::PricingResult result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
-
-        if (!result.Npv().has_value()) {
-            throw numeraire::PersistenceError("Pricer returned no NPV for leg " + row.leg.leg_id);
-        }
-
-        const double unit_npv = *result.Npv();
-        total_npv += PositionSign(row.leg.direction) * row.leg.quantity * unit_npv;
-    }
-    return total_npv;
-}
-
 [[nodiscard]] int RunWithTradeIds(const SqliteTradeRepository& repo,
                                   const std::filesystem::path& db_path,
                                   std::vector<std::string> trade_ids,
@@ -345,9 +455,27 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
             mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
             mq.spot_source == DevMainMarketQuotesConfig::kDb ? mq.as_of_iso : std::string{"n/a"});
 
+    const MarketSnapshot snap_for_mtm = snap;
     StaticMarketDataProvider market(std::move(snap));
     const auto mkt_handle = market.CreateMarketData();
     auto pricer = PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
+
+    const bool persist_mtm = ShouldPersistMtmEod(mq);
+    std::optional<SqliteTradeLegMtmRepository> mtm_repo;
+    std::string batch_run_id;
+    std::string mtm_remarks;
+    if (persist_mtm) {
+        mtm_repo.emplace(db_path.string());
+        batch_run_id = MakeBatchRunId();
+        mtm_remarks = BuildMtmRemarks(mq);
+        Logger::NumInfo("MTM EOD persist enabled as_of={} batch_run_id={}.", mq.as_of_iso, batch_run_id);
+    } else {
+        Logger::NumInfo(
+                "MTM EOD persist skipped: set --as-of YYYY-MM-DD or NUMERAIRE_DEV_AS_OF to write "
+                "trade_leg_mtm_eod.");
+    }
+
+    SqliteTradeLegMtmRepository* mtm_ptr = persist_mtm ? &*mtm_repo : nullptr;
 
     for (size_t i = 0; i < trade_ids.size(); ++i) {
         const std::string& tid = trade_ids[i];
@@ -359,11 +487,12 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
                         bundle.legs.front().leg.product_id,
                         bundle.legs.front().equity.underlying_id);
 
-        const double total_npv = BookNpvForBundle(bundle, *mkt_handle, *pricer);
+        const double total_npv = BookNpvAndPersistMtmForBundle(
+                bundle, *mkt_handle, snap_for_mtm, *pricer, mtm_ptr, mq, batch_run_id, mtm_remarks);
         Logger::NumInfo("Book NPV (summed legs, Black–Scholes analytic) trade_id={} → {}.", tid, total_npv);
     }
 
-    Logger::NumInfo("Priced {} trade(s).", trade_ids.size());
+    Logger::NumInfo("Priced {} trade(s).{}", trade_ids.size(), persist_mtm ? " MTM rows written." : "");
     return 0;
 }
 
