@@ -7,8 +7,8 @@
 
 namespace numeraire::database {
 
-/// Writes to SQLite table `trade_leg_mtm_eod` using `INSERT OR REPLACE` keyed by
-/// `UNIQUE (leg_id, as_of, pricing_engine)` in [schema_v1.sql](../../../../sql/schema_v1.sql).
+/// Persists EOD MTM rows to `trade_leg_mtm_eod` (`INSERT OR REPLACE`) and, when
+/// `batch_run_id` is set, append-only `trade_leg_mtm_eod_archive` for run comparison.
 class SqliteTradeLegMtmRepository {
    public:
     explicit SqliteTradeLegMtmRepository(const std::string& database_file_path);
@@ -19,9 +19,12 @@ class SqliteTradeLegMtmRepository {
     SqliteTradeLegMtmRepository(SqliteTradeLegMtmRepository&&) = delete;
     SqliteTradeLegMtmRepository& operator=(SqliteTradeLegMtmRepository&&) = delete;
 
+    /// When `batch_run_id` is set: append archive row, then upsert official mark.
     void Upsert(const TradeLegMtmEodRow& row) const;
 
    private:
+    void InsertArchive(const TradeLegMtmEodRow& row, const std::string& calculated_at) const;
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -113,6 +113,53 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertInsertsRow) {
     fs::remove(path);
 }
 
+TEST(SqliteTradeLegMtmRepositoryTest, UpsertAppendsArchiveOnEachRun) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+    numeraire::database::TradeLegMtmEodRow row{};
+    row.as_of = "2025-08-10";
+    row.trade_id = "TRD_001";
+    row.leg_id = "TRD_001_L1";
+    row.batch_run_id = "batch-run-a";
+    row.underlying_spot = 240.0;
+    row.risk_free_rate = 0.03;
+    row.dividend_yield = 0.0;
+    row.implied_vol_used = 0.20;
+    row.years_to_maturity = 0.25;
+    row.pv_unit = 5.0;
+    row.pv_total = 500.0;
+    row.delta = 0.5;
+    row.gamma = 0.01;
+    row.vega = 0.2;
+    row.theta = -0.05;
+    row.rho = 0.09;
+    row.pricing_engine = "analytic_black_scholes";
+    row.calculated_at = "2025-08-10T16:00:00Z";
+    row.remarks = "run-a";
+
+    repo.Upsert(row);
+    row.batch_run_id = "batch-run-b";
+    row.pv_total = 600.0;
+    row.remarks = "run-b";
+    repo.Upsert(row);
+
+    SQLite::Database check(path, SQLite::OPEN_READONLY);
+    EXPECT_DOUBLE_EQ(QueryOneDouble(check, "SELECT COUNT(*) FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1'"),
+                     1.0);
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check, "SELECT COUNT(*) FROM trade_leg_mtm_eod_archive WHERE leg_id='TRD_001_L1'"),
+            2.0);
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check,
+                          "SELECT pv_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
+                          "AND as_of='2025-08-10'"),
+            600.0);
+
+    fs::remove(path);
+}
+
 TEST(SqliteTradeLegMtmRepositoryTest, UpsertReplaceUpdatesSameUniqueKey) {
     std::string const path = TempSqlitePath();
     SeedMinimalTrade(path);
