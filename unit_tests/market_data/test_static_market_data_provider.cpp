@@ -2,10 +2,12 @@
 
 #include <numeraire/core/imarket_data.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
+#include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
 
 TEST(StaticMarketDataProviderTest, CreatesMarketDataFromSnapshot) {
     numeraire::market_data::MarketSnapshot snap;
+    snap.valuation_date = numeraire::schedule::Date{.year = 2026, .month = 5, .day = 1};
     snap.spots["AMZN"] = 211.65;
     snap.risk_free_rate = 0.03;
     snap.dividend_yields["AMZN"] = 0.01;
@@ -15,6 +17,9 @@ TEST(StaticMarketDataProviderTest, CreatesMarketDataFromSnapshot) {
     const std::unique_ptr<numeraire::core::IMarketData> mdt = provider.CreateMarketData();
     ASSERT_NE(mdt, nullptr);
 
+    EXPECT_EQ(mdt->ValuationDate().year, 2026);
+    EXPECT_EQ(mdt->ValuationDate().month, 5);
+    EXPECT_EQ(mdt->ValuationDate().day, 1);
     EXPECT_DOUBLE_EQ(mdt->Spot("AMZN"), 211.65);
     EXPECT_DOUBLE_EQ(mdt->RiskFreeRate(), 0.03);
     EXPECT_DOUBLE_EQ(mdt->DividendYield("AMZN"), 0.01);
