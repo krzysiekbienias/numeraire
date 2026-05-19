@@ -89,7 +89,7 @@ Run `app` / `dev_main` from the **repository root** so relative paths resolve
 | **Index daily EOD** (Polygon) | `--fetch-index-eod-daily …` | Upserts [`index_daily_eod`](sql/schema_v1.sql) |
 | **Equity daily EOD** (Polygon) | `--fetch-eod-daily …` | Upserts [`equity_daily_eod`](sql/schema_v1.sql) |
 | **Option contracts reference** (Polygon) | `--fetch-option-contracts …` | Upserts [`option_contract`](sql/schema_v1.sql) |
-| **Price trades** (SQLite + env quotes) | `<trade_id>`, `--all`, `--trades-json`, or env `NUMERAIRE_DEV_TRADE_ID` | Reads `trades` + catalog; NPV via Black–Scholes |
+| **Price trades** (SQLite + env quotes) | `--as-of` + `<trade_id>`, `--all`, `--trades-json`, or env `NUMERAIRE_DEV_TRADE_ID` | Reads `trades` + catalog; NPV via Black–Scholes; optional MTM rows in `trade_leg_mtm_eod` |
 
 **Dispatch:** ingest handlers are checked **in order**: `--fetch-index-eod-daily` → `--fetch-eod-daily` → `--fetch-option-contracts`. The first matching branch runs and exits. If argv matches none of those, `dev_main` opens the SQLite repo and runs **pricing**.
 
@@ -101,24 +101,48 @@ The binary loads `.env` (via [`EnvLoader`](include/numeraire/utils/env_loader.hp
 opens the DB at [`NUMERAIRE_DB_PATH`](.env.example) (default [`db.sqlite3`](.gitignore)),
 applies [`sql/schema_v1.sql`](sql/schema_v1.sql) if tables are missing, then
 loads a **trade header + all legs** from SQLite and runs **analytic Black–Scholes**
-per leg, summing book NPV (`sign × quantity × unit NPV`) using synthetic quotes
-from the `NUMERAIRE_DEV_*` variables in `.env` (quotes are **not** yet pulled from `equity_daily_eod`; see [`docs/architecture.md`](docs/architecture.md)).
+per leg, summing book NPV (`sign × quantity × unit NPV`) using quotes from
+`NUMERAIRE_DEV_*` (and optionally **`equity_daily_eod`** for spot). See
+[`docs/architecture.md`](docs/architecture.md) for `IMarketData::ValuationDate()` and MTM persistence.
 
-- **Which trades**: `dev_main <trade_id>` — one id; `dev_main --all` — every row in
-  `trades` (sorted); `dev_main --trades-json path.json` — list as
-  `["TRD_1",...]` or `{"trade_ids":[...]}` (see
-  [`trades/incoming/pricing_batch.sample.json`](trades/incoming/pricing_batch.sample.json)).
-  With no arguments, `NUMERAIRE_DEV_TRADE_ID` from [.env](.env.example) if set.
-- **Market**: `NUMERAIRE_DEV_SPOT`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`,
-  `NUMERAIRE_DEV_DIV_YIELD` — default spot/dividend are applied per underlying
-  found on the trade’s legs.
+- **Valuation date (required)** — Every pricing run needs calendar **as-of**
+  **`--as-of YYYY-MM-DD`** or **`NUMERAIRE_DEV_AS_OF`** (often in `.env`). Without a
+  valid ISO date, `dev_main` exits with an error. The date is stored on
+  [`MarketSnapshot::valuation_date`](include/numeraire/market_data/market_snapshot.hpp)
+  and exposed as [`IMarketData::ValuationDate()`](include/numeraire/core/imarket_data.hpp).
+  **Time to expiry** in [`AnalyticBlackScholesEquityPricer`](include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp)
+  and MTM column **`years_to_maturity`** use **Act/365 Fixed from valuation date to
+  product expiry**, not from trade date.
+- **Which trades** — `dev_main [--as-of DATE] …`: **`--as-of`** may appear in any
+  position alongside `<trade_id>`, `--all`, or `--trades-json`
+  (e.g. `dev_main --as-of 2026-05-01 TRD_001`).
+- **Synthetic vs DB spot** — **`NUMERAIRE_DEV_SPOT_SOURCE=env`** (default):
+  **`NUMERAIRE_DEV_SPOT`** per underlying. **`NUMERAIRE_DEV_SPOT_SOURCE=db`**:
+  **`equity_daily_eod.close`** on the valuation date (`timespan='1d'`;
+  **`NUMERAIRE_DEV_SPOT_ADJUSTED`**, default `1`). **`NUMERAIRE_DEV_RATE`**,
+  **`NUMERAIRE_DEV_VOL`**, **`NUMERAIRE_DEV_DIV_YIELD`** remain env-driven.
+- **MTM** — When a valuation date is set, one row per leg is written to
+  **`trade_leg_mtm_eod`** (official) plus **`trade_leg_mtm_eod_archive`** (append-only
+  per `batch_run_id`). **`--as-of` date range batching** is not built into `dev_main`;
+  use a shell loop — see [`docs/development.md`](docs/development.md) § *Batch `--as-of` reruns*.
 
 Examples:
 
 ```bash
-./build/dev_main TRD_001
-./build/dev_main --all
-./build/dev_main --trades-json trades/incoming/pricing_batch.sample.json
+# Requires --as-of or NUMERAIRE_DEV_AS_OF (e.g. from .env)
+./build/dev_main --as-of 2026-05-15 TRD_001
+NUMERAIRE_DEV_SPOT_SOURCE=db ./build/dev_main --as-of 2026-05-15 TRD_001
+./build/dev_main --as-of 2026-05-15 --all
+./build/dev_main --trades-json trades/incoming/pricing_batch.sample.json --as-of 2026-05-15
+```
+
+Check `years_to_maturity` moves with `as_of`:
+
+```bash
+sqlite3 db.sqlite3 "
+SELECT as_of, leg_id, years_to_maturity, underlying_spot, pv_unit
+FROM trade_leg_mtm_eod WHERE trade_id = 'TRD_10001' ORDER BY as_of;
+"
 ```
 
 You need matching rows in `trades`, `trade_legs`, `products`, and `products_equity`. The
@@ -261,7 +285,7 @@ settings file already passes `--compile-commands-dir=${workspaceFolder}/build`).
 
 See **[`docs/development.md`](docs/development.md)** for sprint/table status (what is done vs pending).
 
-1. **Pricing / models** — more instruments and engines via `ModelType` / `PricingEngineType`; wire persisted quotes into `IMarketData` (today: Polygon bars in SQLite; `dev_main` NPV still uses env/static snapshot).
+1. **Pricing / models** — more instruments and engines via `ModelType` / `PricingEngineType`; richer DB-backed quotes on `IMarketData` (today: `ValuationDate` + static snapshot in `dev_main`; spot-from-DB optional; rate/vol still env).
 2. **Later** — optional Python bindings, service layer / web tier if needed.
 
 ---

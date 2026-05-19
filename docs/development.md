@@ -108,7 +108,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 [`sql/schema_v1.sql`](../sql/schema_v1.sql) is the single bootstrap DDL (idempotent `IF NOT EXISTS`). Besides booking + Polygon-fed market tables, it includes:
 
 - **`catalog_instrument_type`** — optional reference codes aligned with `products_equity.instrument_type` (seed / UI). Index **`idx_catalog_instrument_type_family`** on `family` (SQLite requires index names not to collide with table names in the same schema).
-- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `pricing_engine`, `as_of`). **DDL only at present** — no application writer/reader yet; batch job is a follow-up.
+- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main` pricing** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*.
 
 Separator lines in the SQL file are **`--` comments** so the script parses cleanly when applied wholesale.
 

@@ -94,7 +94,8 @@ sequenceDiagram
     User->>Engine: Price(product, pricer, market)
     Engine->>Pricer: Price(product, market)
     Pricer->>Model: parameters / setup
-    Pricer->>Mkt: spot, vol, rates, dividends
+    Pricer->>Mkt: ValuationDate, spot, vol, rates, dividends
+    Note over Pricer,Mkt: T = year fraction(ValuationDate, ExpiryDate)
     Pricer->>Product: type, exercise, payoff, schedule
     Pricer-->>Engine: PricingResult{npv, greeks?, diagnostics}
     Engine-->>User: PricingResult
@@ -324,6 +325,7 @@ classDiagram
 
 - **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded like any repository-backed book (fixtures, migrations, ops tooling).
 - **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via [`dev_main`](../app/dev_main.cpp).
+- **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by pricing mode in [`dev_main`](../app/dev_main.cpp).
 
 There are **no foreign keys** from the Polygon-fed tables into `products` / `trades`. Business joins are by convention (e.g. `products.underlying_id` aligned with `equity_daily_eod.ticker`).
 
@@ -421,23 +423,50 @@ flowchart LR
 
 **Ordering detail:** loading `option_contract` uses an **index level** already present in `index_daily_eod` (e.g. close for strike-window logic). In practice, **ingest index daily EOD before option contract reference** for a given valuation date window.
 
-### From book + market snapshot to NPV *(today’s `dev_main` path)*
+### `IMarketData` and valuation date *(shipped)*
+
+[`IMarketData`](../include/numeraire/core/imarket_data.hpp) is the read-only market view passed into pricers. Besides spot, rate, dividend yield, and implied vol, it exposes:
+
+- **`ValuationDate()`** — calendar **as-of** for which inputs are valid (EOD session). Documented convention: pricers compute time to expiry from **`ValuationDate()`** to the product’s **`ExpiryDate()`** using **Act/365 Fixed** unless a concrete provider says otherwise.
+
+[`MarketSnapshot`](../include/numeraire/market_data/market_snapshot.hpp) carries `valuation_date` (set from `--as-of` / `NUMERAIRE_DEV_AS_OF` in `dev_main`). [`StaticMarketDataProvider`](../include/numeraire/market_data/static_market_data_provider.hpp) wraps that snapshot into an `IMarketData` handle **without I/O** — callers build the snapshot elsewhere (env, SQLite lookup in `dev_main`, unit tests).
+
+[`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) uses `schedule::Act365FixedYearFraction(market.ValuationDate(), product.ExpiryDate())` for \(T\) and for the vol slice passed to `ImpliedVolatility`. **`TradeDate()`** on the product is booking metadata, not the pricing time axis.
+
+Unit tests benchmark NPV/greeks against `QuantLib::BlackCalculator` with the same \(T\) convention; see [`unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp).
+
+### From book + market snapshot to NPV and MTM *(today’s `dev_main` path)*
 
 Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-target)** earlier in this document: `SqliteTradeRepository` assembles a `TradeCatalogBundle` per `trade_id`; `ProductFactory` and `PricingEngine` price each leg.
 
-For market inputs, **`dev_main` currently builds a `MarketSnapshot` and wraps it with `StaticMarketDataProvider`**, with spots, rate, dividend yield, and flat vol driven by environment defaults (`NUMERAIRE_DEV_*`). **Quotes from `equity_daily_eod` are not yet read automatically into `IMarketData`** — persisting Polygon bars lays the groundwork for a future SQLite- or provider-backed implementation of `IMarketDataProvider`.
+**Valuation date** — Required for pricing mode: **`--as-of YYYY-MM-DD`** or **`NUMERAIRE_DEV_AS_OF`**. Parsed into `MarketSnapshot::valuation_date` and served via `IMarketData::ValuationDate()`. Missing or invalid date → `ValidationError` at startup (no “timeless” run).
+
+For market inputs, **`dev_main` builds a `MarketSnapshot`** and **`StaticMarketDataProvider`**:
+
+- **Spot** — **`NUMERAIRE_DEV_SPOT_SOURCE=env`** (default): `NUMERAIRE_DEV_SPOT` for every underlying referenced by booked legs.
+- **Spot — DB** — **`NUMERAIRE_DEV_SPOT_SOURCE=db`**: **`equity_daily_eod.close`** for each underlying on **`ValuationDate`** (requires an ingested daily bar; ticker match is case-insensitive; `adjusted` via **`NUMERAIRE_DEV_SPOT_ADJUSTED`**, default `1`).
+- **Rate / vol / dividends** — still from env: **`NUMERAIRE_DEV_RATE`**, **`NUMERAIRE_DEV_VOL`**, **`NUMERAIRE_DEV_DIV_YIELD`**.
+
+**MTM persistence** — After each leg is priced, `dev_main` upserts **`trade_leg_mtm_eod`** and appends **`trade_leg_mtm_eod_archive`** with inputs used (`underlying_spot`, rates, vol), outputs (`pv_unit`, greeks), **`years_to_maturity`** (same \(T\) as the pricer), `pricing_engine`, and a shared **`batch_run_id`** for the run.
+
+A fully SQLite-backed `IMarketDataProvider` (vol/rate surfaces from DB, no env shim) remains future work.
 
 ```mermaid
 flowchart LR
     subgraph Persisted["SQLite"]
         TR[trades + trade_legs + catalog]
         MD[equity_daily_eod index_daily_eod option_contract]
+        MTM[trade_leg_mtm_eod + archive]
     end
 
-    TR -->|GetCatalogForTrade| PR[PricingEngine + factories]
-    ENV[ENV NUMERAIRE_DEV_* / StaticMarketDataProvider] -->|IMarketData today| PR
-    MD -.->|planned wiring to IMarketData| PR
+    ASOF["--as-of / NUMERAIRE_DEV_AS_OF"] --> SNAP[MarketSnapshot valuation_date]
+    TR -->|GetCatalogForTrade| PR[PricingEngine + AnalyticBlackScholesEquityPricer]
+    ENV[ENV NUMERAIRE_DEV_* rate vol q] --> SNAP
+    SNAP --> SMP[StaticMarketDataProvider]
+    SMP -->|IMarketData ValuationDate spot vol| PR
+    MD -->|equity_daily_eod close SOURCE=db| SNAP
     PR --> NPV[Book NPV per trade]
+    PR --> MTM
 ```
 
 ---
