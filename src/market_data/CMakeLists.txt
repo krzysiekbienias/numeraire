@@ -11,6 +11,7 @@ target_include_directories(numeraire_market_data
 target_link_libraries(numeraire_market_data
         PUBLIC
         numeraire_core
+        numeraire_schedule
         PRIVATE
         numeraire_utils
 )

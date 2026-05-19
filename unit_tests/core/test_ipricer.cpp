@@ -5,6 +5,7 @@
 #include <numeraire/core/iproduct.hpp>
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/enums/option_type.hpp>
+#include <numeraire/schedule/date.hpp>
 
 #include <memory>
 #include <string>
@@ -14,6 +15,12 @@ namespace {
 
 class MapBackedMarketData final : public numeraire::core::IMarketData {
    public:
+    void SetValuationDate(const numeraire::schedule::Date& date) { valuation_date_ = date; }
+
+    [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override {
+        return valuation_date_;
+    }
+
     [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
         return spots_.at(std::string(underlying_id));
     }
@@ -37,6 +44,7 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
 
    private:
     std::unordered_map<std::string, double> spots_;
+    numeraire::schedule::Date valuation_date_{.year = 2025, .month = 1, .day = 1};
 };
 
 class VanillaOptionProduct final : public numeraire::core::IProduct {

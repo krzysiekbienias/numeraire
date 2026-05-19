@@ -107,8 +107,7 @@ core::PricingResult AnalyticBlackScholesEquityPricer::Price(const core::IProduct
     if (vanilla->Exercise() != ExerciseStyle::kEuropean) {
         throw ValidationError("AnalyticBlackScholesEquityPricer supports European exercise only");
     }
-
-    const double time_to_expiry = schedule::Act365FixedYearFraction(vanilla->TradeDate(), vanilla->ExpiryDate());
+    const double time_to_expiry = schedule::Act365FixedYearFraction(market.ValuationDate(), vanilla->ExpiryDate());
 
     const double spot = market.Spot(vanilla->UnderlyingId());
     const double strike = vanilla->Strike();
