@@ -7,6 +7,7 @@
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/core/pricing_result.hpp>
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
+#include <numeraire/database/leg_pv.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
@@ -167,10 +168,6 @@ struct PricingArgvScan {
     return out;
 }
 
-[[nodiscard]] double PositionSign(const PositionDirection direction) noexcept {
-    return direction == PositionDirection::kShort ? -1.0 : 1.0;
-}
-
 [[nodiscard]] std::string MakeBatchRunId() {
     const auto now = std::chrono::system_clock::now();
     const std::time_t t = std::chrono::system_clock::to_time_t(now);
@@ -228,6 +225,10 @@ struct PricingArgvScan {
         if (product == nullptr) {
             throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
         }
+        const double contract_size = row.equity.contract_size;
+        numeraire::database::RequirePositiveContractSize(contract_size, row.leg.leg_id);
+        numeraire::database::RequirePositiveQuantity(row.leg.quantity, row.leg.leg_id);
+
         numeraire::core::PricingResult result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
 
         if (!result.Npv().has_value()) {
@@ -235,7 +236,8 @@ struct PricingArgvScan {
         }
 
         const double unit_npv = *result.Npv();
-        const double pv_total = PositionSign(row.leg.direction) * row.leg.quantity * unit_npv;
+        const double pv_total =
+                numeraire::database::LegPvTotal(row.leg.direction, row.leg.quantity, contract_size, unit_npv);
         total_npv += pv_total;
 
         if (mtm_repo == nullptr) {
@@ -336,7 +338,7 @@ void PrintUsage() {
         }
         arr = &t;
     } else {
-        throw numeraire::ValidationError("JSON must be [\"TRD_1\",...] or {\"trade_ids\":[\"TRD_1\",...]} : " +
+        throw numeraire::ValidationError("JSON mustale  be [\"TRD_1\",...] or {\"trade_ids\":[\"TRD_1\",...]} : " +
                                          path.string());
     }
 
