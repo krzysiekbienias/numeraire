@@ -2,6 +2,8 @@
 
 #include <ql/time/date.hpp>
 
+#include <string>
+
 namespace numeraire::schedule {
 
 /// Calendar date in the public API (Gregorian). Maps to `QuantLib::Date` for
@@ -14,6 +16,8 @@ struct Date {
 
 [[nodiscard]] QuantLib::Date ToQuantLibDate(const Date& date);
 [[nodiscard]] Date FromQuantLibDate(const QuantLib::Date& date);
+
+[[nodiscard]] Date ParseIsoDate(const std::string& raw);
 
 /// Year fraction between `start` and `end` on **Actual / 365 Fixed**, matching
 /// `QuantLib::Actual365Fixed`. Used for option horizons (pricing) and schedules;

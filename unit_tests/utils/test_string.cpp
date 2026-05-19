@@ -5,20 +5,20 @@
 namespace numeraire::utils {
 namespace {
 
-TEST(StringUtils, TrimAscii_NoChangeWhenClean) {
+TEST(StringUtils, TrimAsciiNoChangeWhenClean) {
     EXPECT_EQ(TrimAscii("2026-05-01"), "2026-05-01");
 }
 
-TEST(StringUtils, TrimAscii_StripsEdges) {
+TEST(StringUtils, TrimAsciiStripsEdges) {
     EXPECT_EQ(TrimAscii("  hello \t"), "hello");
     EXPECT_EQ(TrimAscii("\n2026-05-01\r"), "2026-05-01");
 }
 
-TEST(StringUtils, TrimAscii_AllWhitespaceBecomesEmpty) {
+TEST(StringUtils, TrimAsciiAllWhitespaceBecomesEmpty) {
     EXPECT_TRUE(TrimAscii("   ").empty());
 }
 
-TEST(StringUtils, TrimCopy_MatchesTrimAscii) {
+TEST(StringUtils, TrimCopyMatchesTrimAscii) {
     EXPECT_EQ(TrimCopy("  x  "), "x");
     EXPECT_EQ(TrimCopy(std::string_view{"  y  "}), "y");
 }

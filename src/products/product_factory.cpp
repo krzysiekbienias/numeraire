@@ -3,14 +3,14 @@
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
+#include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
+#include <numeraire/utils/string.hpp>
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
-#include <cstdio>
 #include <sstream>
 #include <string>
 
@@ -21,53 +21,20 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     kAssetOrNothing,
 };
 
-[[nodiscard]] std::string TrimCopy(std::string s) {
-    const auto not_space = [](const unsigned char ch) { return !std::isspace(ch); };
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
-    s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
-    return s;
-}
-
-[[nodiscard]] std::string ToLowerAscii(std::string s) {
-    for (char& ch : s) {
-        if (ch >= 'A' && ch <= 'Z') {
-            ch = static_cast<char>(ch - 'A' + 'a');
-        }
-    }
-    return s;
-}
-
 [[nodiscard]] std::string NormalizeInstrumentTypeKey(std::string t) {
-    t = ToLowerAscii(TrimCopy(std::move(t)));
+    t = numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(t));
     t.erase(std::remove_if(t.begin(), t.end(),
                            [](const unsigned char c) { return c == '_' || std::isspace(c) != 0; }),
             t.end());
     return t;
 }
 
-[[nodiscard]] numeraire::schedule::Date ParseIsoDate(const std::string& raw) {
-    const std::string s = TrimCopy(raw);
-    if (s.size() != 10U || s[4] != '-' || s[7] != '-') {
-        throw numeraire::ValidationError("expected ISO date YYYY-MM-DD, got: " + raw);
-    }
-    int year{};
-    int month{};
-    int day{};
-    const char* const p = s.c_str();
-    if (std::sscanf(p, "%d-%d-%d", &year, &month, &day) != 3) {
-        throw numeraire::ValidationError("invalid ISO date: " + raw);
-    }
-    if (month < 1 || month > 12 || day < 1 || day > 31) {
-        throw numeraire::ValidationError("date out of range: " + raw);
-    }
-    return numeraire::schedule::Date{.year = year, .month = month, .day = day};
-}
 
 [[nodiscard]] numeraire::OptionType ParseOptionSide(const std::optional<std::string>& side) {
     if (!side.has_value()) {
         throw numeraire::ValidationError("equity catalog product requires option_side (CALL/PUT)");
     }
-    const std::string k = ToLowerAscii(TrimCopy(*side));
+    const std::string k = numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(*side));
     if (k == "call") {
         return numeraire::OptionType::kCall;
     }
@@ -92,7 +59,7 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
 
 [[nodiscard]] EquityCatalogInstrumentKind ParseEquityInstrumentKindFromAttributesJson(
         const std::string& attributes_json) {
-    const std::string trimmed = TrimCopy(attributes_json);
+    const std::string trimmed = numeraire::utils::TrimCopy(attributes_json);
     if (trimmed.empty() || trimmed == "{}") {
         return EquityCatalogInstrumentKind::kVanilla;
     }
@@ -126,7 +93,7 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
 [[nodiscard]] EquityCatalogInstrumentKind ResolveEquityInstrumentKind(
         const std::optional<std::string>& catalog_type, const std::string& attributes_json) {
     if (catalog_type.has_value()) {
-        const std::string t = TrimCopy(*catalog_type);
+        const std::string t = numeraire::utils::TrimCopy(*catalog_type);
         if (!t.empty()) {
             return KindFromNormalizedInstrumentTypeKey(NormalizeInstrumentTypeKey(t));
         }
@@ -139,7 +106,7 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     if (!catalog_exercise.has_value()) {
         return numeraire::ExerciseStyle::kEuropean;
     }
-    const std::string k = ToLowerAscii(TrimCopy(*catalog_exercise));
+    const std::string k = numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(*catalog_exercise));
     if (k.empty() || k == "european") {
         return numeraire::ExerciseStyle::kEuropean;
     }
@@ -156,7 +123,7 @@ void EnsureMatchingProductIds(const std::string& a, const std::string& b) {
 }
 
 void EnsureEquityKind(const std::string& asset_kind) {
-    if (ToLowerAscii(TrimCopy(asset_kind)) != "equity") {
+    if (numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(asset_kind)) != "equity") {
         throw numeraire::ValidationError("ProductFactory::MakeFromEquityCatalog expects asset_kind EQUITY");
     }
 }
@@ -175,13 +142,13 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
             ResolveEquityInstrumentKind(product.catalog_instrument_type, product.attributes_json);
     const ExerciseStyle exercise = ResolveCatalogExerciseStyle(product.catalog_exercise_style);
 
-    if (!equity.expiry_date.has_value() || TrimCopy(*equity.expiry_date).empty()) {
+    if (!equity.expiry_date.has_value() || numeraire::utils::TrimCopy(*equity.expiry_date).empty()) {
         throw ValidationError("equity catalog requires expiry_date for this instrument");
     }
-    const schedule::Date expiry = ParseIsoDate(*equity.expiry_date);
+    const schedule::Date expiry = schedule::ParseIsoDate(*equity.expiry_date);
     const schedule::Date trade_date =
-            trade_header != nullptr && !TrimCopy(trade_header->trade_date).empty()
-                    ? ParseIsoDate(trade_header->trade_date)
+            trade_header != nullptr && !numeraire::utils::TrimCopy(trade_header->trade_date).empty()
+                    ? schedule::ParseIsoDate(trade_header->trade_date)
                     : expiry;
 
     const OptionType opt = ParseOptionSide(product.option_side);

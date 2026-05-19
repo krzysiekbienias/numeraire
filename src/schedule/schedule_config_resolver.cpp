@@ -2,6 +2,7 @@
 
 #include <numeraire/utils/config.hpp>
 #include <numeraire/utils/exception.hpp>
+#include <numeraire/utils/string.hpp>
 
 #include <string>
 #include <string_view>
@@ -15,24 +16,14 @@ constexpr std::string_view kDefaultDayCountPath = "schedule.default_day_count";
 constexpr std::string_view kDefaultConventionPath = "schedule.default_convention";
 constexpr std::string_view kDefaultRulePath = "schedule.default_rule";
 
-[[nodiscard]] std::string TrimCopy(std::string_view s) {
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
-        s.remove_prefix(1);
-    }
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
-        s.remove_suffix(1);
-    }
-    return std::string(s);
-}
-
 [[nodiscard]] bool HasOverride(const std::optional<std::string>& o) {
-    return o.has_value() && !TrimCopy(*o).empty();
+    return o.has_value() && !utils::TrimCopy(*o).empty();
 }
 
 [[nodiscard]] std::string EffectiveCalendarString(const TradeScheduleOverrides& overrides,
                                                   const utils::Config& config) {
     if (HasOverride(overrides.calendar_type)) {
-        return TrimCopy(*overrides.calendar_type);
+        return utils::TrimCopy(*overrides.calendar_type);
     }
     return config.RequireString(kDefaultCalendarPath);
 }
@@ -40,7 +31,7 @@ constexpr std::string_view kDefaultRulePath = "schedule.default_rule";
 [[nodiscard]] std::string EffectiveFrequencyString(const TradeScheduleOverrides& overrides,
                                                    const utils::Config& config) {
     if (HasOverride(overrides.frequency)) {
-        return TrimCopy(*overrides.frequency);
+        return utils::TrimCopy(*overrides.frequency);
     }
     return config.RequireString(kDefaultFrequencyPath);
 }
@@ -48,7 +39,7 @@ constexpr std::string_view kDefaultRulePath = "schedule.default_rule";
 [[nodiscard]] std::string EffectiveConventionString(const TradeScheduleOverrides& overrides,
                                                     const utils::Config& config) {
     if (HasOverride(overrides.date_convention)) {
-        return TrimCopy(*overrides.date_convention);
+        return utils::TrimCopy(*overrides.date_convention);
     }
     return config.RequireString(kDefaultConventionPath);
 }
@@ -56,7 +47,7 @@ constexpr std::string_view kDefaultRulePath = "schedule.default_rule";
 [[nodiscard]] std::string EffectiveRuleString(const TradeScheduleOverrides& overrides,
                                               const utils::Config& config) {
     if (HasOverride(overrides.generation_rule)) {
-        return TrimCopy(*overrides.generation_rule);
+        return utils::TrimCopy(*overrides.generation_rule);
     }
     return config.RequireString(kDefaultRulePath);
 }
@@ -64,7 +55,7 @@ constexpr std::string_view kDefaultRulePath = "schedule.default_rule";
 [[nodiscard]] std::string EffectiveDayCountString(const TradeScheduleOverrides& overrides,
                                                   const utils::Config& config) {
     if (HasOverride(overrides.day_count)) {
-        return TrimCopy(*overrides.day_count);
+        return utils::TrimCopy(*overrides.day_count);
     }
     return config.RequireString(kDefaultDayCountPath);
 }

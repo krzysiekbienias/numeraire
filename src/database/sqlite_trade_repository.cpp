@@ -1,6 +1,7 @@
 #include <numeraire/database/sqlite_trade_repository.hpp>
 
 #include <numeraire/utils/exception.hpp>
+#include <numeraire/utils/string.hpp>
 
 #include <SQLiteCpp/SQLiteCpp.h>
 
@@ -65,24 +66,8 @@ enum class CatalogCol : int {
     kStructuredParams = 26,
 };
 
-[[nodiscard]] std::string TrimCopy(std::string s) {
-    const auto not_space = [](const unsigned char ch) { return std::isspace(ch) == 0; };
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
-    s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
-    return s;
-}
-
-[[nodiscard]] std::string ToLowerAscii(std::string s) {
-    for (char& ch : s) {
-        if (ch >= 'A' && ch <= 'Z') {
-            ch = static_cast<char>(ch - 'A' + 'a');
-        }
-    }
-    return s;
-}
-
 [[nodiscard]] std::string NormalizeEnumKey(std::string s) {
-    s = ToLowerAscii(TrimCopy(std::move(s)));
+    s = utils::ToLowerAscii(utils::TrimCopy(s));
     s.erase(std::remove_if(s.begin(), s.end(),
                            [](const unsigned char c) {
                                return c == '/' || c == ' ' || c == '-' || c == '_';
@@ -104,7 +89,7 @@ enum class CatalogCol : int {
 }
 
 [[nodiscard]] SettlementType ParseSettlement(const std::string& raw) {
-    const std::string k = ToLowerAscii(TrimCopy(raw));
+    const std::string k = utils::ToLowerAscii(utils::TrimCopy(raw));
     if (k == "cash") {
         return SettlementType::kCash;
     }
@@ -155,7 +140,7 @@ enum class CatalogCol : int {
 }
 
 [[nodiscard]] PositionDirection ParseDirection(const std::string& raw) {
-    const std::string k = ToLowerAscii(TrimCopy(raw));
+    const std::string k = utils::ToLowerAscii(utils::TrimCopy(raw));
     if (k == "long") {
         return PositionDirection::kLong;
     }
@@ -220,7 +205,7 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kInstrumentType))) {
         row.product.catalog_instrument_type = std::nullopt;
     } else {
-        const std::string ti = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kInstrumentType)));
+        const std::string ti = utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kInstrumentType)));
         row.product.catalog_instrument_type =
                 ti.empty() ? std::nullopt : std::optional<std::string>(ti);
     }
@@ -228,7 +213,7 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
     if (ColumnIsNull(st, static_cast<int>(CatalogCol::kExerciseStyle))) {
         row.product.catalog_exercise_style = std::nullopt;
     } else {
-        const std::string xe = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kExerciseStyle)));
+        const std::string xe = utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kExerciseStyle)));
         row.product.catalog_exercise_style =
                 xe.empty() ? std::nullopt : std::optional<std::string>(xe);
     }
@@ -245,7 +230,7 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
     row.equity.product_id = pid;
     row.equity.asset_kind = ColumnText(st, static_cast<int>(CatalogCol::kAssetKind));
     row.equity.underlying_id = ColumnText(st, static_cast<int>(CatalogCol::kUnderlyingId));
-    row.equity.currency = TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCurrency)));
+    row.equity.currency = utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCurrency)));
     if (row.equity.currency.empty()) {
         row.equity.currency = "USD";
     }
