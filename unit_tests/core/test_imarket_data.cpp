@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <numeraire/core/imarket_data.hpp>
+#include <numeraire/schedule/date.hpp>
 
 #include <string>
 #include <unordered_map>
@@ -20,6 +21,12 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
     }
 
     void SetVol(const double value) { flat_vol_ = value; }
+
+    void SetValuationDate(const numeraire::schedule::Date& date) { valuation_date_ = date; }
+
+    [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override {
+        return valuation_date_;
+    }
 
     [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
         return spots_.at(std::string(underlying_id));
@@ -47,6 +54,7 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
     std::unordered_map<std::string, double> spots_;
     std::unordered_map<std::string, double> divs_;
     double flat_vol_{0.25};
+    numeraire::schedule::Date valuation_date_{.year = 2025, .month = 6, .day = 1};
 };
 
 }  // namespace

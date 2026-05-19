@@ -2,27 +2,33 @@
 
 #include <string_view>
 
+#include "numeraire/schedule/date.hpp"
+
 namespace numeraire::core {
 
 /// Read-only market snapshot for pricing. Implementations live outside `core`
-/// (e.g. static provider, DB, live feed). No QuantLib or schedule types on the
-/// surface so `core` headers stay free of those dependencies.
+/// (static provider, DB, live feed, …).
 ///
 /// Conventions (document for each concrete provider):
-/// — `RiskFreeRate`: continuous or simple; pricer + model must match.
-/// — `time_to_expiry_years`: year fraction in the same basis the pricer expects
-///   (often from `ScheduleGenerator::YearFraction` on the product horizon).
+/// — `ValuationDate`: calendar date for which spots and other inputs are valid
+///   (EOD as-of). Time to expiry in pricers is from `ValuationDate` to product
+///   `ExpiryDate()`, on Act/365 Fixed unless documented otherwise.
+/// — `RiskFreeRate`: continuous or simple; pricer and model must match.
+/// — `ImpliedVolatility(underlying, strike, T)`: flat or surface slice; `T` is
+///   year fraction in the same basis the pricer uses for that slice.
 class IMarketData {
-   protected:
+protected:
     IMarketData() = default;
 
-   public:
+public:
     virtual ~IMarketData() = default;
 
     IMarketData(const IMarketData&) = delete;
     IMarketData& operator=(const IMarketData&) = delete;
     IMarketData(IMarketData&&) = delete;
     IMarketData& operator=(IMarketData&&) = delete;
+
+    [[nodiscard]] virtual const schedule::Date& ValuationDate() const = 0;
 
     [[nodiscard]] virtual double Spot(std::string_view underlying_id) const = 0;
 
