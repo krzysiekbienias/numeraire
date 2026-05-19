@@ -5,6 +5,7 @@ add_library(numeraire_utils STATIC
         log_level.cpp
         logger.cpp
         quantlib_bridge.cpp
+        string.cpp
 )
 
 target_include_directories(numeraire_utils
