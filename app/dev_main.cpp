@@ -11,7 +11,6 @@
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
-#include <numeraire/schedule/date.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
@@ -23,11 +22,13 @@
 #include <numeraire/market_data_providers/polygon_option_contract_fetch.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/product_factory.hpp>
+#include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/config.hpp>
 #include <numeraire/utils/database_path.hpp>
 #include <numeraire/utils/env_loader.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <numeraire/utils/logger.hpp>
+#include <numeraire/utils/string.hpp>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -38,22 +39,22 @@
 
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
+using numeraire::database::LookupEquityDailyClose;
 using numeraire::database::SqliteTradeLegMtmRepository;
 using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
 using numeraire::database::TradeLegMtmEodRow;
-using numeraire::database::LookupEquityDailyClose;
-using numeraire::schedule::Act365FixedYearFraction;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
 using numeraire::market_data_providers::PrintIndexFetchUsageLines;
+using numeraire::market_data_providers::PrintOptionContractFetchUsageLines;
 using numeraire::market_data_providers::TryRunPolygonDailyEodFetch;
 using numeraire::market_data_providers::TryRunPolygonIndexDailyEodFetch;
-using numeraire::market_data_providers::PrintOptionContractFetchUsageLines;
 using numeraire::market_data_providers::TryRunPolygonOptionContractFetch;
 using numeraire::pricers::PricerFactory;
 using numeraire::products::ProductFactory;
+using numeraire::schedule::Act365FixedYearFraction;
 using numeraire::utils::Config;
 using numeraire::utils::EnvLoader;
 using numeraire::utils::Logger;
@@ -91,8 +92,7 @@ constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
     return static_cast<int>(v);
 }
 
-[[nodiscard]] bool EqualsAsciiIgnoreCase(const std::string_view a,
-                                         const std::string_view b) noexcept {
+[[nodiscard]] bool EqualsAsciiIgnoreCase(const std::string_view a, const std::string_view b) noexcept {
     if (a.size() != b.size()) {
         return false;
     }
@@ -108,14 +108,14 @@ constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
 
 struct DevMainMarketQuotesConfig {
     enum SpotSourceKind { kEnv, kDb };
+
     SpotSourceKind spot_source{kEnv};
     double env_fallback_spot{240.0};
     std::string as_of_iso;
     int equity_eod_adjusted{1};
 };
 
-[[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(
-        const std::optional<std::string>& cli_as_of) {
+[[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(const std::optional<std::string>& cli_as_of) {
     DevMainMarketQuotesConfig c;
     const char* const src_raw = std::getenv("NUMERAIRE_DEV_SPOT_SOURCE");
     if (src_raw != nullptr && src_raw[0] != '\0') {
@@ -125,9 +125,8 @@ struct DevMainMarketQuotesConfig {
         } else if (EqualsAsciiIgnoreCase(sv, "env")) {
             c.spot_source = DevMainMarketQuotesConfig::kEnv;
         } else {
-            throw numeraire::ValidationError(
-                    std::string{"NUMERAIRE_DEV_SPOT_SOURCE must be 'env' or 'db' (got: "} + src_raw +
-                    ")");
+            throw numeraire::ValidationError(std::string{"NUMERAIRE_DEV_SPOT_SOURCE must be 'env' or 'db' (got: "} +
+                                             src_raw + ")");
         }
     }
 
@@ -140,12 +139,9 @@ struct DevMainMarketQuotesConfig {
     const int adj_raw = EnvInt("NUMERAIRE_DEV_SPOT_ADJUSTED", 1);
     c.equity_eod_adjusted = (adj_raw != 0) ? 1 : 0;
 
-    if (c.spot_source == DevMainMarketQuotesConfig::kDb) {
-        if (c.as_of_iso.empty() || !LooksIsoDate(c.as_of_iso)) {
-            throw numeraire::ValidationError(
-                    "NUMERAIRE_DEV_SPOT_SOURCE=db requires a valuation date: pass "
-                    "`--as-of YYYY-MM-DD` or set NUMERAIRE_DEV_AS_OF.");
-        }
+    if (c.as_of_iso.empty() || !LooksIsoDate(c.as_of_iso)) {
+        throw numeraire::ValidationError(
+                "Pricing requires a valuation date: pass `--as-of YYYY-MM-DD` or set NUMERAIRE_DEV_AS_OF.");
     }
     return c;
 }
@@ -210,8 +206,7 @@ struct PricingArgvScan {
     return g.has_value() ? *g : 0.0;
 }
 
-[[nodiscard]] double DividendYieldForUnderlying(const MarketSnapshot& snap,
-                                                const std::string& underlying_id) {
+[[nodiscard]] double DividendYieldForUnderlying(const MarketSnapshot& snap, const std::string& underlying_id) {
     const auto it = snap.dividend_yields.find(underlying_id);
     if (it == snap.dividend_yields.end()) {
         return 0.0;
@@ -219,15 +214,14 @@ struct PricingArgvScan {
     return it->second;
 }
 
-[[nodiscard]] double BookNpvAndPersistMtmForBundle(
-        const TradeCatalogBundle& bundle,
-        const numeraire::core::IMarketData& mkt,
-        const MarketSnapshot& snap,
-        const numeraire::core::IPricer& pricer,
-        SqliteTradeLegMtmRepository* mtm_repo,
-        const DevMainMarketQuotesConfig& mq,
-        const std::string& batch_run_id,
-        const std::string& remarks) {
+[[nodiscard]] double BookNpvAndPersistMtmForBundle(const TradeCatalogBundle& bundle,
+                                                   const numeraire::core::IMarketData& mkt,
+                                                   const MarketSnapshot& snap,
+                                                   const numeraire::core::IPricer& pricer,
+                                                   SqliteTradeLegMtmRepository* mtm_repo,
+                                                   const DevMainMarketQuotesConfig& mq,
+                                                   const std::string& batch_run_id,
+                                                   const std::string& remarks) {
     double total_npv = 0.0;
     for (const auto& row : bundle.legs) {
         const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
@@ -250,8 +244,8 @@ struct PricingArgvScan {
 
         const std::string& underlying = row.equity.underlying_id;
         const double spot_used = mkt.Spot(underlying);
-        const double years_to_maturity =
-                Act365FixedYearFraction(product->TradeDate(), product->ExpiryDate());
+        
+        const double years_to_maturity = Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate());
 
         TradeLegMtmEodRow mtm{};
         mtm.as_of = mq.as_of_iso;
@@ -305,14 +299,13 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --fetch-option-contracts ... Ingest options reference into `option_contract` "
             "(see --help).\n"
-            "  dev_main [--as-of YYYY-MM-DD] <trade_id> | --all | --trades-json <path>   (flags may appear in "
+            "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (flags may appear in "
             "any order)\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade).\n"
-            "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close; "
-            "needs --as-of or NUMERAIRE_DEV_AS_OF). Rate/vol still from NUMERAIRE_DEV_RATE / "
-            "NUMERAIRE_DEV_VOL.\n"
-            "MTM persist: writes one row per leg into trade_leg_mtm_eod when --as-of or "
-            "NUMERAIRE_DEV_AS_OF is set (same batch_run_id for the whole run).\n"
+            "Pricing requires --as-of or NUMERAIRE_DEV_AS_OF (valuation date for T and MTM).\n"
+            "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
+            "Rate/vol from NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL.\n"
+            "MTM persist: writes one row per leg into trade_leg_mtm_eod (same batch_run_id for the whole run).\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
     PrintFetchUsageLines();
@@ -378,10 +371,9 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
 
             if (mq.spot_source == DevMainMarketQuotesConfig::kEnv) {
                 snap.spots[u] = mq.env_fallback_spot;
-                Logger::NumInfo(
-                        "Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
-                        u,
-                        mq.env_fallback_spot);
+                Logger::NumInfo("Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
+                                u,
+                                mq.env_fallback_spot);
                 continue;
             }
 
@@ -394,12 +386,11 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
                         " — ingest daily bars before pricing with NUMERAIRE_DEV_SPOT_SOURCE=db.");
             }
             snap.spots[u] = *close;
-            Logger::NumInfo(
-                    "Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
-                    u,
-                    *close,
-                    mq.as_of_iso,
-                    mq.equity_eod_adjusted);
+            Logger::NumInfo("Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
+                            u,
+                            *close,
+                            mq.as_of_iso,
+                            mq.equity_eod_adjusted);
         }
     }
 }
@@ -440,6 +431,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     }
 
     MarketSnapshot snap;
+    snap.valuation_date = numeraire::schedule::ParseIsoDate(mq.as_of_iso);
     snap.risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
     snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
     const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
@@ -447,13 +439,12 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     FillUnderlyingSpotsAcrossBundles(snap, bundles, db_path, mq);
     FillDividendYieldsAcrossBundles(snap, bundles, q);
 
-    Logger::NumInfo(
-            "Quotes: risk_free_rate={} (env) flat_iv={} (env) dividends={} (env); spot_source={} as_of={}.",
-            snap.risk_free_rate,
-            snap.flat_implied_volatility,
-            q,
-            mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
-            mq.spot_source == DevMainMarketQuotesConfig::kDb ? mq.as_of_iso : std::string{"n/a"});
+    Logger::NumInfo("Quotes: risk_free_rate={} (env) flat_iv={} (env) dividends={} (env); spot_source={} as_of={}.",
+                    snap.risk_free_rate,
+                    snap.flat_implied_volatility,
+                    q,
+                    mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
+                    mq.spot_source == DevMainMarketQuotesConfig::kDb ? mq.as_of_iso : std::string{"n/a"});
 
     const MarketSnapshot snap_for_mtm = snap;
     StaticMarketDataProvider market(std::move(snap));
