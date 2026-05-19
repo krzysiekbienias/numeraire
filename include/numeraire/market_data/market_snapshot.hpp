@@ -1,5 +1,6 @@
 #pragma once
 
+#include <numeraire/schedule/date.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -12,6 +13,7 @@ namespace numeraire::market_data {
 /// for every \((K,T)\) slice. Finer structure (surfaces, curves) can extend
 /// this type later without changing `IMarketData`.
 struct MarketSnapshot {
+    schedule::Date valuation_date{};  // as_of
     std::unordered_map<std::string, double> spots;
     double risk_free_rate{0.0};
     std::unordered_map<std::string, double> dividend_yields;
