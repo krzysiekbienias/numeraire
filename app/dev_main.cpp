@@ -244,7 +244,7 @@ struct PricingArgvScan {
 
         const std::string& underlying = row.equity.underlying_id;
         const double spot_used = mkt.Spot(underlying);
-        
+
         const double years_to_maturity = Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate());
 
         TradeLegMtmEodRow mtm{};
@@ -364,7 +364,7 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
     for (const TradeCatalogBundle& bundle : bundles) {
         for (const auto& row : bundle.legs) {
             const std::string& u = row.equity.underlying_id;
-            if (seen.count(u) != 0u) {
+            if (seen.contains(u)) {
                 continue;
             }
             seen.insert(u);
@@ -404,7 +404,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     for (const TradeCatalogBundle& bundle : bundles) {
         for (const auto& row : bundle.legs) {
             const std::string& u = row.equity.underlying_id;
-            if (snap.dividend_yields.find(u) == snap.dividend_yields.end()) {
+            if (!snap.dividend_yields.contains(u)) {
                 snap.dividend_yields[u] = dividend_yield;
             }
         }
@@ -525,7 +525,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     }
 
     if (tok[0] == "--all") {
-        if (tok.size() != 1u) {
+        if (tok.size() != 1U) {
             Logger::NumError("`--all` must be the only pricing argument.");
             PrintUsage();
             return 1;
@@ -534,11 +534,11 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     }
 
     if (tok[0] == "--trades-json") {
-        if (tok.size() < 2u || tok[1].empty()) {
+        if (tok.size() < 2U || tok[1].empty()) {
             Logger::NumError("--trades-json requires a file path.");
             return 1;
         }
-        if (tok.size() > 2u) {
+        if (tok.size() > 2U) {
             Logger::NumError("--trades-json expects exactly one JSON path.");
             return 1;
         }
@@ -551,7 +551,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         return 1;
     }
 
-    if (tok.size() != 1u) {
+    if (tok.size() != 1U) {
         Logger::NumError("Expected exactly one trade_id positional argument.");
         PrintUsage();
         return 1;
