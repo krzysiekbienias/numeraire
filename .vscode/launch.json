@@ -14,7 +14,35 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.buildDirectory}/dev_main",
-      "args": ["${input:devMainTradeId}"],
+      "args": [
+        "${input:devMainTradeId}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
+        {
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "Run: dev_main — deploy in mtm (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/dev_main",
+      "args": [
+        "${input:devMainTradeId}",
+        "--as-of",
+        "${input:devMainAsOf}"
+      ],
+      "env": {
+        "NUMERAIRE_DEV_SPOT_SOURCE": "db",
+        "NUMERAIRE_DEV_RATE": "0.03",
+        "NUMERAIRE_DEV_VOL": "0.2"
+      },
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
@@ -31,7 +59,9 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.buildDirectory}/dev_main",
-      "args": ["--all"],
+      "args": [
+        "--all"
+      ],
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
@@ -68,7 +98,9 @@
       "type": "lldb",
       "request": "launch",
       "program": "${command:cmake.buildDirectory}/dev_main",
-      "args": ["${input:devMainTradeId}"],
+      "args": [
+        "${input:devMainTradeId}"
+      ],
       "cwd": "${workspaceFolder}"
     },
     {
@@ -76,7 +108,9 @@
       "type": "lldb",
       "request": "launch",
       "program": "${command:cmake.buildDirectory}/dev_main",
-      "args": ["--all"],
+      "args": [
+        "--all"
+      ],
       "cwd": "${workspaceFolder}"
     },
     {
@@ -103,7 +137,9 @@
       "type": "lldb",
       "request": "launch",
       "program": "${command:cmake.buildDirectory}/test_environment",
-      "args": ["--gtest_filter=${input:gtestFilter}"],
+      "args": [
+        "--gtest_filter=${input:gtestFilter}"
+      ],
       "cwd": "${workspaceFolder}"
     }
   ],
@@ -119,6 +155,12 @@
       "type": "promptString",
       "description": "Google Test filter (e.g. Logger.*)",
       "default": "*"
-    }
+    },
+    {
+      "id": "devMainAsOf",
+      "type": "promptString",
+      "description": "Valuation date YYYY-MM-DD (--as-of)",
+      "default": "2026-05-01"
+    },
   ]
 }
