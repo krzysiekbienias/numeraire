@@ -33,6 +33,9 @@ class SqliteTradeLegBookingRepository {
     void SetTradeBookingTimestamp(std::string_view trade_id,
                                   const std::optional<std::string>& booking_timestamp = std::nullopt) const;
 
+    /// Updates `trades.status` (e.g. `PENDING` → `LIVE` after successful booking).
+    void SetTradeStatus(std::string_view trade_id, std::string_view status) const;
+
     /// All leg updates and optional header timestamp in one transaction.
     /// Leg updates use `WHERE leg_id = ? AND trade_id = ?` so legs must belong to `trade_id`.
     void ApplyTradeBooking(std::string_view trade_id,

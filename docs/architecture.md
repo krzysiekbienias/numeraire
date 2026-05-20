@@ -463,7 +463,7 @@ Three **separate** steps touch the book. They reuse the same pricer stack (`Prod
 | Step | Tool | Valuation date (`IMarketData::ValuationDate()`) | Writes |
 |------|------|--------------------------------------------------|--------|
 | **1. Structural book** | [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) | — | `products`, `products_equity`, `trades`, `trade_legs`; `execution_price` null → **0**; `commission` from JSON or **0** |
-| **2. Booking price** | `dev_main --price-booking` *(planned)* | **`trades.trade_date`** per trade | `trade_legs.execution_price` (= model **pv_unit** at trade date); optional `trades.booking_timestamp` |
+| **2. Booking price** | `dev_main --price-booking` | **`trades.trade_date`** per trade (invariant: `ValuationDate` = `trade_date`; no `--as-of`) | `trade_legs.execution_price`; `PENDING` → `LIVE` when all legs `execution_price > 0` |
 | **3. EOD MTM** | `dev_main --as-of` *(shipped)* | **CLI `--as-of`** / `NUMERAIRE_DEV_AS_OF` | `trade_leg_mtm_eod` + archive only |
 
 **`Product::TradeDate()`** is set from `trades.trade_date` when the catalog bundle is built ([`ProductFactory`](../src/products/product_factory.cpp)); it is **metadata** on the instrument. **Time to expiry** for both booking and MTM uses **`ValuationDate()` → expiry** (Act/365 Fixed), not `TradeDate()`.
@@ -472,7 +472,7 @@ Three **separate** steps touch the book. They reuse the same pricer stack (`Prod
 flowchart LR
     JSON[import_trade_bundle.py] --> BOOK[(trades + trade_legs)]
     EOD[Polygon / equity_daily_eod] --> BOOK
-    BOOK --> PB["dev_main --price-booking planned"]
+    BOOK --> PB["dev_main --price-booking"]
     PB -->|UPDATE execution_price| BOOK
     BOOK --> MTM["dev_main --as-of shipped"]
     MTM --> MTM_TBL[(trade_leg_mtm_eod)]
@@ -480,9 +480,9 @@ flowchart LR
 
 **Variant B (dev book):** MTM on `trade_date` the same day as booking is allowed after step 2; re-running MTM on later `--as-of` dates does not require re-booking.
 
-### Booking price (`--price-booking`) *(planned)*
+### Booking price (`--price-booking`) *(shipped)*
 
-> **Status:** Spec + schema + **[`SqliteTradeLegBookingRepository`](../include/numeraire/database/sqlite_trade_leg_booking_repository.hpp)** (DB writes) shipped; **`dev_main --price-booking`** CLI not implemented yet. See [`development.md`](development.md) § *Booking price*.
+> **Status:** [`SqliteTradeLegBookingRepository`](../include/numeraire/database/sqlite_trade_leg_booking_repository.hpp), [`trade_booking_rules`](../include/numeraire/database/trade_booking_rules.hpp), and **`dev_main --price-booking`** are implemented. MTM rejects non-`LIVE` or unbooked legs.
 
 When shipped, booking answers: *“What was the model premium per share at trade date?”* That value is stored as **`trade_legs.execution_price`** and is **not** mixed with commission.
 
@@ -496,8 +496,10 @@ When shipped, booking answers: *“What was the model premium per share at trade
 | **Market inputs** | Same env as MTM: `NUMERAIRE_DEV_SPOT_SOURCE`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, `NUMERAIRE_DEV_DIV_YIELD`. With **`SPOT_SOURCE=db`**, spot is `equity_daily_eod.close` on **`trade_date`** (ingest required for that session). |
 | **Greeks / MTM tables** | Booking run **does not** write `trade_leg_mtm_eod` or greeks to the book row. |
 | **`booking_timestamp`** | Optional: set to `datetime('now')` on `trades` when booking completes; otherwise leave as imported. |
-| **Re-run** | TBD in implementation: overwrite `execution_price` with log vs fail if already &gt; 0. Document the chosen rule in the PR. |
-| **CLI mutual exclusion** | `--price-booking` and `--as-of` must not be combined in one process invocation. |
+| **Trade status** | Import with **`PENDING`**. Booking allowed only for **`PENDING`**. After booking, if every leg has **`execution_price > 0`**, status → **`LIVE`**; otherwise stays **`PENDING`**. |
+| **MTM gate** | **`LIVE`** + every leg **`execution_price > 0`** + MTM `as_of` ≥ `trade_date`. |
+| **Re-run** | Booking on non-`PENDING` trades fails (`ValidationError`). Re-book after manual status reset if needed. |
+| **CLI mutual exclusion** | `--price-booking` and `--as-of` cannot be combined (enforced in argv scan). |
 
 **Planned argv** (mirror MTM trade selection):
 

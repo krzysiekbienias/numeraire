@@ -84,7 +84,7 @@ To drive dates only from rows that exist in the market table (no weekend gaps), 
 
 | Item | Detail |
 |------|--------|
-| **Status** | **Not shipped** — docs + schema only; implement in `dev_main` + SQLite `UPDATE` (see checklist below). |
+| **Status** | **Shipped** — `dev_main --price-booking`, DB writes, status rules, MTM gates (see checklist). |
 | **Spec** | [`architecture.md`](architecture.md) § *Booking price (`--price-booking`)* and § *Trade lifecycle* |
 | **Import today** | [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) — `execution_price` null → `0`; commission from JSON |
 | **MTM today** | `dev_main --as-of` — reads legs; **ignores** `execution_price` / `commission` for pricing |
@@ -98,7 +98,7 @@ python3 scripts/import_trade_bundle.py trades/incoming/my_trade.json --db db.sql
 # 2 — EOD on trade_date for each underlying (when SPOT_SOURCE=db)
 ./build/dev_main --fetch-eod-daily --from 2026-06-01 --to 2026-06-01 --ticker AAPL
 
-# 3 — booking (planned)
+# 3 — booking (trade must be PENDING in DB)
 ./build/dev_main --price-booking TRD_10004
 
 # 4 — MTM (shipped; as_of >= trade_date)
@@ -107,12 +107,13 @@ NUMERAIRE_DEV_SPOT_SOURCE=db ./build/dev_main --as-of 2026-06-01 TRD_10004
 
 ### Fix-level acceptance criteria (for the implementation PR)
 
-1. **Given** a LIVE trade with valid `trade_date`, legs with `execution_price = 0`, and market data available on `trade_date` (env spot or `equity_daily_eod` when `NUMERAIRE_DEV_SPOT_SOURCE=db`).
+1. **Given** a **PENDING** trade with valid `trade_date`, legs with `execution_price = 0`, and market data available on `trade_date` (env spot or `equity_daily_eod` when `NUMERAIRE_DEV_SPOT_SOURCE=db`).
 2. **When** `dev_main --price-booking <trade_id>` runs with fixed `NUMERAIRE_DEV_RATE` / `VOL` / `DIV_YIELD`.
 3. **Then** for each leg: `trade_legs.execution_price` equals the **pv_unit** that the same pricer would produce if `ValuationDate = trade_date` (within float tolerance vs a unit test seed).
 4. **And** `trade_leg_mtm_eod` row count unchanged by the booking run.
 5. **And** `commission` columns unchanged.
 6. **And** combining `--price-booking` with `--as-of` in one argv fails fast with `ValidationError`.
+7. **And** when all booked `execution_price > 0`, `trades.status` becomes **`LIVE`**; MTM on that trade then succeeds with `--as-of` ≥ `trade_date`.
 
 **SQL verify after booking:**
 
@@ -130,10 +131,10 @@ WHERE t.trade_id = 'TRD_10004';
 | # | Deliverable | Status |
 |---|-------------|--------|
 | 1 | `UPDATE trade_legs SET execution_price = ?` (+ optional `trades.booking_timestamp`) — [`SqliteTradeLegBookingRepository`](../include/numeraire/database/sqlite_trade_leg_booking_repository.hpp) | **Shipped** |
-| 2 | Shared leg-pricing helper with MTM path (`valuation_date` parameterised) | Planned |
-| 3 | `dev_main` argv: `--price-booking` + `<trade_id>` / `--all` / `--trades-json`; mutual exclusion with `--as-of` | Planned |
-| 4 | Unit/integration tests with in-memory SQLite (no dependency on developer `TRD_*` rows) | **Partial** — booking repo UT shipped; E2E booking pricer UT with #2–3 |
-| 5 | [`README.md`](../README.md) § *dev_main* — add row to capabilities table when CLI ships | Planned |
+| 2 | Booking pricer path (`ValuationDate = trade_date`) in `dev_main` | **Shipped** |
+| 3 | `dev_main --price-booking` + mutual exclusion with `--as-of` | **Shipped** |
+| 4 | Rules + repo UT (`trade_booking_rules`, booking repository) | **Shipped** |
+| 5 | [`README.md`](../README.md) § *dev_main* — booking row in capabilities table | Planned |
 
 **Explicitly out of scope for booking v1:** `pnl_daily` / `pnl_inception`, IV from Polygon, MC engine, commission recalculation, Hetzner cron.
 
@@ -165,7 +166,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 | **7** | Trade persistence (`TradeDto`, `ITradeRepository`, …) | **Shipped as SQLite-first** — reference DDL [`sql/schema_v1.sql`](../sql/schema_v1.sql); [`SqliteTradeRepository`](../include/numeraire/database/sqlite_trade_repository.hpp); bootstrap from [`sqlite_schema`](../include/numeraire/database/sqlite_schema.hpp); bundle import [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py). *(An in-memory repository was discussed early on; the runnable path is SQLite.)* |
 | **8** | `market_data`: snapshots + providers | **Partially shipped** — [`MarketSnapshot`](../include/numeraire/market_data/market_snapshot.hpp), [`StaticMarketDataProvider`](../include/numeraire/market_data/static_market_data_provider.hpp). **Persisted Polygon daily bars**: [`market_data_providers`](../src/market_data_providers/) → `equity_daily_eod` / `index_daily_eod` / `option_contract`, [`dev_main`](../app/dev_main.cpp) ingest flags. **Spot-on-date for pricing**: `NUMERAIRE_DEV_SPOT_SOURCE=db` reads `equity_daily_eod.close` into the snapshot (**`NUMERAIRE_DEV_RATE` / `VOL` still env**). **Still open:** dedicated `SqliteMarketDataProvider` implementing `IMarketData` beyond this dev shim, vol/rate surfaces from DB. |
 | **9** | Polish, CI, tightening | **Ongoing** — incremental |
-| **—** | **Booking price** (`--price-booking`) | **Planned** — see § *Booking price* above; persists `execution_price` on `trade_date` |
+| **—** | **Booking price** (`--price-booking`) | **Shipped** — see § *Booking price* above |
 
 ### SQLite — reference DDL (book, market, catalog, MTM placeholder)
 

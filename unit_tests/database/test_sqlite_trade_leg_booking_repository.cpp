@@ -184,6 +184,23 @@ TEST(SqliteTradeLegBookingRepositoryTest, ApplyTradeBookingWrongTradeRollsBack) 
     fs::remove(path);
 }
 
+TEST(SqliteTradeLegBookingRepositoryTest, SetTradeStatus) {
+    std::string const path = TempSqlitePath();
+    SeedBookingFixtureDb(path);
+
+    numeraire::database::SqliteTradeLegBookingRepository repo(path);
+    repo.SetTradeStatus("TRD_001", "PENDING");
+    EXPECT_EQ(ReadBookingTimestamp(path, "TRD_001"), "");
+
+    SQLite::Database db(path, SQLite::OPEN_READONLY);
+    SQLite::Statement q(db, "SELECT status FROM trades WHERE trade_id = ?");
+    q.bind(1, "TRD_001");
+    ASSERT_TRUE(q.executeStep());
+    EXPECT_EQ(q.getColumn(0).getText(), std::string{"PENDING"});
+
+    fs::remove(path);
+}
+
 TEST(SqliteTradeLegBookingRepositoryTest, CommissionUnchanged) {
     std::string const path = TempSqlitePath();
     SeedBookingFixtureDb(path);

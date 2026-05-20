@@ -11,4 +11,4 @@ Only `trade_bundle.sample.json` is tracked; other `*.json` files in this directo
 
 Fields filled later by booking pricer: `execution_price` (null → `0`). Optional: `commission_per_contract` (× `quantity`) or `commission`. `updated_at` → `datetime('now')` when omitted.
 
-**After import:** run `dev_main --price-booking <trade_id>` *(planned)* then MTM with `--as-of`. Conventions and workflow: [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle* / *Booking price*; checklist: [`docs/development.md`](../../docs/development.md) § *Booking price*.
+**Pipeline:** import with `status: "PENDING"` → `dev_main --price-booking <trade_id>` (sets `execution_price` on `trade_date`; promotes to `LIVE` when all legs `execution_price > 0`) → `dev_main --as-of …` MTM (requires `LIVE` + booked legs). See [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle*.

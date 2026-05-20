@@ -31,7 +31,7 @@
     "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS",
     "trade_date": null,
     "_trade_date_comment": "required — YYYY-MM-DD",
-    "status": "LIVE",
+    "status": "PENDING",
     "legs": [
       {
         "_leg_id_comment": "optional — defaults to {trade_id}_L1, _L2, …",
