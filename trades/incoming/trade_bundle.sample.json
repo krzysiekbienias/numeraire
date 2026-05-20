@@ -27,11 +27,11 @@
     "trade_id": "TRD_SAMPLE_001",
     "portfolio_id": "BOOK_1",
     "strategy_type": "VANILLA_OPTION",
-    "booking_timestamp": null,
+    "booking_timestamp": "2026-05-01 07:01:12",
     "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS",
     "trade_date": null,
     "_trade_date_comment": "required — YYYY-MM-DD",
-    "status": "PENDING",
+    "_status_comment": "optional — import always writes PENDING until --price-booking",
     "legs": [
       {
         "_leg_id_comment": "optional — defaults to {trade_id}_L1, _L2, …",
@@ -40,8 +40,10 @@
         "quantity": 100,
         "execution_price": null,
         "_execution_price_comment": "null → 0 until booking pricer on trade_date",
+        "commission_per_contract": 0.25,
+        "_commission_per_contract_comment": "USD per contract → DB commission = rate × quantity (here 0.25 × 100 = 25)",
         "commission": null,
-        "_commission_per_contract_comment": "optional — e.g. 0.75 → commission = rate × quantity"
+        "_commission_comment": "optional flat total — used only if commission_per_contract omitted"
       }
     ]
   }

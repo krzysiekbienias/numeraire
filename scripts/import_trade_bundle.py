@@ -37,7 +37,6 @@ REQUIRED_TRADE_KEYS = (
     "trade_id",
     "portfolio_id",
     "strategy_type",
-    "status",
     "legs",
 )
 
@@ -163,7 +162,24 @@ def normalize_bundle(
             leg["leg_id"] = leg_id
             notes.append(f"{label}.leg_id ← {leg_id!r}")
 
+    _resolve_trade_status_for_import(trade, notes)
+
     return notes
+
+
+def _resolve_trade_status_for_import(trade: dict[str, Any], notes: list[str]) -> None:
+    """New trades are always PENDING until dev_main --price-booking promotes to LIVE."""
+    raw = trade.get("status", None)
+    if not _is_blank(raw):
+        requested = str(raw).strip().upper()
+        if requested != "PENDING":
+            notes.append(
+                f"trade.status ← PENDING (import forces PENDING; JSON had {raw!r}; "
+                "LIVE only after --price-booking)"
+            )
+    elif "status" not in trade:
+        notes.append("trade.status ← PENDING (default for new import)")
+    trade["status"] = "PENDING"
 
 
 def _collect_json_paths(json_paths: list[Path], incoming_dir: Path | None) -> list[Path]:

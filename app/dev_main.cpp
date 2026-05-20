@@ -9,8 +9,11 @@
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
 #include <numeraire/database/leg_pv.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
+#include <numeraire/database/sqlite_trade_leg_booking_repository.hpp>
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
+#include <numeraire/database/trade_booking_rules.hpp>
+#include <numeraire/database/trade_leg_booking_update.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
@@ -41,10 +44,13 @@
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
 using numeraire::database::LookupEquityDailyClose;
+using numeraire::database::SqliteTradeLegBookingRepository;
 using numeraire::database::SqliteTradeLegMtmRepository;
 using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
+using numeraire::database::TradeLegBookingUpdate;
 using numeraire::database::TradeLegMtmEodRow;
+using numeraire::schedule::ParseIsoDate;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -116,7 +122,8 @@ struct DevMainMarketQuotesConfig {
     int equity_eod_adjusted{1};
 };
 
-[[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(const std::optional<std::string>& cli_as_of) {
+[[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(const std::optional<std::string>& cli_as_of,
+                                                                      const bool require_valuation_date) {
     DevMainMarketQuotesConfig c;
     const char* const src_raw = std::getenv("NUMERAIRE_DEV_SPOT_SOURCE");
     if (src_raw != nullptr && src_raw[0] != '\0') {
@@ -134,36 +141,55 @@ struct DevMainMarketQuotesConfig {
     c.env_fallback_spot = EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
     if (cli_as_of.has_value()) {
         c.as_of_iso = *cli_as_of;
-    } else if (const char* ao = std::getenv("NUMERAIRE_DEV_AS_OF"); ao != nullptr && ao[0] != '\0') {
-        c.as_of_iso = ao;
+    } else if (require_valuation_date) {
+        if (const char* ao = std::getenv("NUMERAIRE_DEV_AS_OF"); ao != nullptr && ao[0] != '\0') {
+            c.as_of_iso = ao;
+        }
     }
     const int adj_raw = EnvInt("NUMERAIRE_DEV_SPOT_ADJUSTED", 1);
     c.equity_eod_adjusted = (adj_raw != 0) ? 1 : 0;
 
-    if (c.as_of_iso.empty() || !LooksIsoDate(c.as_of_iso)) {
+    if (require_valuation_date && (c.as_of_iso.empty() || !LooksIsoDate(c.as_of_iso))) {
         throw numeraire::ValidationError(
-                "Pricing requires a valuation date: pass `--as-of YYYY-MM-DD` or set NUMERAIRE_DEV_AS_OF.");
+                "MTM pricing requires a valuation date: pass `--as-of YYYY-MM-DD` or set NUMERAIRE_DEV_AS_OF.");
     }
     return c;
 }
 
 struct PricingArgvScan {
     std::optional<std::string> as_of;
+    bool price_booking{false};
     std::vector<std::string> positional;
 };
 
-/// Strips `--as-of YYYY-MM-DD` pairs anywhere in argv so remaining tokens follow the legacy layout.
+/// Strips `--as-of` / `--price-booking` so remaining tokens follow the legacy layout.
 [[nodiscard]] PricingArgvScan ScanPricingArgv(const int argc, char** argv) {
     PricingArgvScan out;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--as-of") == 0) {
+            if (out.price_booking) {
+                throw numeraire::ValidationError("--as-of cannot be used with --price-booking.");
+            }
             if (i + 1 >= argc || argv[i + 1] == nullptr || argv[i + 1][0] == '\0') {
                 throw numeraire::ValidationError("--as-of requires YYYY-MM-DD.");
             }
             out.as_of = std::string(argv[++i]);
             continue;
         }
+        if (std::strcmp(argv[i], "--price-booking") == 0) {
+            if (out.as_of.has_value()) {
+                throw numeraire::ValidationError("--price-booking cannot be used with --as-of.");
+            }
+            if (out.price_booking) {
+                throw numeraire::ValidationError("--price-booking specified more than once.");
+            }
+            out.price_booking = true;
+            continue;
+        }
         out.positional.emplace_back(argv[i]);
+    }
+    if (out.price_booking && out.as_of.has_value()) {
+        throw numeraire::ValidationError("--price-booking cannot be used with --as-of.");
     }
     return out;
 }
@@ -316,10 +342,12 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --fetch-option-contracts ... Ingest options reference into `option_contract` "
             "(see --help).\n"
-            "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (flags may appear in "
-            "any order)\n"
-            "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade).\n"
-            "Pricing requires --as-of or NUMERAIRE_DEV_AS_OF (valuation date for T and MTM).\n"
+            "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (MTM; flags in any order)\n"
+            "  dev_main --price-booking <trade_id> | --all | --trades-json <path>   (book PENDING trades on "
+            "trade_date)\n"
+            "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade, MTM mode).\n"
+            "MTM requires --as-of or NUMERAIRE_DEV_AS_OF. Booking forbids --as-of; ValuationDate = trade_date.\n"
+            "Booking: status PENDING → LIVE when every leg execution_price > 0. MTM requires LIVE + booked legs.\n"
             "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
             "Rate/vol from NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL.\n"
             "MTM persist: writes one row per leg into trade_leg_mtm_eod (same batch_run_id for the whole run).\n"
@@ -431,7 +459,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
 [[nodiscard]] int RunWithTradeIds(const SqliteTradeRepository& repo,
                                   const std::filesystem::path& db_path,
                                   std::vector<std::string> trade_ids,
-                                  const DevMainMarketQuotesConfig& mq) {
+                                  DevMainMarketQuotesConfig mq) {
     if (trade_ids.empty()) {
         Logger::NumError("No trades to price (empty list).");
         return 1;
@@ -445,6 +473,9 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
             Logger::NumError("Trade {} has no legs in database.", tid);
             return 1;
         }
+        numeraire::database::RequireTradeLiveForMtm(bundles.back().trade);
+        numeraire::database::RequireAllLegsBookedForMtm(bundles.back());
+        numeraire::database::RequireMtmAsOfNotBeforeTradeDate(mq.as_of_iso, bundles.back().trade);
     }
 
     MarketSnapshot snap;
@@ -504,6 +535,105 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     return 0;
 }
 
+[[nodiscard]] std::vector<TradeLegBookingUpdate> PriceBundleForBooking(const TradeCatalogBundle& bundle,
+                                                                       const numeraire::core::IMarketData& mkt,
+                                                                       const numeraire::core::IPricer& pricer) {
+    numeraire::database::RequireValuationDateEqualsTradeDate(mkt.ValuationDate(), bundle.trade);
+
+    std::vector<TradeLegBookingUpdate> updates;
+    updates.reserve(bundle.legs.size());
+
+    for (const auto& row : bundle.legs) {
+        const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
+        if (product == nullptr) {
+            throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
+        }
+        numeraire::database::RequirePositiveContractSize(row.equity.contract_size, row.leg.leg_id);
+        numeraire::database::RequirePositiveQuantity(row.leg.quantity, row.leg.leg_id);
+
+        const numeraire::core::PricingResult result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
+        if (!result.Npv().has_value()) {
+            throw numeraire::PersistenceError("Pricer returned no NPV for leg " + row.leg.leg_id);
+        }
+
+        const double unit_npv = *result.Npv();
+        updates.push_back(TradeLegBookingUpdate{.leg_id = row.leg.leg_id, .execution_price = unit_npv});
+
+        Logger::NumInfo(
+                "Booking priced leg_id={} trade_date valuation pv_unit={} (ValuationDate equals trade_date).",
+                row.leg.leg_id,
+                unit_npv);
+    }
+    return updates;
+}
+
+[[nodiscard]] int RunBookingWithTradeIds(const SqliteTradeRepository& repo,
+                                           const std::filesystem::path& db_path,
+                                           std::vector<std::string> trade_ids,
+                                           DevMainMarketQuotesConfig mq) {
+    if (trade_ids.empty()) {
+        Logger::NumError("No trades to book (empty list).");
+        return 1;
+    }
+
+    SqliteTradeLegBookingRepository booking_repo(db_path.string());
+    auto pricer = PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
+
+    for (const std::string& tid : trade_ids) {
+        TradeCatalogBundle bundle = repo.GetCatalogForTrade(tid);
+        if (bundle.legs.empty()) {
+            Logger::NumError("Trade {} has no legs in database.", tid);
+            return 1;
+        }
+
+        numeraire::database::RequireTradePendingForBooking(bundle.trade);
+        mq.as_of_iso = numeraire::database::RequireTradeDateIso(bundle.trade);
+
+        MarketSnapshot snap;
+        snap.valuation_date = ParseIsoDate(mq.as_of_iso);
+        numeraire::database::RequireValuationDateEqualsTradeDate(snap.valuation_date, bundle.trade);
+        snap.risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
+        snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
+        const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
+
+        FillUnderlyingSpotsAcrossBundles(snap, {bundle}, db_path, mq);
+        FillDividendYieldsAcrossBundles(snap, {bundle}, q);
+
+        Logger::NumInfo(
+                "Booking quotes trade_id={} trade_date={} spot_source={} risk_free_rate={} flat_iv={}.",
+                tid,
+                mq.as_of_iso,
+                mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
+                snap.risk_free_rate,
+                snap.flat_implied_volatility);
+
+        StaticMarketDataProvider market(std::move(snap));
+        const auto mkt_handle = market.CreateMarketData();
+
+        const std::vector<TradeLegBookingUpdate> updates = PriceBundleForBooking(bundle, *mkt_handle, *pricer);
+        booking_repo.ApplyTradeBooking(tid, updates, std::nullopt);
+
+        bool all_positive = true;
+        for (const TradeLegBookingUpdate& u : updates) {
+            if (u.execution_price <= 0.0) {
+                all_positive = false;
+                break;
+            }
+        }
+        if (all_positive) {
+            booking_repo.SetTradeStatus(tid, std::string{numeraire::database::kTradeStatusLive});
+            Logger::NumInfo("Trade {} promoted to LIVE (all legs execution_price > 0).", tid);
+        } else {
+            Logger::NumInfo(
+                    "Trade {} remains PENDING (at least one leg execution_price <= 0 after booking run).",
+                    tid);
+        }
+    }
+
+    Logger::NumInfo("Booked {} trade(s) on trade_date valuation.", trade_ids.size());
+    return 0;
+}
+
 [[nodiscard]] int ParseArgsAndRun(int argc,
                                   char** argv,
                                   const SqliteTradeRepository& repo,
@@ -518,7 +648,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
 
     DevMainMarketQuotesConfig mq;
     try {
-        mq = LoadDevMainMarketQuotesConfig(scan.as_of);
+        mq = LoadDevMainMarketQuotesConfig(scan.as_of, !scan.price_booking);
     } catch (const numeraire::ValidationError& ex) {
         Logger::NumError("{}", ex.what());
         return 1;
@@ -532,6 +662,9 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
 
     if (tok.empty()) {
         if (const char* v = std::getenv("NUMERAIRE_DEV_TRADE_ID"); v != nullptr && v[0] != '\0') {
+            if (scan.price_booking) {
+                return RunBookingWithTradeIds(repo, db_path, {std::string(v)}, mq);
+            }
             return RunWithTradeIds(repo, db_path, {std::string(v)}, mq);
         }
         Logger::NumError(
@@ -547,6 +680,9 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
             PrintUsage();
             return 1;
         }
+        if (scan.price_booking) {
+            return RunBookingWithTradeIds(repo, db_path, repo.ListAllTradeIds(), mq);
+        }
         return RunWithTradeIds(repo, db_path, repo.ListAllTradeIds(), mq);
     }
 
@@ -558,6 +694,9 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         if (tok.size() > 2U) {
             Logger::NumError("--trades-json expects exactly one JSON path.");
             return 1;
+        }
+        if (scan.price_booking) {
+            return RunBookingWithTradeIds(repo, db_path, LoadTradeIdsFromJsonFile(tok[1]), mq);
         }
         return RunWithTradeIds(repo, db_path, LoadTradeIdsFromJsonFile(tok[1]), mq);
     }
@@ -572,6 +711,9 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         Logger::NumError("Expected exactly one trade_id positional argument.");
         PrintUsage();
         return 1;
+    }
+    if (scan.price_booking) {
+        return RunBookingWithTradeIds(repo, db_path, {tok[0]}, mq);
     }
     return RunWithTradeIds(repo, db_path, {tok[0]}, mq);
 }
