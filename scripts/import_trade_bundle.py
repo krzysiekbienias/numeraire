@@ -42,8 +42,6 @@ REQUIRED_TRADE_KEYS = (
 )
 
 REQUIRED_LEG_KEYS = (
-    "leg_id",
-    "product_id",
     "direction",
     "quantity",
 )
@@ -105,6 +103,69 @@ def _trade_exists(conn: sqlite3.Connection, trade_id: str) -> bool:
     return cur.fetchone() is not None
 
 
+def _canonical_product_id(product: Mapping[str, Any]) -> str:
+    if "product_id" not in product:
+        _die('product: missing key "product_id"')
+    pid = str(product["product_id"]).strip()
+    if not pid:
+        _die("product.product_id: required (set once under product — copied to equity and legs)")
+    return pid
+
+
+def _resolve_product_id_field(
+    holder: dict[str, Any],
+    label: str,
+    canonical_pid: str,
+    notes: list[str],
+) -> None:
+    raw = holder.get("product_id", None)
+    if _is_blank(raw):
+        holder["product_id"] = canonical_pid
+        notes.append(f"{label}.product_id ← product.product_id ({canonical_pid!r})")
+        return
+    other = str(raw).strip()
+    if other != canonical_pid:
+        _die(
+            f"{label}.product_id ({other!r}) must match product.product_id ({canonical_pid!r})"
+        )
+    holder["product_id"] = other
+
+
+def normalize_bundle(
+    product: dict[str, Any],
+    equity: dict[str, Any],
+    trade: dict[str, Any],
+) -> list[str]:
+    """Fill product_id / leg_id from product.trade; error on conflicting product_id."""
+    notes: list[str] = []
+    canonical_pid = _canonical_product_id(product)
+    product["product_id"] = canonical_pid
+
+    _resolve_product_id_field(equity, "equity", canonical_pid, notes)
+
+    if "trade_id" not in trade or _is_blank(trade.get("trade_id")):
+        _die("trade.trade_id: required")
+    trade_id = str(trade["trade_id"]).strip()
+    trade["trade_id"] = trade_id
+
+    legs_raw = trade.get("legs")
+    if not isinstance(legs_raw, list) or len(legs_raw) == 0:
+        _die('trade.legs: expected a non-empty array')
+
+    for i, leg in enumerate(legs_raw):
+        if not isinstance(leg, dict):
+            _die(f"trade.legs[{i}]: expected JSON object")
+        label = f"trade.legs[{i}]"
+        _resolve_product_id_field(leg, label, canonical_pid, notes)
+
+        if _is_blank(leg.get("leg_id")):
+            leg_id = f"{trade_id}_L{i + 1}"
+            leg["leg_id"] = leg_id
+            notes.append(f"{label}.leg_id ← {leg_id!r}")
+
+    return notes
+
+
 def _collect_json_paths(json_paths: list[Path], incoming_dir: Path | None) -> list[Path]:
     """Unique paths: positional .json files first, then sorted glob from incoming_dir."""
     out: list[Path] = []
@@ -137,9 +198,9 @@ def load_bundle(path: Path) -> tuple[Mapping[str, Any], Mapping[str, Any], Mappi
         _die(f"invalid JSON in {path}: {e}")
 
     root = _require_mapping(data, "root")
-    product = _require_mapping(root.get("product"), "product")
-    equity = _require_mapping(root.get("equity"), "equity")
-    trade = _require_mapping(root.get("trade"), "trade")
+    product = dict(_require_mapping(root.get("product"), "product"))
+    equity = dict(_require_mapping(root.get("equity"), "equity"))
+    trade = dict(_require_mapping(root.get("trade"), "trade"))
 
     mp = _missing_keys(product, REQUIRED_PRODUCT_KEYS)
     if mp:
@@ -147,35 +208,19 @@ def load_bundle(path: Path) -> tuple[Mapping[str, Any], Mapping[str, Any], Mappi
     mt = _missing_keys(trade, REQUIRED_TRADE_KEYS)
     if mt:
         _die(f"trade: missing keys: {mt}")
-    if "product_id" not in equity:
-        _die('equity: missing key "product_id"')
 
-    legs_raw = trade.get("legs")
-    if not isinstance(legs_raw, list) or len(legs_raw) == 0:
-        _die('trade.legs: expected a non-empty array')
+    auto_notes = normalize_bundle(product, equity, trade)
 
-    pid = product["product_id"]
-    if equity["product_id"] != pid:
-        _die(
-            f'equity.product_id ({equity["product_id"]!r}) must match '
-            f'product.product_id ({pid!r})'
-        )
-
-    tid = str(trade["trade_id"])
+    legs_raw = trade["legs"]
     for i, leg in enumerate(legs_raw):
         label = f"trade.legs[{i}]"
         lg = _require_mapping(leg, label)
         ml = _missing_keys(lg, REQUIRED_LEG_KEYS)
         if ml:
             _die(f"{label}: missing keys: {ml}")
-        if str(lg["product_id"]) != pid:
-            _die(
-                f'{label}.product_id ({lg["product_id"]!r}) must match '
-                f'product.product_id ({pid!r})'
-            )
         _normalize_leg_direction_db(str(lg["direction"]))
 
-    return product, equity, trade
+    return product, equity, trade, auto_notes
 
 
 def _optional_str(d: Mapping[str, Any], key: str) -> str | None:
@@ -430,7 +475,9 @@ def main() -> None:
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         for path in paths:
-            product, equity, trade = load_bundle(path)
+            product, equity, trade, auto_notes = load_bundle(path)
+            for note in auto_notes:
+                print(f"  {note}")
             tid = str(trade["trade_id"])
             if _trade_exists(conn, tid):
                 print(f"SKIP: {path.name} (trade_id {tid!r} already in database)")

@@ -1,8 +1,8 @@
 {
-  "_comment": "Copy this file to a new name (e.g. TRD_10004.json), fill every empty string, then import. Do not import this template as-is.",
+  "_comment": "Copy to a new name (e.g. TRD_10004.json), fill required fields, then import. Do not import as-is.",
   "product": {
     "product_id": "OPT_PVE_AAPL_C_290_20261016",
-    "_product_id_comment": "Pattern: OPT_PVE_{UNDERLYING}_{C|P}_{STRIKE}_{YYYYMMDD} — keep in sync with underlying_id, option_type, strike, expiry_date",
+    "_product_id_comment": "Single source of truth — copied to equity + legs. Pattern: OPT_PVE_{UNDERLYING}_{C|P}_{STRIKE}_{YYYYMMDD}",
     "asset_kind": "EQUITY",
     "underlying_id": "AAPL",
     "expiry_date": "",
@@ -15,7 +15,7 @@
     "calendar": "UnitedStates"
   },
   "equity": {
-    "product_id": "OPT_PVE_AAPL_C_290_20261016",
+    "_product_id_comment": "optional — omit or null; defaults from product.product_id",
     "instrument_type": "plain_vanilla_european_option",
     "option_type": "call",
     "strike": null,
@@ -28,22 +28,20 @@
     "portfolio_id": "BOOK_1",
     "strategy_type": "VANILLA_OPTION",
     "booking_timestamp": null,
-    "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS (SQLite TEXT); null = not set at import",
+    "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS",
     "trade_date": null,
-    "_trade_date_comment": "required for booking pricing — YYYY-MM-DD",
+    "_trade_date_comment": "required — YYYY-MM-DD",
     "status": "LIVE",
     "legs": [
       {
-        "leg_id": "TRD_SAMPLE_001_L1",
-        "product_id": "OPT_PVE_AAPL_C_290_20261016",
+        "_leg_id_comment": "optional — defaults to {trade_id}_L1, _L2, …",
+        "_product_id_comment": "optional — defaults from product.product_id",
         "direction": "long",
         "quantity": 100,
         "execution_price": null,
-        "_execution_price_comment": "leave null — filled by booking pricer on trade_date (import stores 0 until then)",
+        "_execution_price_comment": "null → 0 until booking pricer on trade_date",
         "commission": null,
-        "_commission_comment": "optional — total USD on leg; null = 0. Or set commission_per_contract below",
-        "commission_per_contract": null,
-        "_commission_per_contract_comment": "optional — e.g. 0.75 → total commission = rate × quantity at import"
+        "_commission_per_contract_comment": "optional — e.g. 0.75 → commission = rate × quantity"
       }
     ]
   }
