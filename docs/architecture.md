@@ -449,6 +449,23 @@ For market inputs, **`dev_main` builds a `MarketSnapshot`** and **`StaticMarketD
 
 **MTM persistence** — After each leg is priced, `dev_main` upserts **`trade_leg_mtm_eod`** and appends **`trade_leg_mtm_eod_archive`** with inputs used (`underlying_spot`, rates, vol), outputs (`pv_unit`, greeks), **`years_to_maturity`** (same \(T\) as the pricer), `pricing_engine`, and a shared **`batch_run_id`** for the run.
 
+**EOD MTM — unit vs position columns** — Pricer output is **per one share** (one unit of underlying). Booked leg size comes from `trade_legs` (`direction`, `quantity` in contracts) and `products_equity.contract_size` (shares per listed contract, e.g. 100 for US equity options). Let \(s = +1\) for LONG and \(-1\) for SHORT ([`PositionSign`](../include/numeraire/database/leg_pv.hpp)). Position multiplier:
+
+$$
+M = s \times \text{quantity} \times \text{contract_size}
+$$
+
+| Column | Meaning |
+|--------|---------|
+| `pv_unit` | Model NPV per share from the pricer |
+| `pv_total` | \(M \times \text{pv\_unit}\) — [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp) |
+| `delta`, `gamma`, `vega`, `theta`, `rho` | Model greek **per share** (same scale as `pv_unit`; from [`PricingGreeks`](../include/numeraire/core/pricing_result.hpp)) |
+| `delta_total`, `gamma_total`, `vega_total`, `theta_total`, `rho_total` | \(M \times\) the corresponding unit greek — same linear scaling as `pv_total` (helper beside [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp)) |
+
+`quantity` and `contract_size` must be strictly positive before pricing; direction is only on `trade_legs.direction`, not on the sign of `quantity`.
+
+**Greek conventions** ([`AnalyticBlackScholesEquityPricer`](../src/pricers/analytic_black_scholes_equity_pricer.cpp), benchmarked vs `QuantLib::BlackCalculator` in unit tests): sensitivities are w.r.t. **spot \(S\)**, **absolute volatility \(\sigma\)**, and **rate \(r\)** on the same \(T\) as NPV. `vega` is \(\partial V / \partial \sigma\) (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time.
+
 A fully SQLite-backed `IMarketDataProvider` (vol/rate surfaces from DB, no env shim) remains future work.
 
 ```mermaid

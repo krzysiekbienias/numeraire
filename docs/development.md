@@ -26,6 +26,7 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 
 - **Default:** issue + PR description (copy the checklist into the PR). No separate `docs/acceptance/…` file unless the scenario becomes a long-lived regression reference or multi-week epic.
 - **Repo docs:** add or extend a rule here only when the behaviour is a **lasting product convention** (e.g. “EOD MTM: `years_to_maturity` = Act365(`as_of`, expiry)”). One-off verification steps stay in the ticket/PR.
+- **EOD MTM position scaling** — `pv_unit` and `delta`…`rho` are **per share**; `pv_total` and `delta_total`…`rho_total` are **position** values: `sign(direction) × quantity × contract_size × <unit value>`. Same \(M\) as [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp); greek totals use the same helper pattern ([`architecture.md`](architecture.md) § *From book + market snapshot to NPV and MTM*). `quantity` and `contract_size` are validated `> 0` before pricing.
 
 **What a good fix-level DoD contains**
 
@@ -108,7 +109,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 [`sql/schema_v1.sql`](../sql/schema_v1.sql) is the single bootstrap DDL (idempotent `IF NOT EXISTS`). Besides booking + Polygon-fed market tables, it includes:
 
 - **`catalog_instrument_type`** — optional reference codes aligned with `products_equity.instrument_type` (seed / UI). Index **`idx_catalog_instrument_type_family`** on `family` (SQLite requires index names not to collide with table names in the same schema).
-- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main` pricing** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*.
+- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main` pricing** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*.
 
 Separator lines in the SQL file are **`--` comments** so the script parses cleanly when applied wholesale.
 
