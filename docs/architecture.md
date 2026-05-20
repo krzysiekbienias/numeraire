@@ -337,9 +337,9 @@ classDiagram
 
 ### Tables at a glance
 
-- **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded like any repository-backed book (fixtures, migrations, ops tooling).
+- **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded via [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) (or fixtures); **`trade_legs.execution_price`** and **`commission`** are placeholders until booking (see § *Booking price*).
 - **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via `[dev_main](../app/dev_main.cpp)`.
-- **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by pricing mode in `[dev_main](../app/dev_main.cpp)`.
+- **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by **MTM** pricing mode in `[dev_main](../app/dev_main.cpp)` (`--as-of`; does not update `execution_price`).
 
 There are **no foreign keys** from the Polygon-fed tables into `products` / `trades`. Business joins are by convention (e.g. `products.underlying_id` aligned with `equity_daily_eod.ticker`).
 
@@ -395,6 +395,8 @@ erDiagram
         text trade_id PK
         text portfolio_id
         text strategy_type
+        text trade_date
+        text booking_timestamp
         text status
     }
 
@@ -405,6 +407,7 @@ erDiagram
         text direction
         real quantity
         real execution_price
+        real commission
     }
 ```
 
@@ -453,7 +456,60 @@ flowchart LR
 
 Unit tests benchmark NPV/greeks against `QuantLib::BlackCalculator` with the same T convention; see `[unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp)`.
 
-### From book + market snapshot to NPV and MTM *(today’s `dev_main` path)*
+### Trade lifecycle: import → booking → MTM
+
+Three **separate** steps touch the book. They reuse the same pricer stack (`ProductFactory`, `PricingEngine`, `AnalyticBlackScholesEquityPricer`) but differ in **valuation date**, **what gets persisted**, and **whether `trade_legs` is updated**.
+
+| Step | Tool | Valuation date (`IMarketData::ValuationDate()`) | Writes |
+|------|------|--------------------------------------------------|--------|
+| **1. Structural book** | [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) | — | `products`, `products_equity`, `trades`, `trade_legs`; `execution_price` null → **0**; `commission` from JSON or **0** |
+| **2. Booking price** | `dev_main --price-booking` *(planned)* | **`trades.trade_date`** per trade | `trade_legs.execution_price` (= model **pv_unit** at trade date); optional `trades.booking_timestamp` |
+| **3. EOD MTM** | `dev_main --as-of` *(shipped)* | **CLI `--as-of`** / `NUMERAIRE_DEV_AS_OF` | `trade_leg_mtm_eod` + archive only |
+
+**`Product::TradeDate()`** is set from `trades.trade_date` when the catalog bundle is built ([`ProductFactory`](../src/products/product_factory.cpp)); it is **metadata** on the instrument. **Time to expiry** for both booking and MTM uses **`ValuationDate()` → expiry** (Act/365 Fixed), not `TradeDate()`.
+
+```mermaid
+flowchart LR
+    JSON[import_trade_bundle.py] --> BOOK[(trades + trade_legs)]
+    EOD[Polygon / equity_daily_eod] --> BOOK
+    BOOK --> PB["dev_main --price-booking planned"]
+    PB -->|UPDATE execution_price| BOOK
+    BOOK --> MTM["dev_main --as-of shipped"]
+    MTM --> MTM_TBL[(trade_leg_mtm_eod)]
+```
+
+**Variant B (dev book):** MTM on `trade_date` the same day as booking is allowed after step 2; re-running MTM on later `--as-of` dates does not require re-booking.
+
+### Booking price (`--price-booking`) *(planned)*
+
+> **Status:** Spec + schema + **[`SqliteTradeLegBookingRepository`](../include/numeraire/database/sqlite_trade_leg_booking_repository.hpp)** (DB writes) shipped; **`dev_main --price-booking`** CLI not implemented yet. See [`development.md`](development.md) § *Booking price*.
+
+When shipped, booking answers: *“What was the model premium per share at trade date?”* That value is stored as **`trade_legs.execution_price`** and is **not** mixed with commission.
+
+**Conventions (v1):**
+
+| Field | Rule |
+|-------|------|
+| **`execution_price`** | Per-share option premium from the booking run: **`pv_unit`** from `PricingResult::Npv()` (same scale as MTM `pv_unit`). **Convention A:** commission is **not** included in `execution_price`. |
+| **`commission`** | Set at **import** (`commission` or `commission_per_contract × quantity` in JSON). Booking **does not** recalculate commission in v1. |
+| **Valuation date** | `MarketSnapshot::valuation_date` = `ParseIsoDate(trades.trade_date)`. Reject trades with empty/invalid `trade_date`. |
+| **Market inputs** | Same env as MTM: `NUMERAIRE_DEV_SPOT_SOURCE`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, `NUMERAIRE_DEV_DIV_YIELD`. With **`SPOT_SOURCE=db`**, spot is `equity_daily_eod.close` on **`trade_date`** (ingest required for that session). |
+| **Greeks / MTM tables** | Booking run **does not** write `trade_leg_mtm_eod` or greeks to the book row. |
+| **`booking_timestamp`** | Optional: set to `datetime('now')` on `trades` when booking completes; otherwise leave as imported. |
+| **Re-run** | TBD in implementation: overwrite `execution_price` with log vs fail if already &gt; 0. Document the chosen rule in the PR. |
+| **CLI mutual exclusion** | `--price-booking` and `--as-of` must not be combined in one process invocation. |
+
+**Planned argv** (mirror MTM trade selection):
+
+```text
+dev_main --price-booking <trade_id>
+dev_main --price-booking --all
+dev_main --price-booking --trades-json <path>
+```
+
+**Downstream (later tickets):** `pnl_inception` on MTM rows will use `pv_total`, `execution_price`, and `commission` via [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp)-style cost basis; booking must run before inception PnL is meaningful.
+
+### From book + market snapshot to NPV and MTM *(today’s `dev_main --as-of` path)*
 
 Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-target)** earlier in this document: `SqliteTradeRepository` assembles a `TradeCatalogBundle` per `trade_id`; `ProductFactory` and `PricingEngine` price each leg.
 
@@ -500,9 +556,11 @@ flowchart LR
     SNAP --> SMP[StaticMarketDataProvider]
     SMP -->|IMarketData ValuationDate spot vol| PR
     MD -->|equity_daily_eod close SOURCE=db| SNAP
-    PR --> NPV[Book NPV per trade]
+    PR --> NPV[Book NPV per trade log]
     PR --> MTM
 ```
+
+*(Booking path — planned — uses `trade_date` instead of `ASOF` and updates `trade_legs.execution_price` instead of `MTM`.)*
 
 
 

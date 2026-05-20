@@ -10,3 +10,5 @@ Only `trade_bundle.sample.json` is tracked; other `*.json` files in this directo
 - `legs[].leg_id` ← `{trade_id}_L1`, `_L2`, … if omitted
 
 Fields filled later by booking pricer: `execution_price` (null → `0`). Optional: `commission_per_contract` (× `quantity`) or `commission`. `updated_at` → `datetime('now')` when omitted.
+
+**After import:** run `dev_main --price-booking <trade_id>` *(planned)* then MTM with `--as-of`. Conventions and workflow: [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle* / *Booking price*; checklist: [`docs/development.md`](../../docs/development.md) § *Booking price*.

@@ -27,6 +27,7 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 - **Default:** issue + PR description (copy the checklist into the PR). No separate `docs/acceptance/…` file unless the scenario becomes a long-lived regression reference or multi-week epic.
 - **Repo docs:** add or extend a rule here only when the behaviour is a **lasting product convention** (e.g. “EOD MTM: `years_to_maturity` = Act365(`as_of`, expiry)”). One-off verification steps stay in the ticket/PR.
 - **EOD MTM position scaling** — `pv_unit` and `delta`…`rho` are **per share**; `pv_total` and `delta_total`…`rho_total` are **position** values: `sign(direction) × quantity × contract_size × <unit value>`. Same \(M\) as [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp); greek totals use the same helper pattern ([`architecture.md`](architecture.md) § *From book + market snapshot to NPV and MTM*). `quantity` and `contract_size` are validated `> 0` before pricing.
+- **Booking `execution_price`** — After import, legs may have `execution_price = 0`. **Booking** (`dev_main --price-booking`, planned) sets `execution_price` to model **`pv_unit`** on **`trades.trade_date`** (per-share premium; **no** commission inside the price — convention A). **Commission** stays whatever import wrote. **MTM** (`--as-of`) does not update `execution_price`. Full lifecycle table: [`architecture.md`](architecture.md) § *Trade lifecycle: import → booking → MTM*.
 
 **What a good fix-level DoD contains**
 
@@ -77,6 +78,67 @@ To drive dates only from rows that exist in the market table (no weekend gaps), 
 
 ---
 
+## Booking price (`--price-booking`) *(planned)*
+
+**Goal:** Close the gap between structural import and MTM/PnL by persisting a model **trade-date premium** on each leg.
+
+| Item | Detail |
+|------|--------|
+| **Status** | **Not shipped** — docs + schema only; implement in `dev_main` + SQLite `UPDATE` (see checklist below). |
+| **Spec** | [`architecture.md`](architecture.md) § *Booking price (`--price-booking`)* and § *Trade lifecycle* |
+| **Import today** | [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) — `execution_price` null → `0`; commission from JSON |
+| **MTM today** | `dev_main --as-of` — reads legs; **ignores** `execution_price` / `commission` for pricing |
+
+### Operator workflow (target)
+
+```bash
+# 1 — book structure (already shipped)
+python3 scripts/import_trade_bundle.py trades/incoming/my_trade.json --db db.sqlite3
+
+# 2 — EOD on trade_date for each underlying (when SPOT_SOURCE=db)
+./build/dev_main --fetch-eod-daily --from 2026-06-01 --to 2026-06-01 --ticker AAPL
+
+# 3 — booking (planned)
+./build/dev_main --price-booking TRD_10004
+
+# 4 — MTM (shipped; as_of >= trade_date)
+NUMERAIRE_DEV_SPOT_SOURCE=db ./build/dev_main --as-of 2026-06-01 TRD_10004
+```
+
+### Fix-level acceptance criteria (for the implementation PR)
+
+1. **Given** a LIVE trade with valid `trade_date`, legs with `execution_price = 0`, and market data available on `trade_date` (env spot or `equity_daily_eod` when `NUMERAIRE_DEV_SPOT_SOURCE=db`).
+2. **When** `dev_main --price-booking <trade_id>` runs with fixed `NUMERAIRE_DEV_RATE` / `VOL` / `DIV_YIELD`.
+3. **Then** for each leg: `trade_legs.execution_price` equals the **pv_unit** that the same pricer would produce if `ValuationDate = trade_date` (within float tolerance vs a unit test seed).
+4. **And** `trade_leg_mtm_eod` row count unchanged by the booking run.
+5. **And** `commission` columns unchanged.
+6. **And** combining `--price-booking` with `--as-of` in one argv fails fast with `ValidationError`.
+
+**SQL verify after booking:**
+
+```bash
+sqlite3 db.sqlite3 "
+SELECT t.trade_id, t.trade_date, l.leg_id, l.execution_price, l.commission
+FROM trades t
+JOIN trade_legs l ON l.trade_id = t.trade_id
+WHERE t.trade_id = 'TRD_10004';
+"
+```
+
+### Implementation checklist (code)
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | `UPDATE trade_legs SET execution_price = ?` (+ optional `trades.booking_timestamp`) — [`SqliteTradeLegBookingRepository`](../include/numeraire/database/sqlite_trade_leg_booking_repository.hpp) | **Shipped** |
+| 2 | Shared leg-pricing helper with MTM path (`valuation_date` parameterised) | Planned |
+| 3 | `dev_main` argv: `--price-booking` + `<trade_id>` / `--all` / `--trades-json`; mutual exclusion with `--as-of` | Planned |
+| 4 | Unit/integration tests with in-memory SQLite (no dependency on developer `TRD_*` rows) | **Partial** — booking repo UT shipped; E2E booking pricer UT with #2–3 |
+| 5 | [`README.md`](../README.md) § *dev_main* — add row to capabilities table when CLI ships | Planned |
+
+**Explicitly out of scope for booking v1:** `pnl_daily` / `pnl_inception`, IV from Polygon, MC engine, commission recalculation, Hetzner cron.
+
+---
+
 ## Stage 1 — foundation (historical)
 
 Early milestones (kernel modules before trade persistence and HTTP ingest):
@@ -103,13 +165,15 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 | **7** | Trade persistence (`TradeDto`, `ITradeRepository`, …) | **Shipped as SQLite-first** — reference DDL [`sql/schema_v1.sql`](../sql/schema_v1.sql); [`SqliteTradeRepository`](../include/numeraire/database/sqlite_trade_repository.hpp); bootstrap from [`sqlite_schema`](../include/numeraire/database/sqlite_schema.hpp); bundle import [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py). *(An in-memory repository was discussed early on; the runnable path is SQLite.)* |
 | **8** | `market_data`: snapshots + providers | **Partially shipped** — [`MarketSnapshot`](../include/numeraire/market_data/market_snapshot.hpp), [`StaticMarketDataProvider`](../include/numeraire/market_data/static_market_data_provider.hpp). **Persisted Polygon daily bars**: [`market_data_providers`](../src/market_data_providers/) → `equity_daily_eod` / `index_daily_eod` / `option_contract`, [`dev_main`](../app/dev_main.cpp) ingest flags. **Spot-on-date for pricing**: `NUMERAIRE_DEV_SPOT_SOURCE=db` reads `equity_daily_eod.close` into the snapshot (**`NUMERAIRE_DEV_RATE` / `VOL` still env**). **Still open:** dedicated `SqliteMarketDataProvider` implementing `IMarketData` beyond this dev shim, vol/rate surfaces from DB. |
 | **9** | Polish, CI, tightening | **Ongoing** — incremental |
+| **—** | **Booking price** (`--price-booking`) | **Planned** — see § *Booking price* above; persists `execution_price` on `trade_date` |
 
 ### SQLite — reference DDL (book, market, catalog, MTM placeholder)
 
 [`sql/schema_v1.sql`](../sql/schema_v1.sql) is the single bootstrap DDL (idempotent `IF NOT EXISTS`). Besides booking + Polygon-fed market tables, it includes:
 
 - **`catalog_instrument_type`** — optional reference codes aligned with `products_equity.instrument_type` (seed / UI). Index **`idx_catalog_instrument_type_family`** on `family` (SQLite requires index names not to collide with table names in the same schema).
-- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main` pricing** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*.
+- **`trades` / `trade_legs`** — structural book from import; **`execution_price`** (per-share premium at booking) and **`commission`** (trade cost, separate). Booking fill: planned `dev_main --price-booking`; see [`architecture.md`](architecture.md) § *Booking price*.
+- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main --as-of`** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*. Columns **`pnl_daily`** / **`pnl_inception`** exist in DDL but are **not populated** yet.
 
 Separator lines in the SQL file are **`--` comments** so the script parses cleanly when applied wholesale.
 
@@ -141,5 +205,7 @@ These tracks remain the north star for pricer work:
 | Topic | Where |
 |--------|--------|
 | Fix-level Definition of Done / acceptance checklists | This file § *Definition of Done — per fix* |
+| Import → booking → MTM lifecycle + booking conventions | [`architecture.md`](architecture.md) § *Trade lifecycle* / *Booking price* |
+| Booking delivery checklist + operator workflow | This file § *Booking price (`--price-booking`)* |
 | SQLite table layout + Polygon → DB pipeline + pricing seam | [`architecture.md`](architecture.md) § *SQLite schema & Polygon market-data pipeline* |
 | `dev_main` flags and examples | [`README.md`](../README.md) § *dev_main* |
