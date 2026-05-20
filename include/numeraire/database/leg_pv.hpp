@@ -1,7 +1,6 @@
 #pragma once
 
 #include <numeraire/enums/position_direction.hpp>
-
 #include <string_view>
 
 namespace numeraire::database {
@@ -16,6 +15,31 @@ namespace numeraire::database {
                                 double quantity,
                                 double contract_size,
                                 double pv_unit) noexcept;
+
+[[nodiscard]] double LegDeltaTotal(numeraire::PositionDirection direction,
+                                   double quantity,
+                                   double contract_size,
+                                   double delta) noexcept;
+
+[[nodiscard]] double LegGammaTotal(numeraire::PositionDirection direction,
+                                   double quantity,
+                                   double contract_size,
+                                   double gamma) noexcept;
+
+[[nodiscard]] double LegVegaTotal(numeraire::PositionDirection direction,
+                                  double quantity,
+                                  double contract_size,
+                                  double vega) noexcept;
+
+[[nodiscard]] double LegThetaTotal(numeraire::PositionDirection direction,
+                                   double quantity,
+                                   double contract_size,
+                                   double theta) noexcept;
+
+[[nodiscard]] double LegRhoTotal(numeraire::PositionDirection direction,
+                                 double quantity,
+                                 double contract_size,
+                                 double rho) noexcept;
 
 void RequirePositiveContractSize(double contract_size, std::string_view leg_id);
 

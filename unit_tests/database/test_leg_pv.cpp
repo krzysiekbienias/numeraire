@@ -53,3 +53,37 @@ TEST(LegPvTest, RequirePositiveQuantityRejectsZero) {
 TEST(LegPvTest, RequirePositiveQuantityRejectsNegative) {
     EXPECT_THROW(numeraire::database::RequirePositiveQuantity(-5.0, "TRD_001_L1"), numeraire::ValidationError);
 }
+
+TEST(LegGreekTotalTest, LongTenContractsHundredMultiplier) {
+    const double delta_total = numeraire::database::LegDeltaTotal(numeraire::PositionDirection::kLong,
+                                                                  10.0, 100.0, 0.25);
+    EXPECT_DOUBLE_EQ(delta_total, 250.0);
+}
+
+TEST(LegGreekTotalTest, ShortPositionScalesNegative) {
+    const double gamma_total = numeraire::database::LegGammaTotal(numeraire::PositionDirection::kShort,
+                                                                  25.0, 100.0, 0.01);
+    EXPECT_DOUBLE_EQ(gamma_total, -25.0);
+}
+
+TEST(LegGreekTotalTest, GreekTotalsMatchPvPositionMultiplier) {
+    constexpr numeraire::PositionDirection direction = numeraire::PositionDirection::kShort;
+    constexpr double quantity = 25.0;
+    constexpr double contract_size = 100.0;
+    constexpr double unit = 14.8087796956056;
+
+    const double pv = numeraire::database::LegPvTotal(direction, quantity, contract_size, unit);
+    EXPECT_NEAR(pv, -37021.9492390141, 1e-6);
+
+    EXPECT_NEAR(numeraire::database::LegDeltaTotal(direction, quantity, contract_size, unit), pv, 1e-12);
+    EXPECT_NEAR(numeraire::database::LegGammaTotal(direction, quantity, contract_size, unit), pv, 1e-12);
+    EXPECT_NEAR(numeraire::database::LegVegaTotal(direction, quantity, contract_size, unit), pv, 1e-12);
+    EXPECT_NEAR(numeraire::database::LegThetaTotal(direction, quantity, contract_size, unit), pv, 1e-12);
+    EXPECT_NEAR(numeraire::database::LegRhoTotal(direction, quantity, contract_size, unit), pv, 1e-12);
+}
+
+TEST(LegGreekTotalTest, LongUnitContractSize) {
+    const double vega_total =
+            numeraire::database::LegVegaTotal(numeraire::PositionDirection::kLong, 2.0, 1.0, 3.0);
+    EXPECT_DOUBLE_EQ(vega_total, 6.0);
+}
