@@ -46,7 +46,6 @@ REQUIRED_LEG_KEYS = (
     "product_id",
     "direction",
     "quantity",
-    "execution_price",
 )
 
 
@@ -185,7 +184,83 @@ def _optional_str(d: Mapping[str, Any], key: str) -> str | None:
     v = d[key]
     if v is None:
         return None
-    return str(v)
+    s = str(v).strip()
+    if not s:
+        return None
+    return s
+
+
+def _is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    return False
+
+
+def _require_non_blank_str(d: Mapping[str, Any], key: str, label: str) -> str:
+    if key not in d:
+        _die(f"{label}: missing required key {key!r}")
+    v = d[key]
+    if _is_blank(v):
+        _die(f"{label}.{key}: required (see _{key}_comment in bundle template)")
+    return str(v).strip()
+
+
+def _parse_settlement(raw: Any, label: str) -> str:
+    if _is_blank(raw):
+        _die(f"{label}.settlement: required — PHYSICAL or CASH (see _settlement_comment in bundle template)")
+    settlement = str(raw).strip().upper()
+    if settlement not in ("PHYSICAL", "CASH"):
+        _die(f'{label}.settlement: must be "PHYSICAL" or "CASH", got {raw!r}')
+    return settlement
+
+
+def _parse_strike(raw: Any) -> float:
+    if _is_blank(raw):
+        _die('equity.strike: required number (see _strike_comment in bundle template)')
+    try:
+        strike = float(raw)
+    except (TypeError, ValueError):
+        _die(f"equity.strike: expected number, got {raw!r}")
+    if strike <= 0.0:
+        _die(f"equity.strike: must be positive, got {strike}")
+    return strike
+
+
+def _parse_deferred_execution_price(lg: Mapping[str, Any], leg_id: str) -> float:
+    if "execution_price" not in lg or _is_blank(lg.get("execution_price")):
+        return 0.0
+    try:
+        exe = float(lg["execution_price"])
+    except (TypeError, ValueError):
+        _die(f"leg {leg_id!r}: execution_price must be a number or null")
+    if exe < 0.0:
+        _die(f"leg {leg_id!r}: execution_price must be non-negative")
+    return exe
+
+
+def _parse_commission(lg: Mapping[str, Any], quantity: float, leg_id: str) -> float:
+    per_contract = lg.get("commission_per_contract", None)
+    if not _is_blank(per_contract):
+        try:
+            rate = float(per_contract)
+        except (TypeError, ValueError):
+            _die(f"leg {leg_id!r}: commission_per_contract must be a number")
+        if rate < 0.0:
+            _die(f"leg {leg_id!r}: commission_per_contract must be non-negative")
+        return rate * quantity
+
+    comm_raw = lg.get("commission", None)
+    if _is_blank(comm_raw):
+        return 0.0
+    try:
+        commission = float(comm_raw)
+    except (TypeError, ValueError):
+        _die(f"leg {leg_id!r}: commission must be number or null")
+    if commission < 0.0:
+        _die(f"leg {leg_id!r}: commission must be non-negative")
+    return commission
 
 
 def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: Mapping[str, Any], trade: Mapping[str, Any]) -> None:
@@ -194,24 +269,13 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
     exercise_style = equity.get("exercise_style", "european")
     structured_params = _structured_params_to_text(equity.get("structured_params"))
 
-    strike_raw = equity.get("strike", None)
-    strike: float | None
-    if strike_raw is None:
-        strike = None
-    else:
-        try:
-            strike = float(strike_raw)
-        except (TypeError, ValueError):
-            _die(f"equity.strike: expected number, got {strike_raw!r}")
+    strike = _parse_strike(equity.get("strike", None))
 
     option_type = _normalize_option_type(equity.get("option_type", None))
+    if option_type is None:
+        _die('equity.option_type: required — "call" or "put"')
 
-    expiry_val = product.get("expiry_date", None)
-    expiry_date: str | None
-    if expiry_val is None:
-        expiry_date = None
-    else:
-        expiry_date = str(expiry_val)
+    expiry_date = _require_non_blank_str(product, "expiry_date", "product")
 
     currency = str(product.get("currency", "USD"))
     contract_size_raw = product.get("contract_size", 100.0)
@@ -219,6 +283,8 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
         contract_size = float(contract_size_raw)
     except (TypeError, ValueError):
         _die(f"product.contract_size: expected number, got {contract_size_raw!r}")
+
+    settlement = _parse_settlement(product.get("settlement", None), "product")
 
     cur = conn.cursor()
     cur.execute(
@@ -233,7 +299,7 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
             str(product["asset_kind"]),
             str(product["underlying_id"]),
             expiry_date,
-            str(product["settlement"]),
+            settlement,
             currency,
             contract_size,
             str(product["day_count"]),
@@ -250,46 +316,60 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
         (pid, option_type, strike, str(instrument_type), str(exercise_style), structured_params),
     )
     tid = str(trade["trade_id"])
-    cur.execute(
-        """
-        INSERT INTO trades (
-            trade_id, portfolio_id, strategy_type,
-            booking_timestamp, trade_date, updated_at, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            tid,
-            str(trade["portfolio_id"]),
-            str(trade["strategy_type"]),
-            _optional_str(trade, "booking_timestamp"),
-            _optional_str(trade, "trade_date"),
-            _optional_str(trade, "updated_at"),
-            str(trade["status"]),
-        ),
-    )
+    trade_date = _require_non_blank_str(trade, "trade_date", "trade")
+    booking_timestamp = _optional_str(trade, "booking_timestamp")
+    updated_at = _optional_str(trade, "updated_at")
+    if updated_at is None:
+        cur.execute(
+            """
+            INSERT INTO trades (
+                trade_id, portfolio_id, strategy_type,
+                booking_timestamp, trade_date, updated_at, status
+            ) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
+            """,
+            (
+                tid,
+                str(trade["portfolio_id"]),
+                str(trade["strategy_type"]),
+                booking_timestamp,
+                trade_date,
+                str(trade["status"]),
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO trades (
+                trade_id, portfolio_id, strategy_type,
+                booking_timestamp, trade_date, updated_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tid,
+                str(trade["portfolio_id"]),
+                str(trade["strategy_type"]),
+                booking_timestamp,
+                trade_date,
+                updated_at,
+                str(trade["status"]),
+            ),
+        )
 
     legs_raw = trade["legs"]
     assert isinstance(legs_raw, list)
     for leg in legs_raw:
         lg = _require_mapping(leg, "leg")
         direction_db = _normalize_leg_direction_db(str(lg["direction"]))
+        leg_id = str(lg["leg_id"])
         try:
             qty = float(lg["quantity"])
         except (TypeError, ValueError):
-            _die(f'leg {lg["leg_id"]!r}: quantity must be a number')
-        try:
-            exe = float(lg["execution_price"])
-        except (TypeError, ValueError):
-            _die(f'leg {lg["leg_id"]!r}: execution_price must be a number')
+            _die(f"leg {leg_id!r}: quantity must be a number")
+        if qty <= 0.0:
+            _die(f"leg {leg_id!r}: quantity must be positive")
 
-        comm_raw = lg.get("commission", None)
-        if comm_raw is None:
-            commission = 0.0
-        else:
-            try:
-                commission = float(comm_raw)
-            except (TypeError, ValueError):
-                _die(f'leg {lg["leg_id"]!r}: commission must be number or null')
+        exe = _parse_deferred_execution_price(lg, leg_id)
+        commission = _parse_commission(lg, qty, leg_id)
 
         cur.execute(
             """

@@ -1,20 +1,25 @@
 {
+  "_comment": "Copy this file to a new name (e.g. TRD_10004.json), fill every empty string, then import. Do not import this template as-is.",
   "product": {
-    "product_id": "P_AAPL_SAMPLE",
+    "product_id": "OPT_PVE_AAPL_C_290_20261016",
+    "_product_id_comment": "Pattern: OPT_PVE_{UNDERLYING}_{C|P}_{STRIKE}_{YYYYMMDD} — keep in sync with underlying_id, option_type, strike, expiry_date",
     "asset_kind": "EQUITY",
     "underlying_id": "AAPL",
-    "expiry_date": "2025-11-04",
-    "settlement": "PHYSICAL",
+    "expiry_date": "",
+    "_expiry_date_comment": "required — YYYY-MM-DD",
+    "settlement": "",
+    "_settlement_comment": "required — PHYSICAL or CASH",
     "currency": "USD",
     "contract_size": 100,
     "day_count": "Actual365Fixed",
     "calendar": "UnitedStates"
   },
   "equity": {
-    "product_id": "P_AAPL_SAMPLE",
+    "product_id": "OPT_PVE_AAPL_C_290_20261016",
     "instrument_type": "plain_vanilla_european_option",
     "option_type": "call",
-    "strike": 233,
+    "strike": null,
+    "_strike_comment": "required number — e.g. 290",
     "exercise_style": "european",
     "structured_params": {}
   },
@@ -22,18 +27,23 @@
     "trade_id": "TRD_SAMPLE_001",
     "portfolio_id": "BOOK_1",
     "strategy_type": "VANILLA_OPTION",
-    "booking_timestamp": "2025-08-04 10:00:00",
-    "trade_date": "2025-08-06",
-    "updated_at": "2026-05-15 12:00:00",
+    "booking_timestamp": null,
+    "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS (SQLite TEXT); null = not set at import",
+    "trade_date": null,
+    "_trade_date_comment": "required for booking pricing — YYYY-MM-DD",
     "status": "LIVE",
     "legs": [
       {
         "leg_id": "TRD_SAMPLE_001_L1",
-        "product_id": "P_AAPL_SAMPLE",
+        "product_id": "OPT_PVE_AAPL_C_290_20261016",
         "direction": "long",
         "quantity": 100,
-        "execution_price": 12.5,
-        "commission": 0
+        "execution_price": null,
+        "_execution_price_comment": "leave null — filled by booking pricer on trade_date (import stores 0 until then)",
+        "commission": null,
+        "_commission_comment": "optional — total USD on leg; null = 0. Or set commission_per_contract below",
+        "commission_per_contract": null,
+        "_commission_per_contract_comment": "optional — e.g. 0.75 → total commission = rate × quantity at import"
       }
     ]
   }
