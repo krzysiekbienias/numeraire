@@ -31,6 +31,12 @@ struct TradeLegMtmEodRow {
     double theta{};
     double rho{};
 
+    double delta_total{};
+    double gamma_total{};
+    double vega_total{};
+    double theta_total{};
+    double rho_total{};
+
     std::string pricing_engine;
     /// Stored verbatim; if empty, repository substitutes UTC timestamp when upserting.
     std::string calculated_at;

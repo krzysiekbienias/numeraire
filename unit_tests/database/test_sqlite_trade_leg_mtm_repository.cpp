@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <numeraire/database/leg_pv.hpp>
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
+#include <numeraire/enums/position_direction.hpp>
 #include <numeraire/utils/exception.hpp>
 
 #include <SQLiteCpp/SQLiteCpp.h>
@@ -71,6 +73,22 @@ void SeedMinimalTrade(const std::string& db_path) {
     return st.getColumn(0).getDouble();
 }
 
+/// Matches seeded leg: LONG, quantity=100, contract_size=100 (see `SeedMinimalTrade`).
+void FillPositionGreekTotals(numeraire::database::TradeLegMtmEodRow& row) {
+    constexpr numeraire::PositionDirection direction = numeraire::PositionDirection::kLong;
+    constexpr double quantity = 100.0;
+    constexpr double contract_size = 100.0;
+
+    row.delta_total =
+            numeraire::database::LegDeltaTotal(direction, quantity, contract_size, row.delta);
+    row.gamma_total =
+            numeraire::database::LegGammaTotal(direction, quantity, contract_size, row.gamma);
+    row.vega_total = numeraire::database::LegVegaTotal(direction, quantity, contract_size, row.vega);
+    row.theta_total =
+            numeraire::database::LegThetaTotal(direction, quantity, contract_size, row.theta);
+    row.rho_total = numeraire::database::LegRhoTotal(direction, quantity, contract_size, row.rho);
+}
+
 }  // namespace
 
 TEST(SqliteTradeLegMtmRepositoryTest, UpsertInsertsRow) {
@@ -95,6 +113,7 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertInsertsRow) {
     row.vega = 0.2;
     row.theta = -0.05;
     row.rho = 0.09;
+    FillPositionGreekTotals(row);
     row.pricing_engine = "analytic_black_scholes";
     row.calculated_at = "2025-08-10T16:00:00Z";
     row.remarks = "ut";
@@ -109,6 +128,16 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertInsertsRow) {
                           "SELECT pv_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
                           "AND as_of='2025-08-10' AND pricing_engine='analytic_black_scholes'"),
             550.0);
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check,
+                          "SELECT delta_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
+                          "AND as_of='2025-08-10' AND pricing_engine='analytic_black_scholes'"),
+            row.delta_total);
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check,
+                          "SELECT gamma_total FROM trade_leg_mtm_eod_archive WHERE leg_id='TRD_001_L1' "
+                          "AND batch_run_id='batch-ut-1'"),
+            row.gamma_total);
 
     fs::remove(path);
 }
@@ -135,6 +164,7 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertAppendsArchiveOnEachRun) {
     row.vega = 0.2;
     row.theta = -0.05;
     row.rho = 0.09;
+    FillPositionGreekTotals(row);
     row.pricing_engine = "analytic_black_scholes";
     row.calculated_at = "2025-08-10T16:00:00Z";
     row.remarks = "run-a";
@@ -142,6 +172,8 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertAppendsArchiveOnEachRun) {
     repo.Upsert(row);
     row.batch_run_id = "batch-run-b";
     row.pv_total = 600.0;
+    row.delta = 0.6;
+    FillPositionGreekTotals(row);
     row.remarks = "run-b";
     repo.Upsert(row);
 
@@ -156,6 +188,11 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertAppendsArchiveOnEachRun) {
                           "SELECT pv_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
                           "AND as_of='2025-08-10'"),
             600.0);
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check,
+                          "SELECT delta_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
+                          "AND as_of='2025-08-10'"),
+            row.delta_total);
 
     fs::remove(path);
 }
@@ -181,6 +218,7 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertReplaceUpdatesSameUniqueKey) {
     row.vega = 0.2;
     row.theta = -0.05;
     row.rho = 0.09;
+    FillPositionGreekTotals(row);
     row.pricing_engine = "analytic_black_scholes";
     row.calculated_at = "2025-08-10T16:00:00Z";
     row.remarks = "first";
@@ -188,6 +226,8 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertReplaceUpdatesSameUniqueKey) {
     repo.Upsert(row);
     row.pv_unit = 6.0;
     row.pv_total = 600.0;
+    row.vega = 0.25;
+    FillPositionGreekTotals(row);
     row.remarks = "second";
     repo.Upsert(row);
 
@@ -199,6 +239,11 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertReplaceUpdatesSameUniqueKey) {
                           "SELECT pv_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
                           "AND as_of='2025-08-10' AND pricing_engine='analytic_black_scholes'"),
             600.0);
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check,
+                          "SELECT vega_total FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1' "
+                          "AND as_of='2025-08-10' AND pricing_engine='analytic_black_scholes'"),
+            row.vega_total);
 
     fs::remove(path);
 }

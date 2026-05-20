@@ -1,23 +1,23 @@
 # Numeraire++ — architecture
 
-Living document. Updated as the codebase evolves. **Sprint/stage history:** [`development.md`](development.md).
+Living document. Updated as the codebase evolves. **Sprint/stage history:** `[development.md](development.md)`.
 
 ## Vision
 
-Numeraire++ is a modular C++ derivative pricing framework. The primary goals
+Numeraire++is a modular C++ derivative pricing framework. The primary goals
 are:
 
 - **Composable** — products, pricers, models and market data are independent
-  abstractions. You build a trade and pick a pricer per call.
+abstractions. You build a trade and pick a pricer per call.
 - **Testable end-to-end** — unit tests where possible (everything pure),
-  integration tests where I/O is involved (DB, market data providers).
+integration tests where I/O is involved (DB, market data providers).
 - **QuantLib-grounded** — schedule generation uses QuantLib internally; UTs
-  cross-check our outputs against raw QuantLib as the ground truth.
+cross-check our outputs against raw QuantLib as the ground truth.
 - **Hybrid coupling** — public API speaks our domain types
-  (`numeraire::CalendarType`, `Schedule`, `OptionType`); QuantLib lives
-  inside the schedule module and inside individual pricers as an
-  implementation detail. Bridge helpers in
-  `include/numeraire/utils/quantlib_bridge.hpp` (Sprint 1+).
+(`numeraire::CalendarType`, `Schedule`, `OptionType`); QuantLib lives
+inside the schedule module and inside individual pricers as an
+implementation detail. Bridge helpers in
+`include/numeraire/utils/quantlib_bridge.hpp` (Sprint 1+).
 
 ---
 
@@ -66,14 +66,16 @@ flowchart TB
     gtest([GoogleTest]) -.-> tests
 ```
 
+
+
 Rules:
 
 - `enums` and `utils` are leaf modules — depended on, never depending.
 - `core` defines abstractions only; no concrete pricer/product lives here.
 - `database` and `market_data` know `core` (they implement / consume its
-  interfaces); `core` does not know them.
+interfaces); `core` does not know them.
 - QuantLib is visible only in `schedule` (and tests, as a benchmark). `core`
-  must never link QuantLib directly.
+must never link QuantLib directly.
 
 ---
 
@@ -101,44 +103,46 @@ sequenceDiagram
     Engine-->>User: PricingResult
 ```
 
+
+
 ---
 
 ## Build system
 
-- Top-level [`CMakeLists.txt`](../CMakeLists.txt) is intentionally short. It
-  declares the project, options, includes the two helper modules, then
-  delegates to per-module subdirectories (gated by `if(EXISTS)` so empty
-  modules don't break the build).
-- [`cmake/NumeraireCompileOptions.cmake`](../cmake/NumeraireCompileOptions.cmake)
-  — language standard, warnings, debug/release flags, OS-specific tweaks.
-  Single source of truth for "how we compile".
-- [`cmake/NumeraireDependencies.cmake`](../cmake/NumeraireDependencies.cmake)
-  — every `find_package` lives here. Single source of truth for "what we
-  use". Per-module CMakeLists then link only the deps they actually need.
+- Top-level `[CMakeLists.txt](../CMakeLists.txt)` is intentionally short. It
+declares the project, options, includes the two helper modules, then
+delegates to per-module subdirectories (gated by `if(EXISTS)` so empty
+modules don't break the build).
+- `[cmake/NumeraireCompileOptions.cmake](../cmake/NumeraireCompileOptions.cmake)`
+— language standard, warnings, debug/release flags, OS-specific tweaks.
+Single source of truth for "how we compile".
+- `[cmake/NumeraireDependencies.cmake](../cmake/NumeraireDependencies.cmake)`
+— every `find_package` lives here. Single source of truth for "what we
+use". Per-module CMakeLists then link only the deps they actually need.
 
-The first real library is **`numeraire_utils`** ([`src/utils/CMakeLists.txt`](../src/utils/CMakeLists.txt)):
-spdlog-backed [`Logger`](../include/numeraire/utils/logger.hpp), log-level
-parsing, [`EnvLoader`](../include/numeraire/utils/env_loader.hpp) (dotenv-style
-`.env` + optional `ApplyToEnvironment` / POSIX `setenv`), [`Config`](../include/numeraire/utils/config.hpp)
-(JSON defaults via nlohmann_json), and the [`exception`](../include/numeraire/utils/exception.hpp)
-types. The [`enums`](../include/numeraire/enums/enums.hpp) module holds domain `enum class` types;
-[`quantlib_bridge`](../include/numeraire/utils/quantlib_bridge.hpp) maps them to QuantLib calendars,
+The first real library is `**numeraire_utils**` (`[src/utils/CMakeLists.txt](../src/utils/CMakeLists.txt)`):
+spdlog-backed `[Logger](../include/numeraire/utils/logger.hpp)`, log-level
+parsing, `[EnvLoader](../include/numeraire/utils/env_loader.hpp)` (dotenv-style
+`.env` + optional `ApplyToEnvironment` / POSIX `setenv`), `[Config](../include/numeraire/utils/config.hpp)`
+(JSON defaults via nlohmann_json), and the `[exception](../include/numeraire/utils/exception.hpp)`
+types. The `[enums](../include/numeraire/enums/enums.hpp)` module holds domain `enum class` types;
+`[quantlib_bridge](../include/numeraire/utils/quantlib_bridge.hpp)` maps them to QuantLib calendars,
 frequencies, day counters, conventions, currencies, and option/exercise enums. Executables link
 `numeraire_utils` directly (which **PUBLIC**-ly depends on `numeraire_enums` and QuantLib).
 
-The **`numeraire_schedule`** library ([`src/schedule/CMakeLists.txt`](../src/schedule/CMakeLists.txt)) wraps
-QuantLib schedule generation: [`Schedule`](../include/numeraire/schedule/schedule.hpp) (date list + day-count),
-[`ScheduleConfig`](../include/numeraire/schedule/schedule_config.hpp), [`ScheduleGenerator`](../include/numeraire/schedule/schedule_generator.hpp)
-(builder + `Generate` / `YearFraction` / `IsBusinessDay` / `Adjust`), plus [`ScheduleToQuantLib`](../include/numeraire/schedule/schedule_quantlib.hpp) /
-`ScheduleFromQuantLib`. It links **`numeraire_utils`** for `quantlib_bridge` only (QuantLib stays out of `core`).
+The `**numeraire_schedule`** library (`[src/schedule/CMakeLists.txt](../src/schedule/CMakeLists.txt)`) wraps
+QuantLib schedule generation: `[Schedule](../include/numeraire/schedule/schedule.hpp)` (date list + day-count),
+`[ScheduleConfig](../include/numeraire/schedule/schedule_config.hpp)`, `[ScheduleGenerator](../include/numeraire/schedule/schedule_generator.hpp)`
+(builder + `Generate` / `YearFraction` / `IsBusinessDay` / `Adjust`), plus `[ScheduleToQuantLib](../include/numeraire/schedule/schedule_quantlib.hpp)` /
+`ScheduleFromQuantLib`. It links `**numeraire_utils**` for `quantlib_bridge` only (QuantLib stays out of `core`).
 
 ### `ScheduleGenerator` dependencies
 
-[`ScheduleGenerator`](../include/numeraire/schedule/schedule_generator.hpp) is a thin façade: it owns a
-[`ScheduleConfig`](../include/numeraire/schedule/schedule_config.hpp) (domain enums only in the public header) and,
-in the implementation TU, maps that config to QuantLib via [`quantlib_bridge`](../include/numeraire/utils/quantlib_bridge.hpp)
-and [`ScheduleFromQuantLib`](../include/numeraire/schedule/schedule_quantlib.hpp). Call sites receive a lightweight
-[`Schedule`](../include/numeraire/schedule/schedule.hpp) (dates + `DayCount` tag), not a `QuantLib::Schedule`.
+`[ScheduleGenerator](../include/numeraire/schedule/schedule_generator.hpp)` is a thin façade: it owns a
+`[ScheduleConfig](../include/numeraire/schedule/schedule_config.hpp)` (domain enums only in the public header) and,
+in the implementation TU, maps that config to QuantLib via `[quantlib_bridge](../include/numeraire/utils/quantlib_bridge.hpp)`
+and `[ScheduleFromQuantLib](../include/numeraire/schedule/schedule_quantlib.hpp)`. Call sites receive a lightweight
+`[Schedule](../include/numeraire/schedule/schedule.hpp)` (dates + `DayCount` tag), not a `QuantLib::Schedule`.
 
 **Types and composition** (solid = header-level ownership / API; dashed = implementation detail in `.cpp`):
 
@@ -189,7 +193,9 @@ flowchart TB
     D -.->|ToQuantLibDate / FromQuantLibDate| QL
 ```
 
-**`Generate(start, end)`** (conceptual sequence):
+
+
+`**Generate(start, end)**` (conceptual sequence):
 
 ```mermaid
 sequenceDiagram
@@ -211,21 +217,23 @@ sequenceDiagram
     SG-->>Client: Schedule
 ```
 
+
+
 **Pricing takeaway:** keep stochastic models and numerical engines out of `ScheduleGenerator`; pricers consume
-`Schedule` / `YearFraction` / `Adjust` alongside `IModel` and market data. Note: [`date.hpp`](../include/numeraire/schedule/date.hpp)
+`Schedule` / `YearFraction` / `Adjust` alongside `IModel` and market data. Note: `[date.hpp](../include/numeraire/schedule/date.hpp)`
 includes QuantLib’s date type for conversions at the schedule module boundary.
 
 ### Trade row → `ScheduleConfig` (database first, then JSON fallback)
 
 Schedule fields may live on the trade row (e.g. optional `schedule_*` columns on `wiener_tradebook`). **One place**
-must own the merge rule: **use DB strings when present; otherwise fall back to** [`configs/default.json`](../configs/default.json)
-under `schedule` (`default_calendar`, `default_frequency`, …), read through [`Config`](../include/numeraire/utils/config.hpp).
+must own the merge rule: **use DB strings when present; otherwise fall back to** `[configs/default.json](../configs/default.json)`
+under `schedule` (`default_calendar`, `default_frequency`, …), read through `[Config](../include/numeraire/utils/config.hpp)`.
 
 - **Persistence** — SQLite (or any repository) returns a small DTO with `std::optional<std::string>` per column; it does **not**
-  implement fallback logic.
+implement fallback logic.
 - **Config** — supplies default strings from JSON; it does **not** know about SQL.
-- **`ScheduleConfigResolver` (target)** — lives in the **`schedule`** module; parses optional DB strings to enums and fills gaps
-  from `Config`. String→enum parsing stays in the resolver’s `.cpp` (or private helpers), not in thin `enum` headers.
+- `**ScheduleConfigResolver` (target)** — lives in the `**schedule`** module; parses optional DB strings to enums and fills gaps
+from `Config`. String→enum parsing stays in the resolver’s `.cpp` (or private helpers), not in thin `enum` headers.
 
 **Component view** (single “driver” for merge):
 
@@ -256,6 +264,8 @@ flowchart LR
     DRV -->|ScheduleConfig| GEN
 ```
 
+
+
 **Sequence** (conceptual):
 
 ```mermaid
@@ -279,6 +289,8 @@ sequenceDiagram
 
     App->>GEN: generator with resolved ScheduleConfig Generate(start, end)
 ```
+
+
 
 **Minimal types** (contract sketch):
 
@@ -315,17 +327,19 @@ classDiagram
     ScheduleConfigResolver ..> ScheduleConfig : builds
 ```
 
+
+
 ---
 
 ## SQLite schema & Polygon market-data pipeline *(current stage)*
 
-> **Note:** This subsection describes the **persisted catalog, trades, and market-data tables plus HTTP ingest from Polygon.io** as implemented **today**. It will evolve as DB-backed `IMarketData` and richer surfaces ship. See [`sql/schema_v1.sql`](../sql/schema_v1.sql) for the authoritative DDL.
+> **Note:** This subsection describes the **persisted catalog, trades, and market-data tables plus HTTP ingest from Polygon.io** as implemented **today**. It will evolve as DB-backed `IMarketData` and richer surfaces ship. See `[sql/schema_v1.sql](../sql/schema_v1.sql)` for the authoritative DDL.
 
 ### Tables at a glance
 
 - **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded like any repository-backed book (fixtures, migrations, ops tooling).
-- **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via [`dev_main`](../app/dev_main.cpp).
-- **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by pricing mode in [`dev_main`](../app/dev_main.cpp).
+- **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via `[dev_main](../app/dev_main.cpp)`.
+- **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by pricing mode in `[dev_main](../app/dev_main.cpp)`.
 
 There are **no foreign keys** from the Polygon-fed tables into `products` / `trades`. Business joins are by convention (e.g. `products.underlying_id` aligned with `equity_daily_eod.ticker`).
 
@@ -394,9 +408,11 @@ erDiagram
     }
 ```
 
+
+
 ### Polygon.io → SQLite ingest
 
-Bulk endpoints target the same SQLite file configured under `database.path` (see [`configs/default.json`](../configs/default.json)). Credentials and throttle use environment variables (`POLYGON_API_KEY`, optional `POLYGON_BASE_URL`, `NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL`), documented alongside the ingest code under [`src/market_data_providers/`](../src/market_data_providers/).
+Bulk endpoints target the same SQLite file configured under `database.path` (see `[configs/default.json](../configs/default.json)`). Credentials and throttle use environment variables (`POLYGON_API_KEY`, optional `POLYGON_BASE_URL`, `NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL`), documented alongside the ingest code under `[src/market_data_providers/](../src/market_data_providers/)`.
 
 ```mermaid
 flowchart LR
@@ -421,50 +437,52 @@ flowchart LR
     TR --> CAT
 ```
 
+
+
 **Ordering detail:** loading `option_contract` uses an **index level** already present in `index_daily_eod` (e.g. close for strike-window logic). In practice, **ingest index daily EOD before option contract reference** for a given valuation date window.
 
 ### `IMarketData` and valuation date *(shipped)*
 
-[`IMarketData`](../include/numeraire/core/imarket_data.hpp) is the read-only market view passed into pricers. Besides spot, rate, dividend yield, and implied vol, it exposes:
+`[IMarketData](../include/numeraire/core/imarket_data.hpp)` is the read-only market view passed into pricers. Besides spot, rate, dividend yield, and implied vol, it exposes:
 
-- **`ValuationDate()`** — calendar **as-of** for which inputs are valid (EOD session). Documented convention: pricers compute time to expiry from **`ValuationDate()`** to the product’s **`ExpiryDate()`** using **Act/365 Fixed** unless a concrete provider says otherwise.
+- `**ValuationDate()`** — calendar **as-of** for which inputs are valid (EOD session). Documented convention: pricers compute time to expiry from `**ValuationDate()`** to the product’s `**ExpiryDate()**` using **Act/365 Fixed** unless a concrete provider says otherwise.
 
-[`MarketSnapshot`](../include/numeraire/market_data/market_snapshot.hpp) carries `valuation_date` (set from `--as-of` / `NUMERAIRE_DEV_AS_OF` in `dev_main`). [`StaticMarketDataProvider`](../include/numeraire/market_data/static_market_data_provider.hpp) wraps that snapshot into an `IMarketData` handle **without I/O** — callers build the snapshot elsewhere (env, SQLite lookup in `dev_main`, unit tests).
+`[MarketSnapshot](../include/numeraire/market_data/market_snapshot.hpp)` carries `valuation_date` (set from `--as-of` / `NUMERAIRE_DEV_AS_OF` in `dev_main`). `[StaticMarketDataProvider](../include/numeraire/market_data/static_market_data_provider.hpp)` wraps that snapshot into an `IMarketData` handle **without I/O** — callers build the snapshot elsewhere (env, SQLite lookup in `dev_main`, unit tests).
 
-[`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) uses `schedule::Act365FixedYearFraction(market.ValuationDate(), product.ExpiryDate())` for \(T\) and for the vol slice passed to `ImpliedVolatility`. **`TradeDate()`** on the product is booking metadata, not the pricing time axis.
+`[AnalyticBlackScholesEquityPricer](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp)` uses `schedule::Act365FixedYearFraction(market.ValuationDate(), product.ExpiryDate())` for T and for the vol slice passed to `ImpliedVolatility`. `**TradeDate()`** on the product is booking metadata, not the pricing time axis.
 
-Unit tests benchmark NPV/greeks against `QuantLib::BlackCalculator` with the same \(T\) convention; see [`unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp).
+Unit tests benchmark NPV/greeks against `QuantLib::BlackCalculator` with the same T convention; see `[unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp)`.
 
 ### From book + market snapshot to NPV and MTM *(today’s `dev_main` path)*
 
 Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-target)** earlier in this document: `SqliteTradeRepository` assembles a `TradeCatalogBundle` per `trade_id`; `ProductFactory` and `PricingEngine` price each leg.
 
-**Valuation date** — Required for pricing mode: **`--as-of YYYY-MM-DD`** or **`NUMERAIRE_DEV_AS_OF`**. Parsed into `MarketSnapshot::valuation_date` and served via `IMarketData::ValuationDate()`. Missing or invalid date → `ValidationError` at startup (no “timeless” run).
+**Valuation date** — Required for pricing mode: `**--as-of YYYY-MM-DD*`* or `**NUMERAIRE_DEV_AS_OF**`. Parsed into `MarketSnapshot::valuation_date` and served via `IMarketData::ValuationDate()`. Missing or invalid date → `ValidationError` at startup (no “timeless” run).
 
-For market inputs, **`dev_main` builds a `MarketSnapshot`** and **`StaticMarketDataProvider`**:
+For market inputs, `**dev_main` builds a `MarketSnapshot**` and `**StaticMarketDataProvider**`:
 
-- **Spot** — **`NUMERAIRE_DEV_SPOT_SOURCE=env`** (default): `NUMERAIRE_DEV_SPOT` for every underlying referenced by booked legs.
-- **Spot — DB** — **`NUMERAIRE_DEV_SPOT_SOURCE=db`**: **`equity_daily_eod.close`** for each underlying on **`ValuationDate`** (requires an ingested daily bar; ticker match is case-insensitive; `adjusted` via **`NUMERAIRE_DEV_SPOT_ADJUSTED`**, default `1`).
-- **Rate / vol / dividends** — still from env: **`NUMERAIRE_DEV_RATE`**, **`NUMERAIRE_DEV_VOL`**, **`NUMERAIRE_DEV_DIV_YIELD`**.
+- **Spot** — `**NUMERAIRE_DEV_SPOT_SOURCE=env`** (default): `NUMERAIRE_DEV_SPOT` for every underlying referenced by booked legs.
+- **Spot — DB** — `**NUMERAIRE_DEV_SPOT_SOURCE=db`**: `**equity_daily_eod.close**` for each underlying on `**ValuationDate**` (requires an ingested daily bar; ticker match is case-insensitive; `adjusted` via `**NUMERAIRE_DEV_SPOT_ADJUSTED**`, default `1`).
+- **Rate / vol / dividends** — still from env: `**NUMERAIRE_DEV_RATE`**, `**NUMERAIRE_DEV_VOL**`, `**NUMERAIRE_DEV_DIV_YIELD**`.
 
-**MTM persistence** — After each leg is priced, `dev_main` upserts **`trade_leg_mtm_eod`** and appends **`trade_leg_mtm_eod_archive`** with inputs used (`underlying_spot`, rates, vol), outputs (`pv_unit`, greeks), **`years_to_maturity`** (same \(T\) as the pricer), `pricing_engine`, and a shared **`batch_run_id`** for the run.
+**MTM persistence** — After each leg is priced, `dev_main` upserts `**trade_leg_mtm_eod`** and appends `**trade_leg_mtm_eod_archive**` with inputs used (`underlying_spot`, rates, vol), outputs (`pv_unit`, greeks), `**years_to_maturity**` (same T as the pricer), `pricing_engine`, and a shared `**batch_run_id**` for the run.
 
-**EOD MTM — unit vs position columns** — Pricer output is **per one share** (one unit of underlying). Booked leg size comes from `trade_legs` (`direction`, `quantity` in contracts) and `products_equity.contract_size` (shares per listed contract, e.g. 100 for US equity options). Let \(s = +1\) for LONG and \(-1\) for SHORT ([`PositionSign`](../include/numeraire/database/leg_pv.hpp)). Position multiplier:
+**EOD MTM — unit vs position columns** — Pricer output is **per one share** (one unit of underlying). Booked leg size comes from `trade_legs` (`direction`, `quantity` in contracts) and `products_equity.contract_size` (shares per listed contract, e.g. 100 for US equity options). Let s = +1 for LONG and -1 for SHORT (`[PositionSign](../include/numeraire/database/leg_pv.hpp)`). Position multiplier:
 
-$$
-M = s \times \text{quantity} \times \text{contract_size}
-$$
+M = sign(direction) × quantity × contract_size
 
-| Column | Meaning |
-|--------|---------|
-| `pv_unit` | Model NPV per share from the pricer |
-| `pv_total` | \(M \times \text{pv\_unit}\) — [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp) |
-| `delta`, `gamma`, `vega`, `theta`, `rho` | Model greek **per share** (same scale as `pv_unit`; from [`PricingGreeks`](../include/numeraire/core/pricing_result.hpp)) |
-| `delta_total`, `gamma_total`, `vega_total`, `theta_total`, `rho_total` | \(M \times\) the corresponding unit greek — same linear scaling as `pv_total` (helper beside [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp)) |
+
+| Column                                                                 | Meaning                                                                                                                                            |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pv_unit`                                                              | Model NPV per share from the pricer                                                                                                                |
+| `pv_total`                                                             | M \times \text{pvunit} — `[LegPvTotal](../include/numeraire/database/leg_pv.hpp)`                                                                  |
+| `delta`, `gamma`, `vega`, `theta`, `rho`                               | Model greek **per share** (same scale as `pv_unit`; from `[PricingGreeks](../include/numeraire/core/pricing_result.hpp)`)                          |
+| `delta_total`, `gamma_total`, `vega_total`, `theta_total`, `rho_total` | M \times the corresponding unit greek — same linear scaling as `pv_total` (helper beside `[LegPvTotal](../include/numeraire/database/leg_pv.hpp)`) |
+
 
 `quantity` and `contract_size` must be strictly positive before pricing; direction is only on `trade_legs.direction`, not on the sign of `quantity`.
 
-**Greek conventions** ([`AnalyticBlackScholesEquityPricer`](../src/pricers/analytic_black_scholes_equity_pricer.cpp), benchmarked vs `QuantLib::BlackCalculator` in unit tests): sensitivities are w.r.t. **spot \(S\)**, **absolute volatility \(\sigma\)**, and **rate \(r\)** on the same \(T\) as NPV. `vega` is \(\partial V / \partial \sigma\) (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time.
+**Greek conventions** (`[AnalyticBlackScholesEquityPricer](../src/pricers/analytic_black_scholes_equity_pricer.cpp)`, benchmarked vs `QuantLib::BlackCalculator` in unit tests): sensitivities are w.r.t. **spot S**, **absolute volatility \sigma**, and **rate r** on the same T as NPV. `vega` is \partial V / \partial \sigma (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time.
 
 A fully SQLite-backed `IMarketDataProvider` (vol/rate surfaces from DB, no env shim) remains future work.
 
@@ -486,8 +504,10 @@ flowchart LR
     PR --> MTM
 ```
 
+
+
 ---
 
 ## Delivery status
 
-Sprint checklist, Stage 2 pricing tracks, SQLite/Polygon milestones, and gaps are maintained in **[`development.md`](development.md)** so this file stays focused on structure and diagrams.
+Sprint checklist, Stage 2 pricing tracks, SQLite/Polygon milestones, and gaps are maintained in `**[development.md](development.md)**` so this file stays focused on structure and diagrams.

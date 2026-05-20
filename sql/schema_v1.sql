@@ -175,10 +175,15 @@ CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod (
     pnl_inception REAL,
     -- Greeks (convention: same scale as pv_unit — document in app/docs)
     delta REAL NOT NULL,
+    delta_total REAL NOT NULL,
     gamma REAL NOT NULL,
+    gamma_total REAL NOT NULL,
     vega REAL NOT NULL,
+    vega_total REAL NOT NULL,
     theta REAL NOT NULL,
+    theta_total REAL NOT NULL,
     rho REAL NOT NULL,
+    rho_total REAL NOT NULL,
     pricing_engine TEXT NOT NULL,
     -- e.g. analytic_black_scholes, monte_carlo_gbm_v1
     batch_run_id TEXT,
@@ -192,53 +197,43 @@ CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_leg_asof_engine ON trade_leg_mt
 CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_asof ON trade_leg_mtm_eod (as_of);
 CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_trade_asof ON trade_leg_mtm_eod (trade_id, as_of);
 CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_engine ON trade_leg_mtm_eod (pricing_engine);
-
 -- ---------------------------------------------------------------------------
 -- Append-only archive of every MTM leg valuation produced by a batch run.
 -- Official current mark remains in trade_leg_mtm_eod (INSERT OR REPLACE).
 -- Compare runs: filter or join on batch_run_id (and leg_id / as_of / pricing_engine).
 CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod_archive (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-
     batch_run_id TEXT NOT NULL,
     calculated_at TEXT NOT NULL,
-
     as_of TEXT NOT NULL,
     session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
-
     trade_id TEXT NOT NULL,
     leg_id TEXT NOT NULL,
-
     underlying_spot REAL NOT NULL,
     risk_free_rate REAL NOT NULL,
     dividend_yield REAL NOT NULL DEFAULT 0,
     implied_vol_used REAL NOT NULL,
     years_to_maturity REAL NOT NULL,
-
     numeraire_currency TEXT NOT NULL DEFAULT 'USD',
     pv_unit REAL NOT NULL,
     pv_total REAL NOT NULL,
     pnl_daily REAL,
     pnl_inception REAL,
-
     delta REAL NOT NULL,
+    delta_total REAL NOT NULL,
     gamma REAL NOT NULL,
+    gamma_total REAL NOT NULL,
     vega REAL NOT NULL,
+    vega_total REAL NOT NULL,
     theta REAL NOT NULL,
+    theta_total REAL NOT NULL,
     rho REAL NOT NULL,
-
+    rho_total REAL NOT NULL,
     pricing_engine TEXT NOT NULL,
     remarks TEXT NOT NULL DEFAULT '',
-
     FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
     FOREIGN KEY (leg_id) REFERENCES trade_legs (leg_id) ON DELETE CASCADE
 );
-
-CREATE INDEX IF NOT EXISTS idx_mtm_archive_batch_run
-    ON trade_leg_mtm_eod_archive (batch_run_id);
-
-CREATE INDEX IF NOT EXISTS idx_mtm_archive_leg_asof_engine_batch
-    ON trade_leg_mtm_eod_archive (leg_id, as_of, pricing_engine, batch_run_id);
-
-CREATE INDEX IF NOT EXISTS idx_mtm_archive_trade_asof
-    ON trade_leg_mtm_eod_archive (trade_id, as_of);
+CREATE INDEX IF NOT EXISTS idx_mtm_archive_batch_run ON trade_leg_mtm_eod_archive (batch_run_id);
+CREATE INDEX IF NOT EXISTS idx_mtm_archive_leg_asof_engine_batch ON trade_leg_mtm_eod_archive (leg_id, as_of, pricing_engine, batch_run_id);
+CREATE INDEX IF NOT EXISTS idx_mtm_archive_trade_asof ON trade_leg_mtm_eod_archive (trade_id, as_of);

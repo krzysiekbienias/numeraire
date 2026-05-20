@@ -1,12 +1,10 @@
-#include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
-
-#include <numeraire/utils/exception.hpp>
-
 #include <SQLiteCpp/SQLiteCpp.h>
 
 #include <array>
 #include <chrono>
 #include <memory>
+#include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
+#include <numeraire/utils/exception.hpp>
 #include <string>
 
 namespace numeraire::database {
@@ -35,14 +33,15 @@ constexpr const char* kArchiveInsertSql =
         "as_of, session_calendar, trade_id, leg_id, "
         "underlying_spot, risk_free_rate, dividend_yield, implied_vol_used, years_to_maturity, "
         "numeraire_currency, pv_unit, pv_total, pnl_daily, pnl_inception, "
-        "delta, gamma, vega, theta, rho, "
+        "delta, delta_total, gamma, gamma_total, vega, vega_total, "
+        "theta, theta_total, rho, rho_total, "
         "pricing_engine, remarks"
         ") VALUES ("
         "?, ?, "
         "?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
-        "?, ?, ?, ?, ?, "
+        "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
         "?, ?"
         ")";
 
@@ -51,13 +50,14 @@ constexpr const char* kUpsertSql =
         "as_of, session_calendar, trade_id, leg_id, batch_run_id, "
         "underlying_spot, risk_free_rate, dividend_yield, implied_vol_used, years_to_maturity, "
         "numeraire_currency, pv_unit, pv_total, pnl_daily, pnl_inception, "
-        "delta, gamma, vega, theta, rho, "
+        "delta, delta_total, gamma, gamma_total, vega, vega_total, "
+        "theta, theta_total, rho, rho_total, "
         "pricing_engine, calculated_at, remarks"
         ") VALUES ("
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
-        "?, ?, ?, ?, ?, "
+        "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
         "?, ?, ?"
         ")";
 
@@ -84,10 +84,15 @@ void BindMarketAndPvFields(SQLite::Statement& st, int& i, const TradeLegMtmEodRo
     }
 
     st.bind(i++, row.delta);
+    st.bind(i++, row.delta_total);
     st.bind(i++, row.gamma);
+    st.bind(i++, row.gamma_total);
     st.bind(i++, row.vega);
+    st.bind(i++, row.vega_total);
     st.bind(i++, row.theta);
+    st.bind(i++, row.theta_total);
     st.bind(i++, row.rho);
+    st.bind(i++, row.rho_total);
 }
 
 }  // namespace
@@ -99,10 +104,10 @@ struct SqliteTradeLegMtmRepository::Impl {
 };
 
 SqliteTradeLegMtmRepository::SqliteTradeLegMtmRepository(const std::string& database_file_path)
-        : impl_(std::make_unique<Impl>()) {
+    : impl_(std::make_unique<Impl>()) {
     try {
-        impl_->db = std::make_unique<SQLite::Database>(
-                database_file_path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+        impl_->db =
+                std::make_unique<SQLite::Database>(database_file_path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
         impl_->db->exec("PRAGMA foreign_keys = ON;");
         impl_->archive_insert = std::make_unique<SQLite::Statement>(*impl_->db, kArchiveInsertSql);
         impl_->upsert = std::make_unique<SQLite::Statement>(*impl_->db, kUpsertSql);
@@ -113,8 +118,7 @@ SqliteTradeLegMtmRepository::SqliteTradeLegMtmRepository(const std::string& data
 
 SqliteTradeLegMtmRepository::~SqliteTradeLegMtmRepository() = default;
 
-void SqliteTradeLegMtmRepository::InsertArchive(const TradeLegMtmEodRow& row,
-                                              const std::string& calculated_at) const {
+void SqliteTradeLegMtmRepository::InsertArchive(const TradeLegMtmEodRow& row, const std::string& calculated_at) const {
     if (!row.batch_run_id.has_value() || row.batch_run_id->empty()) {
         throw ValidationError("TradeLegMtmEodRow: batch_run_id is required for archive insert");
     }
@@ -145,12 +149,10 @@ void SqliteTradeLegMtmRepository::InsertArchive(const TradeLegMtmEodRow& row,
 
 void SqliteTradeLegMtmRepository::Upsert(const TradeLegMtmEodRow& row) const {
     if (row.as_of.empty() || row.trade_id.empty() || row.leg_id.empty() || row.pricing_engine.empty()) {
-        throw ValidationError(
-                "TradeLegMtmEodRow: as_of, trade_id, leg_id, and pricing_engine must be non-empty");
+        throw ValidationError("TradeLegMtmEodRow: as_of, trade_id, leg_id, and pricing_engine must be non-empty");
     }
 
-    const std::string calculated_at =
-            row.calculated_at.empty() ? DefaultUtcTimestampIso8601() : row.calculated_at;
+    const std::string calculated_at = row.calculated_at.empty() ? DefaultUtcTimestampIso8601() : row.calculated_at;
 
     if (row.batch_run_id.has_value() && !row.batch_run_id->empty()) {
         InsertArchive(row, calculated_at);

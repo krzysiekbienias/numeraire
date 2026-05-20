@@ -264,11 +264,26 @@ struct PricingArgvScan {
         mtm.pv_total = pv_total;
 
         if (const auto& greeks = result.Greeks()) {
-            mtm.delta = GreekOrZero(greeks->delta);
-            mtm.gamma = GreekOrZero(greeks->gamma);
-            mtm.vega = GreekOrZero(greeks->vega);
-            mtm.theta = GreekOrZero(greeks->theta);
-            mtm.rho = GreekOrZero(greeks->rho);
+            const double delta_unit = GreekOrZero(greeks->delta);
+            const double gamma_unit = GreekOrZero(greeks->gamma);
+            const double vega_unit = GreekOrZero(greeks->vega);
+            const double theta_unit = GreekOrZero(greeks->theta);
+            const double rho_unit = GreekOrZero(greeks->rho);
+            mtm.delta = delta_unit;
+            mtm.gamma = gamma_unit;
+            mtm.vega = vega_unit;
+            mtm.theta = theta_unit;
+            mtm.rho = rho_unit;
+            mtm.delta_total =
+                    numeraire::database::LegDeltaTotal(row.leg.direction, row.leg.quantity, contract_size, delta_unit);
+            mtm.gamma_total =
+                    numeraire::database::LegGammaTotal(row.leg.direction, row.leg.quantity, contract_size, gamma_unit);
+            mtm.vega_total =
+                    numeraire::database::LegVegaTotal(row.leg.direction, row.leg.quantity, contract_size, vega_unit);
+            mtm.theta_total =
+                    numeraire::database::LegThetaTotal(row.leg.direction, row.leg.quantity, contract_size, theta_unit);
+            mtm.rho_total =
+                    numeraire::database::LegRhoTotal(row.leg.direction, row.leg.quantity, contract_size, rho_unit);
         }
 
         mtm.pricing_engine = kMtmPricingEngine;
