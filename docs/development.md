@@ -135,8 +135,54 @@ WHERE t.trade_id = 'TRD_10004';
 | 3 | `dev_main --price-booking` + mutual exclusion with `--as-of` | **Shipped** |
 | 4 | Rules + repo UT (`trade_booking_rules`, booking repository) | **Shipped** |
 | 5 | [`README.md`](../README.md) § *dev_main* — booking row in capabilities table | Planned |
+| 6 | Hetzner daily cron — [`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) | **Shipped** (script + docs; crontab on host is manual) |
 
-**Explicitly out of scope for booking v1:** `pnl_daily` / `pnl_inception`, IV from Polygon, MC engine, commission recalculation, Hetzner cron.
+**Explicitly out of scope for booking v1:** `pnl_daily` / `pnl_inception`, IV from Polygon, MC engine, commission recalculation.
+
+---
+
+## Daily dev job (Hetzner / cron) — ticket #3
+
+Script: [`scripts/daily_dev_eod.sh`](../scripts/daily_dev_eod.sh). Uses system **cron** (free, pre-installed on Ubuntu). **Polygon** may rate-limit on a cheap tier before any “extra billing” applies.
+
+### What it runs (in order)
+
+1. **`dev_main --fetch-eod-daily`** — one `as_of` day, `--ticker` per distinct `products.underlying_id` from booked legs (+ optional `NUMERAIRE_EXTRA_TICKERS`).
+2. **`dev_main --price-booking --all`** — only **PENDING** trades; sets `execution_price`, may promote to **LIVE**.
+3. **`dev_main --as-of <as_of> --all`** with **`NUMERAIRE_DEV_SPOT_SOURCE=db`** — MTM for **LIVE** trades with booked legs.
+
+**`as_of` default:** last **Mon–Fri** before today (UTC). Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US **holidays** are not skipped (override manually or extend the script later).
+
+### One-off test on the server
+
+```bash
+cd /opt/numeraire/dev
+./scripts/build.sh Release
+NUMERAIRE_DRY_RUN=1 ./scripts/daily_dev_eod.sh    # print steps only
+./scripts/daily_dev_eod.sh                          # real run (needs POLYGON_API_KEY in .env)
+```
+
+### Cron install (example)
+
+```bash
+chmod +x /opt/numeraire/dev/scripts/daily_dev_eod.sh
+sudo crontab -e
+```
+
+```cron
+30 22 * * 1-5 /opt/numeraire/dev/scripts/daily_dev_eod.sh >> /var/log/numeraire-daily.log 2>&1
+```
+
+Ensure repo `.env` contains `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, and dev quote vars (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …). Run as the user that owns the repo and `db.sqlite3`.
+
+### Skip flags (debug)
+
+| Variable | Effect |
+|----------|--------|
+| `NUMERAIRE_SKIP_INGEST=1` | skip Polygon |
+| `NUMERAIRE_SKIP_BOOKING=1` | skip booking |
+| `NUMERAIRE_SKIP_MTM=1` | skip MTM |
+| `NUMERAIRE_DRY_RUN=1` | log commands only |
 
 ---
 
@@ -172,6 +218,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 
 [`sql/schema_v1.sql`](../sql/schema_v1.sql) is the single bootstrap DDL (idempotent `IF NOT EXISTS`). Besides booking + Polygon-fed market tables, it includes:
 
+- **`universe_instrument`** — controlled market-data universe (`data_vendor`, `ingest_equity_eod`, …); scope for EOD ingest / spot, extensible to FX, commodities, manual feeds.
 - **`catalog_instrument_type`** — optional reference codes aligned with `products_equity.instrument_type` (seed / UI). Index **`idx_catalog_instrument_type_family`** on `family` (SQLite requires index names not to collide with table names in the same schema).
 - **`trades` / `trade_legs`** — structural book from import; **`execution_price`** (per-share premium at booking) and **`commission`** (trade cost, separate). Booking fill: planned `dev_main --price-booking`; see [`architecture.md`](architecture.md) § *Booking price*.
 - **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main --as-of`** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*. Columns **`pnl_daily`** / **`pnl_inception`** exist in DDL but are **not populated** yet.

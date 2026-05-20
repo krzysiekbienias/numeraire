@@ -338,6 +338,7 @@ classDiagram
 ### Tables at a glance
 
 - **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded via [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) (or fixtures); **`trade_legs.execution_price`** and **`commission`** are placeholders until booking (see § *Booking price*).
+- **Market-data universe:** `universe_instrument` — controlled ingest/pricing scope (`instrument_id`, `provider_symbol`, `asset_class`, `sector`, `data_vendor`, ingest flags). Seed separately; not auto-filled by Polygon jobs.
 - **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via `[dev_main](../app/dev_main.cpp)`.
 - **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by **MTM** pricing mode in `[dev_main](../app/dev_main.cpp)` (`--as-of`; does not update `execution_price`).
 

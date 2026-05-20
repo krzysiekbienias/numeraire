@@ -52,6 +52,38 @@ CREATE TABLE IF NOT EXISTS trade_legs (
 );
 CREATE INDEX IF NOT EXISTS idx_trade_legs_trade_id ON trade_legs (trade_id);
 CREATE INDEX IF NOT EXISTS idx_trade_legs_product_id ON trade_legs (product_id);
+-- ---------------------------------------------------------------------------
+-- Controlled market-data / pricing universe (reference metadata, not trade products).
+--
+-- `instrument_id` — canonical key in Numeraire (align with `products.underlying_id` when possible).
+-- `provider_symbol` — symbol passed to the ingest API (Polygon ticker, `I:NDX`, `C:EURUSD`, …).
+-- `data_vendor` — primary vendor for this instrument's market data (not everything is Polygon).
+-- Ingest scope: `is_active` + per-pipeline flags (`ingest_equity_eod`, `ingest_index_eod`, …).
+-- No FK to `equity_daily_eod` / `products` — joins by convention on ticker / underlying_id.
+CREATE TABLE IF NOT EXISTS universe_instrument (
+    instrument_id TEXT PRIMARY KEY,
+    provider_symbol TEXT NOT NULL,
+    display_name TEXT,
+    asset_class TEXT NOT NULL CHECK (
+        asset_class IN ('EQUITY', 'INDEX', 'FX', 'COMMODITY', 'RATE', 'BOND', 'OTHER')
+    ),
+    sector TEXT,
+    industry TEXT,
+    quote_currency TEXT NOT NULL DEFAULT 'USD',
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    country TEXT,
+    data_vendor TEXT NOT NULL DEFAULT 'POLYGON',
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    ingest_equity_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_equity_eod IN (0, 1)),
+    ingest_index_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_index_eod IN (0, 1)),
+    ingest_priority INTEGER NOT NULL DEFAULT 100,
+    notes TEXT,
+    created_at TEXT,
+    updated_at TEXT,
+    UNIQUE (provider_symbol, asset_class)
+);
+CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_equity ON universe_instrument (is_active, ingest_equity_eod);
+CREATE INDEX IF NOT EXISTS idx_universe_instrument_data_vendor ON universe_instrument (data_vendor, is_active);
 -- End-of-day OHLCV for listed equities (e.g. Polygon `v2/aggs` `1/day`, adjusted flag).
 --
 -- Time semantics:
