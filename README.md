@@ -176,6 +176,8 @@ Requires **`POLYGON_API_KEY`** in `.env`. Optional: **`POLYGON_BASE_URL`** (defa
 ./build/dev_main --fetch-option-contracts --from 2025-01-02 --to 2025-01-02 --underlying NDX
 ```
 
+**Backfill many equities from `universe_instrument`** (one `dev_main` call, all active Polygon equity symbols) — see [`docs/development.md`](docs/development.md) § *Polygon EOD backfill (`universe_instrument`)*.
+
 ---
 
 ## Tests

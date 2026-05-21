@@ -148,10 +148,10 @@ Script: [`scripts/daily_dev_eod.sh`](../scripts/daily_dev_eod.sh). Uses system *
 ### What it runs (in order)
 
 1. **`dev_main --fetch-eod-daily`** — one `as_of` day, `--ticker` per distinct `products.underlying_id` from booked legs (+ optional `NUMERAIRE_EXTRA_TICKERS`).
-2. **`dev_main --price-booking --all`** — only **PENDING** trades; sets `execution_price`, may promote to **LIVE**.
+2. **`dev_main --price-booking --all`** — **off by default** (`NUMERAIRE_SKIP_BOOKING` defaults to `1`). Opt in with `NUMERAIRE_SKIP_BOOKING=0` for **PENDING** trades only; failures (e.g. LIVE) are logged and **do not** stop step 3.
 3. **`dev_main --as-of <as_of> --all`** with **`NUMERAIRE_DEV_SPOT_SOURCE=db`** — MTM for **LIVE** trades with booked legs.
 
-**`as_of` default:** last **Mon–Fri** before today (UTC). Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US **holidays** are not skipped (override manually or extend the script later).
+**`as_of` default:** **`NUMERAIRE_AS_OF_LAG_DAYS`** calendar days ago (default **2**, UTC) — fits cheap Polygon tiers that lag vs “today”. Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US **holidays** are not skipped (override manually or extend the script later).
 
 ### One-off test on the server
 
@@ -170,19 +170,73 @@ sudo crontab -e
 ```
 
 ```cron
-30 22 * * 1-5 /opt/numeraire/dev/scripts/daily_dev_eod.sh >> /var/log/numeraire-daily.log 2>&1
+30 3 * * 2-6 /opt/numeraire/dev/scripts/daily_dev_eod.sh >> /var/log/numeraire-daily.log 2>&1
 ```
+
+(Booking skipped by default; ingest + MTM only. Uses `AS_OF` = 2 days ago unless you set `NUMERAIRE_AS_OF`.)
 
 Ensure repo `.env` contains `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, and dev quote vars (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …). Run as the user that owns the repo and `db.sqlite3`.
 
 ### Skip flags (debug)
 
-| Variable | Effect |
-|----------|--------|
-| `NUMERAIRE_SKIP_INGEST=1` | skip Polygon |
-| `NUMERAIRE_SKIP_BOOKING=1` | skip booking |
-| `NUMERAIRE_SKIP_MTM=1` | skip MTM |
-| `NUMERAIRE_DRY_RUN=1` | log commands only |
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `NUMERAIRE_SKIP_INGEST` | `0` | `1` = skip Polygon |
+| `NUMERAIRE_SKIP_BOOKING` | **`1`** | `0` = run `--price-booking` (non-fatal errors) |
+| `NUMERAIRE_SKIP_MTM` | `0` | `1` = skip MTM |
+| `NUMERAIRE_AS_OF_LAG_DAYS` | `2` | when `NUMERAIRE_AS_OF` unset |
+| `NUMERAIRE_DRY_RUN` | `0` | `1` = log commands only |
+
+---
+
+## Polygon EOD backfill (`universe_instrument`)
+
+Use this when **`equity_daily_eod`** has gaps (e.g. after a holiday break, before cron is live, or after extending [`universe_instrument`](architecture.md)). Requires **`POLYGON_API_KEY`** in `.env` and a Release build (`./scripts/build.sh`).
+
+**Prerequisites:** seed [`universe_instrument`](../sql/schema_v1.sql) with `ingest_equity_eod = 1` for each symbol. Adjust **`--from`** / **`--to`** to the missing calendar range (inclusive). Expect long runs on a cheap Polygon tier (`NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL` defaults to ~13s between HTTP calls).
+
+From the **repository root**:
+
+```bash
+cd /opt/numeraire/dev   # or your clone path
+DB="${NUMERAIRE_DB_PATH:-db.sqlite3}"
+
+tickers=$(sqlite3 "${DB}" "
+  SELECT provider_symbol
+  FROM universe_instrument
+  WHERE is_active = 1
+    AND ingest_equity_eod = 1
+    AND asset_class = 'EQUITY'
+  ORDER BY instrument_id;
+")
+
+args=(--fetch-eod-daily --from 2026-05-16 --to 2026-05-19)
+while IFS= read -r t; do
+  [[ -n "${t}" ]] && args+=(--ticker "${t}")
+done <<< "${tickers}"
+
+./build/dev_main "${args[@]}"
+```
+
+**Index gap (separate invocation)** — `dev_main` runs only one ingest mode per argv; use `provider_symbol` from the universe row (e.g. `I:NDX` for `instrument_id = NDX`):
+
+```bash
+./build/dev_main --fetch-index-eod-daily \
+  --from 2026-05-16 --to 2026-05-19 --ticker I:NDX
+```
+
+**Verify:**
+
+```bash
+sqlite3 "${DB}" "
+  SELECT ticker, MAX(as_of) AS last_as_of, COUNT(*) AS n
+  FROM equity_daily_eod
+  GROUP BY ticker
+  ORDER BY ticker;
+"
+```
+
+**Note:** [`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) still ingests **book underlyings** only (+ `NUMERAIRE_EXTRA_TICKERS`); it does not read `universe_instrument` yet. Use this backfill for the full equity universe; use the daily script for booked names on each session date.
 
 ---
 
