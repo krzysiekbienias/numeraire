@@ -187,6 +187,47 @@ Ensure repo `.env` contains `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, and dev quot
 | `NUMERAIRE_AS_OF_LAG_DAYS` | `2` | when `NUMERAIRE_AS_OF` unset |
 | `NUMERAIRE_DRY_RUN` | `0` | `1` = log commands only |
 
+### Manual backfill (gaps)
+
+From the **repository root** on the server. Set **`NUMERAIRE_AS_OF`** to each missing **session date** (inclusive). Trades must be **LIVE** with **`execution_price > 0`** on every leg (same rules as cron).
+
+**Ingest only** (`equity_daily_eod` for book underlyings; no MTM):
+
+```bash
+cd /opt/numeraire/dev
+for d in 2026-05-20 2026-05-21; do
+  NUMERAIRE_AS_OF=$d NUMERAIRE_SKIP_MTM=1 ./scripts/daily_dev_eod.sh
+done
+```
+
+**MTM only** (spots already in `equity_daily_eod`; skip Polygon):
+
+```bash
+for d in 2026-05-20 2026-05-21; do
+  NUMERAIRE_AS_OF=$d NUMERAIRE_SKIP_INGEST=1 ./scripts/daily_dev_eod.sh
+done
+```
+
+**Full catch-up** (ingest + MTM per day — e.g. after a missed cron run or restoring an older `db.sqlite3`):
+
+```bash
+for d in 2026-05-20 2026-05-21; do
+  NUMERAIRE_AS_OF=$d ./scripts/daily_dev_eod.sh
+done
+```
+
+**Verify MTM:**
+
+```bash
+sqlite3 db.sqlite3 "
+  SELECT as_of, batch_run_id, COUNT(*) AS legs
+  FROM trade_leg_mtm_eod_archive
+  WHERE as_of >= '2026-05-20'
+  GROUP BY as_of, batch_run_id
+  ORDER BY as_of;
+"
+```
+
 ---
 
 ## Polygon EOD backfill (`universe_instrument`)

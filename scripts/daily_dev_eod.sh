@@ -19,7 +19,10 @@
 #   NUMERAIRE_SKIP_INGEST=1        skip Polygon fetch
 #   NUMERAIRE_SKIP_BOOKING=0       run --price-booking (default: 1 = skip)
 #   NUMERAIRE_SKIP_MTM=1           skip MTM
-#   NUMERAIRE_AS_OF_LAG_DAYS=2     when AS_OF unset: session date N calendar days ago (UTC)
+#   NUMERAIRE_AS_OF_LAG_DAYS=1     when AS_OF unset: session date N calendar days ago (UTC)
+#   Manual MTM gap fill (server): for d in 2026-05-20 2026-05-21; do
+#     NUMERAIRE_AS_OF=$d ./scripts/daily_dev_eod.sh; done
+#   (ingest only: add NUMERAIRE_SKIP_MTM=1; MTM only if spots in DB: NUMERAIRE_SKIP_INGEST=1)
 #   NUMERAIRE_DRY_RUN=1            print commands only
 #   NUMERAIRE_EXTRA_TICKERS="MSFT" extra --ticker symbols (space-separated)
 # ============================================================================
