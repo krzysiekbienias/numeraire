@@ -75,7 +75,7 @@ resolve_as_of() {
         echo "${NUMERAIRE_AS_OF}"
         return
     fi
-    local lag_days="${NUMERAIRE_AS_OF_LAG_DAYS:-2}"
+    local lag_days="${NUMERAIRE_AS_OF_LAG_DAYS:-1}"
     local d
     d="$(date -u -d "${lag_days} days ago" +%Y-%m-%d)"
     while true; do
