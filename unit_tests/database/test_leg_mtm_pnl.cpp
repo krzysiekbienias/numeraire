@@ -53,3 +53,31 @@ TEST(LegMtmPnlTest, ResolvePvTotalPrevUsesPriorWhenPresent) {
 TEST(LegMtmPnlTest, ResolvePvTotalPrevFallsBackToBookedMark) {
     EXPECT_DOUBLE_EQ(numeraire::database::ResolvePvTotalPrevForDaily(std::nullopt, 5000.0), 5000.0);
 }
+
+TEST(LegMtmPnlTest, PnlDailyLongFirstEodUsesBookedMarkAsPrev) {
+    const auto row = MakeLegRow(numeraire::PositionDirection::kLong, 1.0, 100.0, 5.0);
+    const double booked = numeraire::database::LegBookedMark(row);
+    const double pv_total = 600.0;
+    const double prev = numeraire::database::ResolvePvTotalPrevForDaily(std::nullopt, booked);
+    EXPECT_DOUBLE_EQ(numeraire::database::LegPnlDaily(pv_total, prev), 100.0);
+}
+
+TEST(LegMtmPnlTest, PnlDailyShortWithPriorMark) {
+    numeraire::database::PriorOfficialMtmMark prior{};
+    prior.pv_total = -550.0;
+    const double prev = numeraire::database::ResolvePvTotalPrevForDaily(prior, -500.0);
+    EXPECT_DOUBLE_EQ(numeraire::database::LegPnlDaily(-600.0, prev), -50.0);
+}
+
+TEST(LegMtmPnlTest, PnlInceptionLongSubtractsCommission) {
+    auto row = MakeLegRow(numeraire::PositionDirection::kLong, 1.0, 100.0, 5.0);
+    row.leg.commission = 25.0;
+    const double booked = numeraire::database::LegBookedMark(row);
+    EXPECT_DOUBLE_EQ(numeraire::database::LegPnlInception(600.0, booked, 25.0), 75.0);
+}
+
+TEST(LegMtmPnlTest, PnlInceptionShort) {
+    const auto row = MakeLegRow(numeraire::PositionDirection::kShort, 1.0, 100.0, 5.0);
+    const double booked = numeraire::database::LegBookedMark(row);
+    EXPECT_DOUBLE_EQ(numeraire::database::LegPnlInception(-600.0, booked, 0.0), -100.0);
+}

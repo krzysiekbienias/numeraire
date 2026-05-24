@@ -22,4 +22,12 @@ double ResolvePvTotalPrevForDaily(const std::optional<PriorOfficialMtmMark>& pri
     return booked_mark;
 }
 
+double LegPnlDaily(const double pv_total, const double pv_total_prev) noexcept {
+    return pv_total - pv_total_prev;
+}
+
+double LegPnlInception(const double pv_total, const double booked_mark, const double commission) noexcept {
+    return pv_total - booked_mark - commission;
+}
+
 }  // namespace numeraire::database

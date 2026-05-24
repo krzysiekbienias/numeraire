@@ -1,5 +1,6 @@
 add_library(numeraire_database STATIC
         equity_daily_eod_lookup.cpp
+        leg_mtm_pnl.cpp
         leg_pv.cpp
         trade_booking_rules.cpp
         sqlite_schema.cpp

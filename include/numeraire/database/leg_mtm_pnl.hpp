@@ -18,4 +18,10 @@ namespace numeraire::database {
 [[nodiscard]] double ResolvePvTotalPrevForDaily(const std::optional<PriorOfficialMtmMark>& prior_official_mark,
                                                 double booked_mark) noexcept;
 
+/// `pv_total − pv_total_prev` (commission excluded).
+[[nodiscard]] double LegPnlDaily(double pv_total, double pv_total_prev) noexcept;
+
+/// `pv_total − booked_mark − commission`.
+[[nodiscard]] double LegPnlInception(double pv_total, double booked_mark, double commission) noexcept;
+
 }  // namespace numeraire::database
