@@ -6,6 +6,7 @@
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <string>
+#include <string_view>
 
 namespace numeraire::database {
 
@@ -97,10 +98,16 @@ void BindMarketAndPvFields(SQLite::Statement& st, int& i, const TradeLegMtmEodRo
 
 }  // namespace
 
+constexpr const char* kLookupPriorOfficialMarkSql =
+        "SELECT as_of, pv_total FROM trade_leg_mtm_eod "
+        "WHERE leg_id = ? AND pricing_engine = ? AND as_of < ? "
+        "ORDER BY as_of DESC LIMIT 1";
+
 struct SqliteTradeLegMtmRepository::Impl {
     std::unique_ptr<SQLite::Database> db;
     std::unique_ptr<SQLite::Statement> archive_insert;
     std::unique_ptr<SQLite::Statement> upsert;
+    std::unique_ptr<SQLite::Statement> lookup_prior_official;
 };
 
 SqliteTradeLegMtmRepository::SqliteTradeLegMtmRepository(const std::string& database_file_path)
@@ -111,6 +118,8 @@ SqliteTradeLegMtmRepository::SqliteTradeLegMtmRepository(const std::string& data
         impl_->db->exec("PRAGMA foreign_keys = ON;");
         impl_->archive_insert = std::make_unique<SQLite::Statement>(*impl_->db, kArchiveInsertSql);
         impl_->upsert = std::make_unique<SQLite::Statement>(*impl_->db, kUpsertSql);
+        impl_->lookup_prior_official =
+                std::make_unique<SQLite::Statement>(*impl_->db, kLookupPriorOfficialMarkSql);
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"SqliteTradeLegMtmRepository: "} + e.what());
     }
@@ -185,6 +194,38 @@ void SqliteTradeLegMtmRepository::Upsert(const TradeLegMtmEodRow& row) const {
         throw;
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"SqliteTradeLegMtmRepository::Upsert: "} + e.what());
+    }
+}
+
+std::optional<PriorOfficialMtmMark> SqliteTradeLegMtmRepository::LookupPriorOfficialMark(
+        const std::string_view leg_id,
+        const std::string_view pricing_engine,
+        const std::string_view as_of) const {
+    if (leg_id.empty() || pricing_engine.empty() || as_of.empty()) {
+        throw ValidationError(
+                "LookupPriorOfficialMark: leg_id, pricing_engine, and as_of must be non-empty");
+    }
+
+    try {
+        SQLite::Statement& st = *impl_->lookup_prior_official;
+        st.reset();
+        st.clearBindings();
+        st.bind(1, std::string(leg_id));
+        st.bind(2, std::string(pricing_engine));
+        st.bind(3, std::string(as_of));
+
+        if (!st.executeStep()) {
+            return std::nullopt;
+        }
+
+        PriorOfficialMtmMark mark{};
+        mark.as_of = st.getColumn(0).getText();
+        mark.pv_total = st.getColumn(1).getDouble();
+        return mark;
+    } catch (ValidationError const&) {
+        throw;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(std::string{"SqliteTradeLegMtmRepository::LookupPriorOfficialMark: "} + e.what());
     }
 }
 

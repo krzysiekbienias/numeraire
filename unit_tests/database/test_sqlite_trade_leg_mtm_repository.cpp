@@ -8,6 +8,7 @@
 #include <SQLiteCpp/SQLiteCpp.h>
 
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <unistd.h>
@@ -245,6 +246,111 @@ TEST(SqliteTradeLegMtmRepositoryTest, UpsertReplaceUpdatesSameUniqueKey) {
                           "AND as_of='2025-08-10' AND pricing_engine='analytic_black_scholes'"),
             row.vega_total);
 
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegMtmRepositoryTest, LookupPriorOfficialMarkEmptyWhenNoRows) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+    EXPECT_FALSE(repo.LookupPriorOfficialMark("TRD_001_L1", "analytic_black_scholes", "2025-08-10").has_value());
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegMtmRepositoryTest, LookupPriorOfficialMarkReturnsLatestStrictlyBeforeAsOf) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+
+    auto make_row = [](const char* as_of, double pv_total) {
+        numeraire::database::TradeLegMtmEodRow row{};
+        row.as_of = as_of;
+        row.trade_id = "TRD_001";
+        row.leg_id = "TRD_001_L1";
+        row.underlying_spot = 240.0;
+        row.risk_free_rate = 0.03;
+        row.dividend_yield = 0.0;
+        row.implied_vol_used = 0.20;
+        row.years_to_maturity = 0.25;
+        row.pv_unit = pv_total / 10000.0;
+        row.pv_total = pv_total;
+        row.delta = 0.5;
+        row.gamma = 0.01;
+        row.vega = 0.2;
+        row.theta = -0.05;
+        row.rho = 0.09;
+        FillPositionGreekTotals(row);
+        row.pricing_engine = "analytic_black_scholes";
+        row.remarks = "ut";
+        return row;
+    };
+
+    numeraire::database::TradeLegMtmEodRow row_a = make_row("2025-08-08", 500.0);
+    row_a.batch_run_id = "batch-a";
+    repo.Upsert(row_a);
+
+    numeraire::database::TradeLegMtmEodRow row_b = make_row("2025-08-09", 550.0);
+    row_b.batch_run_id = "batch-b";
+    repo.Upsert(row_b);
+
+    const std::optional prior =
+            repo.LookupPriorOfficialMark("TRD_001_L1", "analytic_black_scholes", "2025-08-10");
+    ASSERT_TRUE(prior.has_value());
+    EXPECT_EQ(prior->as_of, "2025-08-09");
+    EXPECT_DOUBLE_EQ(prior->pv_total, 550.0);
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegMtmRepositoryTest, LookupPriorOfficialMarkIgnoresArchiveOnlyAndSameAsOf) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+    numeraire::database::TradeLegMtmEodRow row{};
+    row.as_of = "2025-08-10";
+    row.trade_id = "TRD_001";
+    row.leg_id = "TRD_001_L1";
+    row.batch_run_id = "batch-only-archive-path";
+    row.underlying_spot = 240.0;
+    row.risk_free_rate = 0.03;
+    row.dividend_yield = 0.0;
+    row.implied_vol_used = 0.20;
+    row.years_to_maturity = 0.25;
+    row.pv_unit = 6.0;
+    row.pv_total = 600.0;
+    row.delta = 0.5;
+    row.gamma = 0.01;
+    row.vega = 0.2;
+    row.theta = -0.05;
+    row.rho = 0.09;
+    FillPositionGreekTotals(row);
+    row.pricing_engine = "analytic_black_scholes";
+    row.remarks = "ut";
+    repo.Upsert(row);
+
+    SQLite::Database check(path, SQLite::OPEN_READWRITE);
+    check.exec("DELETE FROM trade_leg_mtm_eod WHERE leg_id='TRD_001_L1'");
+
+    EXPECT_FALSE(repo.LookupPriorOfficialMark("TRD_001_L1", "analytic_black_scholes", "2025-08-11").has_value());
+    EXPECT_DOUBLE_EQ(
+            QueryOneDouble(check, "SELECT COUNT(*) FROM trade_leg_mtm_eod_archive WHERE leg_id='TRD_001_L1'"), 1.0);
+
+    repo.Upsert(row);
+    EXPECT_FALSE(repo.LookupPriorOfficialMark("TRD_001_L1", "analytic_black_scholes", "2025-08-10").has_value());
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegMtmRepositoryTest, LookupPriorOfficialMarkEmptyArgsThrows) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+    EXPECT_THROW({ repo.LookupPriorOfficialMark("", "analytic_black_scholes", "2025-08-10"); },
+                 numeraire::ValidationError);
     fs::remove(path);
 }
 
