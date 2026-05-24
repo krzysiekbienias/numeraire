@@ -7,6 +7,7 @@
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/core/pricing_result.hpp>
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
+#include <numeraire/database/leg_mtm_pnl.hpp>
 #include <numeraire/database/leg_pv.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_trade_leg_booking_repository.hpp>
@@ -50,7 +51,6 @@ using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
 using numeraire::database::TradeLegBookingUpdate;
 using numeraire::database::TradeLegMtmEodRow;
-using numeraire::schedule::ParseIsoDate;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -62,6 +62,7 @@ using numeraire::market_data_providers::TryRunPolygonOptionContractFetch;
 using numeraire::pricers::PricerFactory;
 using numeraire::products::ProductFactory;
 using numeraire::schedule::Act365FixedYearFraction;
+using numeraire::schedule::ParseIsoDate;
 using numeraire::utils::Config;
 using numeraire::utils::EnvLoader;
 using numeraire::utils::Logger;
@@ -314,15 +315,27 @@ struct PricingArgvScan {
 
         mtm.pricing_engine = kMtmPricingEngine;
         mtm.remarks = remarks;
+
+        const double booked_mark = numeraire::database::LegBookedMark(row);
+        const std::optional prior_official =
+                mtm_repo->LookupPriorOfficialMark(row.leg.leg_id, kMtmPricingEngine, mtm.as_of);
+        const double pv_total_prev =
+                numeraire::database::ResolvePvTotalPrevForDaily(prior_official, booked_mark);
+        const double commission = numeraire::database::LegCommissionOrZero(row.leg);
+        mtm.pnl_daily = numeraire::database::LegPnlDaily(pv_total, pv_total_prev);
+        mtm.pnl_inception = numeraire::database::LegPnlInception(pv_total, booked_mark, commission);
+
         mtm_repo->Upsert(mtm);
 
         Logger::NumInfo(
-                "MTM persisted leg_id={} as_of={} pv_unit={} pv_total={} batch_run_id={} "
-                "(official + archive).",
+                "MTM persisted leg_id={} as_of={} pv_unit={} pv_total={} pnl_daily={} pnl_inception={} "
+                "batch_run_id={} (official + archive).",
                 mtm.leg_id,
                 mtm.as_of,
                 mtm.pv_unit,
                 mtm.pv_total,
+                *mtm.pnl_daily,
+                *mtm.pnl_inception,
                 *mtm.batch_run_id);
     }
     return total_npv;
@@ -559,18 +572,17 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         const double unit_npv = *result.Npv();
         updates.push_back(TradeLegBookingUpdate{.leg_id = row.leg.leg_id, .execution_price = unit_npv});
 
-        Logger::NumInfo(
-                "Booking priced leg_id={} trade_date valuation pv_unit={} (ValuationDate equals trade_date).",
-                row.leg.leg_id,
-                unit_npv);
+        Logger::NumInfo("Booking priced leg_id={} trade_date valuation pv_unit={} (ValuationDate equals trade_date).",
+                        row.leg.leg_id,
+                        unit_npv);
     }
     return updates;
 }
 
 [[nodiscard]] int RunBookingWithTradeIds(const SqliteTradeRepository& repo,
-                                           const std::filesystem::path& db_path,
-                                           std::vector<std::string> trade_ids,
-                                           DevMainMarketQuotesConfig mq) {
+                                         const std::filesystem::path& db_path,
+                                         std::vector<std::string> trade_ids,
+                                         DevMainMarketQuotesConfig mq) {
     if (trade_ids.empty()) {
         Logger::NumError("No trades to book (empty list).");
         return 1;
@@ -599,13 +611,12 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         FillUnderlyingSpotsAcrossBundles(snap, {bundle}, db_path, mq);
         FillDividendYieldsAcrossBundles(snap, {bundle}, q);
 
-        Logger::NumInfo(
-                "Booking quotes trade_id={} trade_date={} spot_source={} risk_free_rate={} flat_iv={}.",
-                tid,
-                mq.as_of_iso,
-                mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
-                snap.risk_free_rate,
-                snap.flat_implied_volatility);
+        Logger::NumInfo("Booking quotes trade_id={} trade_date={} spot_source={} risk_free_rate={} flat_iv={}.",
+                        tid,
+                        mq.as_of_iso,
+                        mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
+                        snap.risk_free_rate,
+                        snap.flat_implied_volatility);
 
         StaticMarketDataProvider market(std::move(snap));
         const auto mkt_handle = market.CreateMarketData();
@@ -624,9 +635,7 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
             booking_repo.SetTradeStatus(tid, std::string{numeraire::database::kTradeStatusLive});
             Logger::NumInfo("Trade {} promoted to LIVE (all legs execution_price > 0).", tid);
         } else {
-            Logger::NumInfo(
-                    "Trade {} remains PENDING (at least one leg execution_price <= 0 after booking run).",
-                    tid);
+            Logger::NumInfo("Trade {} remains PENDING (at least one leg execution_price <= 0 after booking run).", tid);
         }
     }
 
