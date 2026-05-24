@@ -1,6 +1,6 @@
 # Numeraire++ — architecture
 
-Living document. Updated as the codebase evolves. **Sprint/stage history:** `[development.md](development.md)`.
+Living document. Updated as the codebase evolves. **Sprint/stage history:** `[development.md](development.md)`. **Pricing formulas and notation:** `[mathematical_background.md](mathematical_background.md)`.
 
 ## Vision
 
@@ -510,7 +510,7 @@ dev_main --price-booking --all
 dev_main --price-booking --trades-json <path>
 ```
 
-**Downstream (later tickets):** `pnl_inception` on MTM rows will use `pv_total`, `execution_price`, and `commission` via [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp)-style cost basis; booking must run before inception PnL is meaningful.
+**PnL on MTM rows** — Formulas for `pnl_daily` / `pnl_inception` (position-level, same currency as `numeraire_currency`) are specified in § *EOD MTM — PnL columns* below. **`dev_main --as-of`** populates both columns when MTM rows are persisted; booking must have run (`execution_price > 0`) before inception PnL is meaningful.
 
 ### From book + market snapshot to NPV and MTM *(today’s `dev_main --as-of` path)*
 
@@ -540,6 +540,31 @@ M = sign(direction) × quantity × contract_size
 
 
 `quantity` and `contract_size` must be strictly positive before pricing; direction is only on `trade_legs.direction`, not on the sign of `quantity`.
+
+**EOD MTM — PnL columns** — Both columns are **position-level** (same scale as `pv_total`, not per-share). Currency is `numeraire_currency` (typically USD). Inputs come from the **current MTM row** plus **`trade_legs`** (`direction`, `quantity`, `execution_price`, `commission`) and **`products.contract_size`**. Use the same position multiplier M as above.
+
+**Booked mark** (model entry value, no commission):
+
+`booked_mark` = M × `execution_price` = `LegPvTotal(direction, quantity, contract_size, execution_price)`
+
+See also [`mathematical_background.md`](mathematical_background.md) for Black–Scholes notation.
+
+`execution_price` is **per-share premium** at booking (same scale as `pv_unit`; convention A — commission excluded). `commission` is **total cash cost on the leg** (non-negative USD from import; `commission_per_contract × quantity` or flat `commission` in JSON).
+
+| Column | Formula | Notes |
+| ------ | ------- | ----- |
+| `pnl_inception` | `pv_total` − `booked_mark` − `commission` | Mark-to-model P&amp;L since booking. Commission is always **subtracted** (reduces P&amp;L). Requires `execution_price > 0`. |
+| `pnl_daily` | `pv_total` − `pv_total_prev` | Change in position mark vs the **prior official** EOD row. Commission **not** included (paid at entry only). |
+
+**Prior mark** `pv_total_prev` for `pnl_daily`:
+
+1. **Official table only:** [`SqliteTradeLegMtmRepository::LookupPriorOfficialMark`](../include/numeraire/database/sqlite_trade_leg_mtm_repository.hpp) queries **`trade_leg_mtm_eod`** (current mark per `leg_id`, `as_of`, `pricing_engine`). Do **not** use `trade_leg_mtm_eod_archive` — that table keeps every batch run for audit; the official row is the prior mark for P&amp;L.
+2. Row with the same `(leg_id, pricing_engine)` and the **largest** `as_of` strictly **less than** the current row’s `as_of`.
+3. If none exists (first EOD after booking): `pv_total_prev` = `LegBookedMark` from [`leg_mtm_pnl.hpp`](../include/numeraire/database/leg_mtm_pnl.hpp) (`LegPvTotal` with `execution_price`).
+
+There is **no** automatic “previous US trading session” calendar — if MTM skips calendar days (missed cron, holiday manual override), `pnl_daily` spans that gap in one step. Re-runs for the same `(leg_id, as_of, pricing_engine)` replace the official row; `pnl_daily` is recomputed against the same prior `as_of` as before.
+
+**Sign check (LONG, quantity = 1, contract_size = 100):** if `execution_price = 5`, `pv_unit = 6` → `booked_mark = +500`, `pv_total = +600` → `pnl_inception = +100 - commission`. **SHORT** with the same numbers → `booked_mark = -500`, `pv_total = -600` → `pnl_inception = -100 - commission` (option rose → loss on short).
 
 **Greek conventions** (`[AnalyticBlackScholesEquityPricer](../src/pricers/analytic_black_scholes_equity_pricer.cpp)`, benchmarked vs `QuantLib::BlackCalculator` in unit tests): sensitivities are w.r.t. **spot S**, **absolute volatility \sigma**, and **rate r** on the same T as NPV. `vega` is \partial V / \partial \sigma (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time.
 

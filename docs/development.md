@@ -28,6 +28,7 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 - **Repo docs:** add or extend a rule here only when the behaviour is a **lasting product convention** (e.g. “EOD MTM: `years_to_maturity` = Act365(`as_of`, expiry)”). One-off verification steps stay in the ticket/PR.
 - **EOD MTM position scaling** — `pv_unit` and `delta`…`rho` are **per share**; `pv_total` and `delta_total`…`rho_total` are **position** values: `sign(direction) × quantity × contract_size × <unit value>`. Same \(M\) as [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp); greek totals use the same helper pattern ([`architecture.md`](architecture.md) § *From book + market snapshot to NPV and MTM*). `quantity` and `contract_size` are validated `> 0` before pricing.
 - **Booking `execution_price`** — After import, legs may have `execution_price = 0`. **Booking** (`dev_main --price-booking`, planned) sets `execution_price` to model **`pv_unit`** on **`trades.trade_date`** (per-share premium; **no** commission inside the price — convention A). **Commission** stays whatever import wrote. **MTM** (`--as-of`) does not update `execution_price`. Full lifecycle table: [`architecture.md`](architecture.md) § *Trade lifecycle: import → booking → MTM*.
+- **EOD MTM PnL** — `pnl_inception` and `pnl_daily` on `trade_leg_mtm_eod` are **position-level** (same scale as `pv_total`). `pnl_inception = pv_total − LegPvTotal(…, execution_price) − commission`. `pnl_daily = pv_total − pv_total_prev`, where `pv_total_prev` is the prior official mark for the same `(leg_id, pricing_engine)`, or `LegPvTotal(…, execution_price)` on the first EOD after booking. Full notation: [`architecture.md`](architecture.md) § *EOD MTM — PnL columns*. **Populated by `dev_main --as-of`** when MTM rows are persisted.
 
 **What a good fix-level DoD contains**
 
@@ -137,7 +138,17 @@ WHERE t.trade_id = 'TRD_10004';
 | 5 | [`README.md`](../README.md) § *dev_main* — booking row in capabilities table | Planned |
 | 6 | Hetzner daily cron — [`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) | **Shipped** (script + docs; crontab on host is manual) |
 
-**Explicitly out of scope for booking v1:** `pnl_daily` / `pnl_inception`, IV from Polygon, MC engine, commission recalculation.
+### PnL on MTM rows (next)
+
+| # | Deliverable | Status |
+|---|-------------|--------|
+| 1 | Formulas in [`architecture.md`](architecture.md) § *EOD MTM — PnL columns* + [`mathematical_background.md`](mathematical_background.md) | **Shipped** (docs) |
+| 2 | `LegBookedMark` / `ResolvePvTotalPrevForDaily` in [`leg_mtm_pnl.hpp`](../include/numeraire/database/leg_mtm_pnl.hpp) | **Shipped** |
+| 3 | Prior-mark lookup `LookupPriorOfficialMark` on **`trade_leg_mtm_eod`** (not archive) | **Shipped** |
+| 4 | Populate `pnl_*` in `dev_main` MTM persist + repository bind | **Shipped** |
+| 5 | Unit tests (LONG/SHORT, first EOD, gap days, commission) | **Shipped** (helpers + lookup + DB persist UT) |
+
+**Explicitly out of scope for booking v1:** IV from Polygon, MC engine, commission recalculation.
 
 ---
 
@@ -316,7 +327,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 - **`universe_instrument`** — controlled market-data universe (`data_vendor`, `ingest_equity_eod`, …); scope for EOD ingest / spot, extensible to FX, commodities, manual feeds.
 - **`catalog_instrument_type`** — optional reference codes aligned with `products_equity.instrument_type` (seed / UI). Index **`idx_catalog_instrument_type_family`** on `family` (SQLite requires index names not to collide with table names in the same schema).
 - **`trades` / `trade_legs`** — structural book from import; **`execution_price`** (per-share premium at booking) and **`commission`** (trade cost, separate). Booking fill: planned `dev_main --price-booking`; see [`architecture.md`](architecture.md) § *Booking price*.
-- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main --as-of`** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*. Columns **`pnl_daily`** / **`pnl_inception`** exist in DDL but are **not populated** yet.
+- **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main --as-of`** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*. **`pnl_daily`** / **`pnl_inception`**: position-level formulas in [`architecture.md`](architecture.md) § *EOD MTM — PnL columns*; **written by `dev_main --as-of`** when MTM is persisted.
 
 Separator lines in the SQL file are **`--` comments** so the script parses cleanly when applied wholesale.
 
