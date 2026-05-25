@@ -4,8 +4,14 @@
 Uses only the Python standard library. Expects schema from sql/refactor.sql
 (tables must exist — apply the schema manually or via your bootstrap).
 
+Validates `product.expiry_date >= trade.trade_date` before any INSERT (rejects
+expired-at-trade-date instruments with a clear error).
+
 Examples:
   NUMERAIRE_DB_PATH=db.sqlite3 python3 scripts/import_trade_bundle.py trades/incoming/my_trade.json
+
+  # Trade ids → trades/incoming/{TRD_….json} (default incoming dir: repo trades/incoming)
+  python3 scripts/import_trade_bundle.py TRD_10005 TRD_10006 TRD_10007 TRD_10008
 
   # Wszystkie *.json z katalogu — ponowny import pomija już istniejące trade_id (SKIP)
   python3 scripts/import_trade_bundle.py --incoming-dir trades/incoming --db db.sqlite3
@@ -19,10 +25,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
 from typing import Any, Mapping
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_INCOMING_DIR = _REPO_ROOT / "trades" / "incoming"
+_TRADE_ID_RE = re.compile(r"^TRD_[A-Za-z0-9_]+$")
 
 REQUIRED_PRODUCT_KEYS = (
     "product_id",
@@ -80,6 +91,17 @@ def _normalize_option_type(raw: Any) -> str | None:
     if k not in ("call", "put"):
         _die(f'equity.option_type must be "call", "put", or null, got {raw!r}')
     return k
+
+
+def _normalize_instrument_type_key(raw: str) -> str:
+    return "".join(ch for ch in str(raw).strip().lower() if ch not in "_ \t")
+
+
+def _is_equity_forward_instrument(raw: Any) -> bool:
+    if raw is None:
+        return False
+    key = _normalize_instrument_type_key(str(raw))
+    return key in ("equityforward", "forward")
 
 
 def _structured_params_to_text(raw: Any) -> str:
@@ -182,8 +204,33 @@ def _resolve_trade_status_for_import(trade: dict[str, Any], notes: list[str]) ->
     trade["status"] = "PENDING"
 
 
-def _collect_json_paths(json_paths: list[Path], incoming_dir: Path | None) -> list[Path]:
-    """Unique paths: positional .json files first, then sorted glob from incoming_dir."""
+def _looks_like_trade_id(raw: str) -> bool:
+    token = raw.removesuffix(".json").removesuffix(".JSON")
+    return _TRADE_ID_RE.match(token) is not None
+
+
+def _resolve_bundle_path(raw: str, incoming_dir: Path) -> Path:
+    """Path to a bundle: explicit .json path or trade id → incoming_dir/{id}.json."""
+    if _looks_like_trade_id(raw):
+        trade_id = raw.removesuffix(".json").removesuffix(".JSON")
+        path = incoming_dir / f"{trade_id}.json"
+        if not path.is_file():
+            _die(f"bundle not found for trade id {trade_id!r}: {path}")
+        return path
+
+    path = Path(raw)
+    if path.suffix.lower() != ".json":
+        _die(f"not a .json file or trade id (TRD_…): {raw!r}")
+    if not path.is_file():
+        _die(f"bundle file not found: {path}")
+    return path
+
+
+def _collect_json_paths(
+        inputs: list[str],
+        incoming_dir: Path,
+        import_all_in_dir: bool) -> list[Path]:
+    """Unique paths: trade ids / .json paths, optionally every *.json in incoming_dir."""
     out: list[Path] = []
     seen: set[str] = set()
 
@@ -195,13 +242,16 @@ def _collect_json_paths(json_paths: list[Path], incoming_dir: Path | None) -> li
             seen.add(key)
             out.append(path)
 
-    for p in json_paths:
-        add(p)
-    if incoming_dir is not None:
-        if not incoming_dir.is_dir():
-            _die(f"--incoming-dir is not a directory: {incoming_dir}")
-        for p in sorted(incoming_dir.glob("*.json")):
-            add(p)
+    if not incoming_dir.is_dir():
+        _die(f"incoming dir is not a directory: {incoming_dir}")
+
+    for raw in inputs:
+        add(_resolve_bundle_path(raw, incoming_dir))
+
+    if import_all_in_dir:
+        for path in sorted(incoming_dir.glob("*.json")):
+            add(path)
+
     return out
 
 
@@ -266,6 +316,32 @@ def _require_non_blank_str(d: Mapping[str, Any], key: str, label: str) -> str:
     if _is_blank(v):
         _die(f"{label}.{key}: required (see _{key}_comment in bundle template)")
     return str(v).strip()
+
+
+def _parse_iso_date(raw: str, label: str) -> tuple[int, int, int]:
+    s = raw.strip()
+    if len(s) != 10 or s[4] != "-" or s[7] != "-":
+        _die(f"{label}: expected ISO date YYYY-MM-DD, got {raw!r}")
+    try:
+        year = int(s[0:4])
+        month = int(s[5:7])
+        day = int(s[8:10])
+    except ValueError:
+        _die(f"{label}: expected ISO date YYYY-MM-DD, got {raw!r}")
+    if month < 1 or month > 12 or day < 1 or day > 31:
+        _die(f"{label}: date out of range: {raw!r}")
+    return year, month, day
+
+
+def _require_expiry_on_or_after_trade_date(expiry_date: str, trade_date: str, product_id: str) -> None:
+    """Product must still be alive on the trade booking date."""
+    exp = _parse_iso_date(expiry_date, "product.expiry_date")
+    td = _parse_iso_date(trade_date, "trade.trade_date")
+    if exp < td:
+        _die(
+            f"product {product_id!r}: expiry_date {expiry_date!r} must be on or after "
+            f"trade.trade_date {trade_date!r}"
+        )
 
 
 def _parse_settlement(raw: Any, label: str) -> str:
@@ -333,10 +409,12 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
     strike = _parse_strike(equity.get("strike", None))
 
     option_type = _normalize_option_type(equity.get("option_type", None))
-    if option_type is None:
-        _die('equity.option_type: required — "call" or "put"')
+    if option_type is None and not _is_equity_forward_instrument(instrument_type):
+        _die('equity.option_type: required — "call" or "put" (null allowed for equity_forward only)')
 
     expiry_date = _require_non_blank_str(product, "expiry_date", "product")
+    trade_date = _require_non_blank_str(trade, "trade_date", "trade")
+    _require_expiry_on_or_after_trade_date(expiry_date, trade_date, pid)
 
     currency = str(product.get("currency", "USD"))
     contract_size_raw = product.get("contract_size", 100.0)
@@ -377,7 +455,6 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
         (pid, option_type, strike, str(instrument_type), str(exercise_style), structured_params),
     )
     tid = str(trade["trade_id"])
-    trade_date = _require_non_blank_str(trade, "trade_date", "trade")
     booking_timestamp = _optional_str(trade, "booking_timestamp")
     updated_at = _optional_str(trade, "updated_at")
     if updated_at is None:
@@ -454,17 +531,25 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import product + equity + trade + legs from JSON into SQLite.")
     parser.add_argument(
-        "json_paths",
+        "inputs",
         nargs="*",
-        type=Path,
-        help="One or more bundle JSON files (keys: product, equity, trade with legs[])",
+        help="Trade ids (TRD_10005) and/or paths to bundle JSON files (product, equity, trade.legs[])",
     )
     parser.add_argument(
         "--incoming-dir",
         dest="incoming_dir",
         type=Path,
         default=None,
-        help="Also import every *.json in this directory (sorted; duplicates skipped)",
+        help=(
+            f"Directory for trade-id lookup (default: {DEFAULT_INCOMING_DIR}). "
+            "If passed with no trade ids, imports every *.json here (same as --all)."
+        ),
+    )
+    parser.add_argument(
+        "--all",
+        dest="import_all",
+        action="store_true",
+        help="Also import every *.json in --incoming-dir (sorted; existing trade_id → SKIP)",
     )
     parser.add_argument(
         "--db",
@@ -475,9 +560,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    paths = _collect_json_paths(list(args.json_paths), args.incoming_dir)
+    incoming_dir = args.incoming_dir if args.incoming_dir is not None else DEFAULT_INCOMING_DIR
+    import_all = args.import_all or (not args.inputs and args.incoming_dir is not None)
+
+    paths = _collect_json_paths(list(args.inputs), incoming_dir, import_all)
     if not paths:
-        _die("No JSON bundles to import. Pass file paths and/or --incoming-dir.")
+        _die(
+            "No JSON bundles to import. Pass trade ids (TRD_10005 …), .json paths, and/or --all with --incoming-dir."
+        )
 
     db_path = args.db_path if args.db_path is not None else Path(default_db_path())
 
