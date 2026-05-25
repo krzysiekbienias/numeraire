@@ -27,7 +27,7 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 - **Default:** issue + PR description (copy the checklist into the PR). No separate `docs/acceptance/…` file unless the scenario becomes a long-lived regression reference or multi-week epic.
 - **Repo docs:** add or extend a rule here only when the behaviour is a **lasting product convention** (e.g. “EOD MTM: `years_to_maturity` = Act365(`as_of`, expiry)”). One-off verification steps stay in the ticket/PR.
 - **EOD MTM position scaling** — `pv_unit` and `delta`…`rho` are **per share**; `pv_total` and `delta_total`…`rho_total` are **position** values: `sign(direction) × quantity × contract_size × <unit value>`. Same \(M\) as [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp); greek totals use the same helper pattern ([`architecture.md`](architecture.md) § *From book + market snapshot to NPV and MTM*). `quantity` and `contract_size` are validated `> 0` before pricing.
-- **Booking `execution_price`** — After import, legs may have `execution_price = 0`. **Booking** (`dev_main --price-booking`, planned) sets `execution_price` to model **`pv_unit`** on **`trades.trade_date`** (per-share premium; **no** commission inside the price — convention A). **Commission** stays whatever import wrote. **MTM** (`--as-of`) does not update `execution_price`. Full lifecycle table: [`architecture.md`](architecture.md) § *Trade lifecycle: import → booking → MTM*.
+- **Booking `execution_price`** — After import, legs may have `execution_price = 0`. **Booking** (`dev_main --price-booking`, planned) sets `execution_price` to model **`pv_unit`** on **`trades.trade_date`** (per-share model value — options, binaries, forwards; **no** commission inside the price — convention A). **Commission** stays whatever import wrote. **MTM** (`--as-of`) does not update `execution_price`. Full lifecycle table: [`architecture.md`](architecture.md) § *Trade lifecycle: import → booking → MTM*.
 - **EOD MTM PnL** — `pnl_inception` and `pnl_daily` on `trade_leg_mtm_eod` are **position-level** (same scale as `pv_total`). `pnl_inception = pv_total − LegPvTotal(…, execution_price) − commission`. `pnl_daily = pv_total − pv_total_prev`, where `pv_total_prev` is the prior official mark for the same `(leg_id, pricing_engine)`, or `LegPvTotal(…, execution_price)` on the first EOD after booking. Full notation: [`architecture.md`](architecture.md) § *EOD MTM — PnL columns*. **Populated by `dev_main --as-of`** when MTM rows are persisted.
 
 **What a good fix-level DoD contains**
@@ -326,7 +326,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 
 - **`universe_instrument`** — controlled market-data universe (`data_vendor`, `ingest_equity_eod`, …); scope for EOD ingest / spot, extensible to FX, commodities, manual feeds.
 - **`catalog_instrument_type`** — optional reference codes aligned with `products_equity.instrument_type` (seed / UI). Index **`idx_catalog_instrument_type_family`** on `family` (SQLite requires index names not to collide with table names in the same schema).
-- **`trades` / `trade_legs`** — structural book from import; **`execution_price`** (per-share premium at booking) and **`commission`** (trade cost, separate). Booking fill: planned `dev_main --price-booking`; see [`architecture.md`](architecture.md) § *Booking price*.
+- **`trades` / `trade_legs`** — structural book from import; **`execution_price`** (per-share model value at booking) and **`commission`** (trade cost, separate). Booking fill: `dev_main --price-booking`; see [`architecture.md`](architecture.md) § *Booking price*.
 - **`trade_leg_mtm_eod`** — per-leg **EOD mark-to-model** row (inputs used, PV, greeks, `years_to_maturity`, `pricing_engine`, `as_of`). **Written by `dev_main --as-of`** (plus append-only **`trade_leg_mtm_eod_archive`**). `years_to_maturity` = Act/365(`ValuationDate`, expiry) — see [`architecture.md`](architecture.md) § *IMarketData and valuation date*. PV/greek columns: unit (`pv_unit`, `delta`, …) vs position (`pv_total`, `delta_total`, …) — scaling in [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*. **`pnl_daily`** / **`pnl_inception`**: position-level formulas in [`architecture.md`](architecture.md) § *EOD MTM — PnL columns*; **written by `dev_main --as-of`** when MTM is persisted.
 
 Separator lines in the SQL file are **`--` comments** so the script parses cleanly when applied wholesale.
@@ -349,8 +349,12 @@ These tracks remain the north star for pricer work:
 **Shipped under these tracks (non-exhaustive):**
 
 - [`PricingEngine`](../include/numeraire/core/pricing_engine.hpp)
-- [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) with UT vs `QuantLib::BlackCalculator`
+- [`PricerFactory`](../include/numeraire/pricers/pricer_factory.hpp) → [`AnalyticCompositePricer`](../include/numeraire/pricers/analytic_composite_pricer.hpp) routing:
+  - [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) — vanilla + asset-or-nothing + cash-or-nothing (UT vs `QuantLib::BlackCalculator` for vanilla)
+  - [`AnalyticForwardPricer`](../include/numeraire/pricers/analytic_forward_pricer.hpp) — equity forward (NPV only v1)
+- [`ProductFactory`](../include/numeraire/products/product_factory.hpp) — `plain_vanilla_european_option`, `asset_or_nothing` / `AssetOrNothingOption`, `binary_cash_or_nothing` / `CashOrNothingOption`, `equity_forward`
 - SQLite-backed catalog + trades + multi-mode [`dev_main`](../README.md#dev_main-pricing--polygon-ingest) (price book vs Polygon ingest)
+- Unit tests: [`test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp), [`test_analytic_forward_pricer.cpp`](../unit_tests/pricers/test_analytic_forward_pricer.cpp), [`test_analytic_composite_pricer.cpp`](../unit_tests/pricers/test_analytic_composite_pricer.cpp)
 
 ---
 

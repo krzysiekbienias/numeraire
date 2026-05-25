@@ -453,13 +453,38 @@ flowchart LR
 
 `[MarketSnapshot](../include/numeraire/market_data/market_snapshot.hpp)` carries `valuation_date` (set from `--as-of` / `NUMERAIRE_DEV_AS_OF` in `dev_main`). `[StaticMarketDataProvider](../include/numeraire/market_data/static_market_data_provider.hpp)` wraps that snapshot into an `IMarketData` handle **without I/O** — callers build the snapshot elsewhere (env, SQLite lookup in `dev_main`, unit tests).
 
-`[AnalyticBlackScholesEquityPricer](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp)` uses `schedule::Act365FixedYearFraction(market.ValuationDate(), product.ExpiryDate())` for T and for the vol slice passed to `ImpliedVolatility`. `**TradeDate()`** on the product is booking metadata, not the pricing time axis.
+All pricers use `schedule::Act365FixedYearFraction(market.ValuationDate(), product.ExpiryDate())` for \(\tau\). **`Product::TradeDate()`** on the instrument is booking metadata, not the pricing time axis.
 
-Unit tests benchmark NPV/greeks against `QuantLib::BlackCalculator` with the same T convention; see `[unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp)`.
+### Analytic pricer layer *(shipped)*
+
+Booking and MTM call `[PricerFactory::Make(kAnalytic, kBlackScholes)](../include/numeraire/pricers/pricer_factory.hpp)`, which returns `[AnalyticCompositePricer](../include/numeraire/pricers/analytic_composite_pricer.hpp)` — a router over specialized closed-form engines. `[PricingEngine`](../include/numeraire/core/pricing_engine.hpp) forwards to whichever `IPricer` the caller holds (in `dev_main`, always the composite from the factory).
+
+```mermaid
+flowchart TB
+    PF[PricerFactory kAnalytic + kBlackScholes]
+    PF --> COMP[AnalyticCompositePricer]
+    COMP --> BS[AnalyticBlackScholesEquityPricer]
+    COMP --> FWD[AnalyticForwardPricer]
+    BS --> OPT[Vanilla + AON + CON]
+    FWD --> EQF[EquityForwardProduct]
+```
+
+| Product (`ProductFactory`) | Pricer | Uses `ImpliedVolatility`? | NPV / greeks |
+| -------------------------- | ------ | --------------------------- | ------------ |
+| `VanillaEquityOptionProduct` | `[AnalyticBlackScholesEquityPricer](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp)` | yes (flat \(\sigma\)) | NPV + greeks (vanilla) |
+| `EquityAssetOrNothingProduct` | same | yes | NPV only (v1) |
+| `EquityCashOrNothingProduct` | same | yes | NPV only (v1) |
+| `EquityForwardProduct` | `[AnalyticForwardPricer](../include/numeraire/pricers/analytic_forward_pricer.hpp)` | **no** | NPV only (v1) |
+
+**Catalog routing** — `[ProductFactory`](../include/numeraire/products/product_factory.hpp) maps `products_equity.instrument_type` (e.g. `plain_vanilla_european_option`, `asset_or_nothing` / `AssetOrNothingOption`, `binary_cash_or_nothing` / `CashOrNothingOption`, `equity_forward`) to the concrete `IProduct` type. See [`trades/incoming/incomming_trades.md`](../trades/incoming/incomming_trades.md) for JSON import examples.
+
+**MTM `pricing_engine` column** — Every leg in a batch run is persisted with `pricing_engine = analytic_black_scholes` ([`dev_main`](../app/dev_main.cpp) constant), including forwards priced via `AnalyticForwardPricer`. The stored `implied_vol_used` snapshot field is still populated from env for all legs even when the pricer ignores vol (forwards). A per-product engine id is future work.
+
+Unit tests: vanilla NPV/greeks vs `QuantLib::BlackCalculator` in [`test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp); forwards in [`test_analytic_forward_pricer.cpp`](../unit_tests/pricers/test_analytic_forward_pricer.cpp); routing in [`test_analytic_composite_pricer.cpp`](../unit_tests/pricers/test_analytic_composite_pricer.cpp).
 
 ### Trade lifecycle: import → booking → MTM
 
-Three **separate** steps touch the book. They reuse the same pricer stack (`ProductFactory`, `PricingEngine`, `AnalyticBlackScholesEquityPricer`) but differ in **valuation date**, **what gets persisted**, and **whether `trade_legs` is updated**.
+Three **separate** steps touch the book. They reuse the same stack (`ProductFactory`, `PricingEngine`, `PricerFactory` → `AnalyticCompositePricer`) but differ in **valuation date**, **what gets persisted**, and **whether `trade_legs` is updated**.
 
 | Step | Tool | Valuation date (`IMarketData::ValuationDate()`) | Writes |
 |------|------|--------------------------------------------------|--------|
@@ -491,7 +516,7 @@ When shipped, booking answers: *“What was the model premium per share at trade
 
 | Field | Rule |
 |-------|------|
-| **`execution_price`** | Per-share option premium from the booking run: **`pv_unit`** from `PricingResult::Npv()` (same scale as MTM `pv_unit`). **Convention A:** commission is **not** included in `execution_price`. |
+| **`execution_price`** | Per-share model **`pv_unit`** from `PricingResult::Npv()` at booking (options, binaries, forwards — same scale as MTM `pv_unit`). **Convention A:** commission is **not** included in `execution_price`. |
 | **`commission`** | Set at **import** (`commission` or `commission_per_contract × quantity` in JSON). Booking **does not** recalculate commission in v1. |
 | **Valuation date** | `MarketSnapshot::valuation_date` = `ParseIsoDate(trades.trade_date)`. Reject trades with empty/invalid `trade_date`. |
 | **Market inputs** | Same env as MTM: `NUMERAIRE_DEV_SPOT_SOURCE`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, `NUMERAIRE_DEV_DIV_YIELD`. With **`SPOT_SOURCE=db`**, spot is `equity_daily_eod.close` on **`trade_date`** (ingest required for that session). |
@@ -514,7 +539,7 @@ dev_main --price-booking --trades-json <path>
 
 ### From book + market snapshot to NPV and MTM *(today’s `dev_main --as-of` path)*
 
-Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-target)** earlier in this document: `SqliteTradeRepository` assembles a `TradeCatalogBundle` per `trade_id`; `ProductFactory` and `PricingEngine` price each leg.
+Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-target)** earlier in this document: `SqliteTradeRepository` assembles a `TradeCatalogBundle` per `trade_id`; `ProductFactory` builds each leg’s `IProduct`; `PricingEngine` prices via `PricerFactory`’s composite pricer.
 
 **Valuation date** — Required for pricing mode: `**--as-of YYYY-MM-DD*`* or `**NUMERAIRE_DEV_AS_OF**`. Parsed into `MarketSnapshot::valuation_date` and served via `IMarketData::ValuationDate()`. Missing or invalid date → `ValidationError` at startup (no “timeless” run).
 
@@ -526,7 +551,7 @@ For market inputs, `**dev_main` builds a `MarketSnapshot**` and `**StaticMarketD
 
 **MTM persistence** — After each leg is priced, `dev_main` upserts `**trade_leg_mtm_eod`** and appends `**trade_leg_mtm_eod_archive**` with inputs used (`underlying_spot`, rates, vol), outputs (`pv_unit`, greeks), `**years_to_maturity**` (same T as the pricer), `pricing_engine`, and a shared `**batch_run_id**` for the run.
 
-**EOD MTM — unit vs position columns** — Pricer output is **per one share** (one unit of underlying). Booked leg size comes from `trade_legs` (`direction`, `quantity` in contracts) and `products_equity.contract_size` (shares per listed contract, e.g. 100 for US equity options). Let s = +1 for LONG and -1 for SHORT (`[PositionSign](../include/numeraire/database/leg_pv.hpp)`). Position multiplier:
+**EOD MTM — unit vs position columns** — Pricer output is **per one share** (one unit of underlying). Booked leg size comes from `trade_legs` (`direction`, `quantity`) and `products.contract_size` (e.g. 100 for US listed options; equity forwards in sample bundles often use `1` with `quantity` = share count). Let s = +1 for LONG and -1 for SHORT (`[PositionSign](../include/numeraire/database/leg_pv.hpp)`). Position multiplier:
 
 M = sign(direction) × quantity × contract_size
 
@@ -535,7 +560,7 @@ M = sign(direction) × quantity × contract_size
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pv_unit`                                                              | Model NPV per share from the pricer                                                                                                                |
 | `pv_total`                                                             | M \times \text{pvunit} — `[LegPvTotal](../include/numeraire/database/leg_pv.hpp)`                                                                  |
-| `delta`, `gamma`, `vega`, `theta`, `rho`                               | Model greek **per share** (same scale as `pv_unit`; from `[PricingGreeks](../include/numeraire/core/pricing_result.hpp)`)                          |
+| `delta`, `gamma`, `vega`, `theta`, `rho`                               | Model greek **per share** when the pricer sets `[PricingGreeks](../include/numeraire/core/pricing_result.hpp)`; otherwise **0** in MTM rows (binaries and forwards v1) |
 | `delta_total`, `gamma_total`, `vega_total`, `theta_total`, `rho_total` | M \times the corresponding unit greek — same linear scaling as `pv_total` (helper beside `[LegPvTotal](../include/numeraire/database/leg_pv.hpp)`) |
 
 
@@ -547,9 +572,9 @@ M = sign(direction) × quantity × contract_size
 
 `booked_mark` = M × `execution_price` = `LegPvTotal(direction, quantity, contract_size, execution_price)`
 
-See also [`mathematical_background.md`](mathematical_background.md) for Black–Scholes notation.
+See also [`mathematical_background.md`](mathematical_background.md) for formulas (Black–Scholes, binaries, equity forward).
 
-`execution_price` is **per-share premium** at booking (same scale as `pv_unit`; convention A — commission excluded). `commission` is **total cash cost on the leg** (non-negative USD from import; `commission_per_contract × quantity` or flat `commission` in JSON).
+`execution_price` is **per-share model value** at booking (same scale as `pv_unit`; convention A — commission excluded). `commission` is **total cash cost on the leg** (non-negative USD from import; `commission_per_contract × quantity` or flat `commission` in JSON).
 
 | Column | Formula | Notes |
 | ------ | ------- | ----- |
@@ -566,7 +591,7 @@ There is **no** automatic “previous US trading session” calendar — if MTM 
 
 **Sign check (LONG, quantity = 1, contract_size = 100):** if `execution_price = 5`, `pv_unit = 6` → `booked_mark = +500`, `pv_total = +600` → `pnl_inception = +100 - commission`. **SHORT** with the same numbers → `booked_mark = -500`, `pv_total = -600` → `pnl_inception = -100 - commission` (option rose → loss on short).
 
-**Greek conventions** (`[AnalyticBlackScholesEquityPricer](../src/pricers/analytic_black_scholes_equity_pricer.cpp)`, benchmarked vs `QuantLib::BlackCalculator` in unit tests): sensitivities are w.r.t. **spot S**, **absolute volatility \sigma**, and **rate r** on the same T as NPV. `vega` is \partial V / \partial \sigma (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time.
+**Greek conventions (vanilla only)** — `[AnalyticBlackScholesEquityPricer](../src/pricers/analytic_black_scholes_equity_pricer.cpp)` for European vanilla, benchmarked vs `QuantLib::BlackCalculator` in unit tests: sensitivities are w.r.t. **spot S**, **absolute volatility \(\sigma\)**, and **rate r** on the same T as NPV. `vega` is \(\partial V / \partial \sigma\) (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time. Asset-or-nothing, cash-or-nothing, and equity forward pricers return **NPV only** in v1 (MTM greek columns are zero-filled).
 
 A fully SQLite-backed `IMarketDataProvider` (vol/rate surfaces from DB, no env shim) remains future work.
 
@@ -579,7 +604,7 @@ flowchart LR
     end
 
     ASOF["--as-of / NUMERAIRE_DEV_AS_OF"] --> SNAP[MarketSnapshot valuation_date]
-    TR -->|GetCatalogForTrade| PR[PricingEngine + AnalyticBlackScholesEquityPricer]
+    TR -->|GetCatalogForTrade| PR[PricingEngine + AnalyticCompositePricer]
     ENV[ENV NUMERAIRE_DEV_* rate vol q] --> SNAP
     SNAP --> SMP[StaticMarketDataProvider]
     SMP -->|IMarketData ValuationDate spot vol| PR

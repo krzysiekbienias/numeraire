@@ -89,7 +89,7 @@ Run `app` / `dev_main` from the **repository root** so relative paths resolve
 | **Index daily EOD** (Polygon) | `--fetch-index-eod-daily …` | Upserts [`index_daily_eod`](sql/schema_v1.sql) |
 | **Equity daily EOD** (Polygon) | `--fetch-eod-daily …` | Upserts [`equity_daily_eod`](sql/schema_v1.sql) |
 | **Option contracts reference** (Polygon) | `--fetch-option-contracts …` | Upserts [`option_contract`](sql/schema_v1.sql) |
-| **Price trades** (SQLite + env quotes) | `--as-of` + `<trade_id>`, `--all`, `--trades-json`, or env `NUMERAIRE_DEV_TRADE_ID` | Reads `trades` + catalog; NPV via Black–Scholes; optional MTM rows in `trade_leg_mtm_eod` |
+| **Price trades** (SQLite + env quotes) | `--as-of` + `<trade_id>`, `--all`, `--trades-json`, or env `NUMERAIRE_DEV_TRADE_ID` | Reads `trades` + catalog; NPV via analytic composite pricer; optional MTM rows in `trade_leg_mtm_eod` |
 
 **Dispatch:** ingest handlers are checked **in order**: `--fetch-index-eod-daily` → `--fetch-eod-daily` → `--fetch-option-contracts`. The first matching branch runs and exits. If argv matches none of those, `dev_main` opens the SQLite repo and runs **pricing**.
 
@@ -100,8 +100,8 @@ Always run from the **repository root** so `.env` and `configs/default.json` res
 The binary loads `.env` (via [`EnvLoader`](include/numeraire/utils/env_loader.hpp)),
 opens the DB at [`NUMERAIRE_DB_PATH`](.env.example) (default [`db.sqlite3`](.gitignore)),
 applies [`sql/schema_v1.sql`](sql/schema_v1.sql) if tables are missing, then
-loads a **trade header + all legs** from SQLite and runs **analytic Black–Scholes**
-per leg, summing book NPV (`sign × quantity × unit NPV`) using quotes from
+loads a **trade header + all legs** from SQLite and runs **analytic closed-form pricing**
+per leg (composite pricer: Black–Scholes for options/binaries, dedicated forward engine for equity forwards), summing book NPV (`sign × quantity × unit NPV`) using quotes from
 `NUMERAIRE_DEV_*` (and optionally **`equity_daily_eod`** for spot). See
 [`docs/architecture.md`](docs/architecture.md) for `IMarketData::ValuationDate()` and MTM persistence.
 
@@ -110,9 +110,13 @@ per leg, summing book NPV (`sign × quantity × unit NPV`) using quotes from
   valid ISO date, `dev_main` exits with an error. The date is stored on
   [`MarketSnapshot::valuation_date`](include/numeraire/market_data/market_snapshot.hpp)
   and exposed as [`IMarketData::ValuationDate()`](include/numeraire/core/imarket_data.hpp).
-  **Time to expiry** in [`AnalyticBlackScholesEquityPricer`](include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp)
-  and MTM column **`years_to_maturity`** use **Act/365 Fixed from valuation date to
-  product expiry**, not from trade date.
+  **Time to expiry** (`years_to_maturity` in MTM, and \(\tau\) in all analytic pricers)
+  uses **Act/365 Fixed from valuation date to product expiry**, not from trade date.
+  [`PricerFactory`](include/numeraire/pricers/pricer_factory.hpp) returns
+  [`AnalyticCompositePricer`](include/numeraire/pricers/analytic_composite_pricer.hpp), which routes to
+  [`AnalyticBlackScholesEquityPricer`](include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) or
+  [`AnalyticForwardPricer`](include/numeraire/pricers/analytic_forward_pricer.hpp) by product type — see
+  [`docs/architecture.md`](docs/architecture.md) § *Analytic pricer layer*.
 - **Which trades** — `dev_main [--as-of DATE] …`: **`--as-of`** may appear in any
   position alongside `<trade_id>`, `--all`, or `--trades-json`
   (e.g. `dev_main --as-of 2026-05-01 TRD_001`).

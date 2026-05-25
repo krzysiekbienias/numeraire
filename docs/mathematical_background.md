@@ -39,7 +39,7 @@ Subscripts \(d_1\), \(d_2\) are the usual Black–Scholes auxiliary variables, n
 
 ## Black–Scholes–Merton (European vanilla on equity)
 
-**Scope in repo:** [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) — European calls and puts only; flat \(r\), \(q\), \(\sigma\) over \(\tau\); no American exercise.
+**Scope in repo:** [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) — European calls and puts; flat \(r\), \(q\), \(\sigma\) over \(\tau\); no American exercise. Invoked via [`AnalyticCompositePricer`](../include/numeraire/pricers/analytic_composite_pricer.hpp) for vanilla legs (same factory entry as binaries below).
 
 ### Auxiliary terms
 
@@ -68,7 +68,9 @@ These match `BlackScholesNpv` in the pricer implementation.
 
 ---
 
-## Greeks (same conventions as persisted MTM)
+## Greeks (vanilla only; same conventions as persisted MTM)
+
+**Scope:** [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) for European vanilla only. Asset-or-nothing, cash-or-nothing, and equity forward pricers return **NPV only** in v1 (MTM greek columns are zero-filled).
 
 Sensitivities are w.r.t. **absolute** \(\sigma\) and **calendar** time; `theta` is **per year** (not per day). Unit greeks are **per share**; position totals multiply by \(M\) — see [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*.
 
@@ -110,6 +112,62 @@ PnL conventions (position-level): [`architecture.md`](architecture.md) § *EOD M
 
 ---
 
+## Asset-or-nothing (European, equity)
+
+**Scope in repo:** [`EquityAssetOrNothingProduct`](../include/numeraire/products/equity_asset_or_nothing_product.hpp) priced by [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp). Pays **spot at expiry** \(S_T\) if the option finishes in the money (catalog family **AON**).
+
+Use the same \(d_1\) as vanilla Black–Scholes.
+
+**Call** (pays \(S_T\) if \(S_T > K\)):
+
+$$V_{\mathrm{AON,call}} = S\,e^{-q\tau}\,\Phi(d_1)$$
+
+**Put** (pays \(S_T\) if \(S_T < K\)):
+
+$$V_{\mathrm{AON,put}} = S\,e^{-q\tau}\,\Phi(-d_1)$$
+
+**Expiry / degenerate cases** (same pattern as vanilla):
+
+- **\(\tau \le 0\):** intrinsic — call pays \(S\) if \(S > K\), else 0; put pays \(S\) if \(S < K\), else 0.
+- **\(\sigma \le 0\):** forward test on \(F = S\,e^{(r-q)\tau}\) with spot scaled by \(e^{-q\tau}\).
+
+---
+
+## Cash-or-nothing (European, equity)
+
+**Scope in repo:** [`EquityCashOrNothingProduct`](../include/numeraire/products/equity_cash_or_nothing_product.hpp) priced by [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.cpp). Pays fixed cash **\(Q\)** per share if ITM (`structured_params.cash_payout_per_share` in JSON import; catalog family **BIN** / `binary_cash_or_nothing`).
+
+Use the same \(d_1\), \(d_2\) as vanilla.
+
+**Call** (pays \(Q\) if \(S_T > K\)):
+
+$$V_{\mathrm{CON,call}} = Q\,e^{-r\tau}\,\Phi(d_2)$$
+
+**Put** (pays \(Q\) if \(S_T < K\)):
+
+$$V_{\mathrm{CON,put}} = Q\,e^{-r\tau}\,\Phi(-d_2)$$
+
+**Expiry / degenerate cases:**
+
+- **\(\tau \le 0\):** pays \(Q\) on intrinsic ITM, else 0.
+- **\(\sigma \le 0\):** forward ITM test with cash discounted by \(e^{-r\tau}\).
+
+---
+
+## Equity forward (European delivery)
+
+**Scope in repo:** [`EquityForwardProduct`](../include/numeraire/products/equity_forward_product.hpp) priced by [`AnalyticForwardPricer`](../include/numeraire/pricers/analytic_forward_pricer.hpp) (routed by [`AnalyticCompositePricer`](../include/numeraire/pricers/analytic_composite_pricer.hpp)). Long physical forward: receive \(S_T\), pay fixed **forward price** \(K\) (stored as `products_equity.strike`; catalog **EQF**). **No volatility** enters the formula.
+
+**Present value (per one share):**
+
+$$V_{\mathrm{fwd}} = S\,e^{-q\tau} - K\,e^{-r\tau}$$
+
+**Expiry:**
+
+- **\(\tau \le 0\):** \(V_{\mathrm{fwd}} = S - K\) (undiscounted intrinsic).
+
+---
+
 ## Planned extensions (placeholder)
 
-Future sections may cover: asset-or-nothing payoffs, local/stochastic vol, American bounds, Monte Carlo GBM, etc., as corresponding pricers land in `src/pricers/`.
+Future sections may cover: local/stochastic vol, American bounds, Monte Carlo GBM, FX forwards (**FXF**), FRAs (**IRF**), etc., as corresponding pricers land in `src/pricers/`.
