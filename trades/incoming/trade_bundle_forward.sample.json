@@ -1,0 +1,56 @@
+{
+  "_comment": "Equity forward template — copy to e.g. TRD_10009.json, fill required fields, then import. Do not import as-is.",
+  "product": {
+    "product_id": "FWD_EQF_AAPL_20260918",
+    "_product_id_comment": "Pattern: FWD_EQF_{UNDERLYING}_{YYYYMMDD} (catalog EQF). Strike K in equity.strike, not in product_id.",
+    "asset_kind": "EQUITY",
+    "underlying_id": "AAPL",
+    "expiry_date": "",
+    "_expiry_date_comment": "required — YYYY-MM-DD",
+    "settlement": "CASH",
+    "_settlement_comment": "CASH or PHYSICAL",
+    "currency": "USD",
+    "contract_size": 1,
+    "_contract_size_comment": "OTC: 1 = one share per quantity unit. Options-style: use 100 and quantity in contracts.",
+    "day_count": "Actual365Fixed",
+    "calendar": "UnitedStates"
+  },
+  "equity": {
+    "_product_id_comment": "optional — omit or null; defaults from product.product_id",
+    "instrument_type": "equity_forward",
+    "_instrument_type_comment": "catalog maps_to equity_forward (code EQF)",
+    "option_type": null,
+    "_option_type_comment": "must be null — no call/put; use legs[].direction long/short",
+    "strike": null,
+    "_strike_comment": "required number — forward price K per share",
+    "exercise_style": "european",
+    "structured_params": {},
+    "_structured_params_comment": "plain forward: {}"
+  },
+  "trade": {
+    "trade_id": "TRD_SAMPLE_FWD",
+    "portfolio_id": "BOOK_1",
+    "strategy_type": "EQUITY_FORWARD",
+    "booking_timestamp": "2026-05-11 09:00:00",
+    "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS",
+    "trade_date": null,
+    "_trade_date_comment": "required — YYYY-MM-DD",
+    "_status_comment": "optional — import always writes PENDING until --price-booking",
+    "legs": [
+      {
+        "_leg_id_comment": "optional — defaults to {trade_id}_L1",
+        "_product_id_comment": "optional — defaults from product.product_id",
+        "direction": "long",
+        "_direction_comment": "long = bought forward, short = sold forward",
+        "quantity": 1000,
+        "_quantity_comment": "with contract_size=1: number of shares",
+        "execution_price": null,
+        "_execution_price_comment": "null → 0 until booking pricer on trade_date",
+        "commission_per_contract": 0,
+        "_commission_per_contract_comment": "optional — multiplied by quantity",
+        "commission": null,
+        "_commission_comment": "optional flat total — used only if commission_per_contract omitted"
+      }
+    ]
+  }
+}

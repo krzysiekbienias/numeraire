@@ -1,8 +1,8 @@
 # Incoming trade bundles
 
-Copy [`trade_bundle.sample.json`](trade_bundle.sample.json) (vanilla) or [`trade_bundle_binary.sample.json`](trade_bundle_binary.sample.json) (asset-or-nothing / cash-or-nothing) to a new filename, fill empty/required fields, then import with [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py).
+Copy [`trade_bundle.sample.json`](trade_bundle.sample.json) (vanilla), [`trade_bundle_binary.sample.json`](trade_bundle_binary.sample.json) (binaries), or [`trade_bundle_forward.sample.json`](trade_bundle_forward.sample.json) (equity forward) to a new filename, fill empty/required fields, then import with [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py).
 
-Only `trade_bundle.sample.json` and `trade_bundle_binary.sample.json` are tracked; other `*.json` files in this directory are gitignored. **Do not import a sample as-is** — samples intentionally fail validation until filled.
+Only `trade_bundle*.sample.json` files are tracked; other `*.json` files in this directory are gitignored. **Do not import a sample as-is** — samples intentionally fail validation until filled.
 
 ## Import from CLI
 
@@ -54,6 +54,26 @@ All four use **`trade_date` = 2026-05-11** (first booking/MTM on or after that d
 
 ```bash
 python3 scripts/import_trade_bundle.py TRD_10005 TRD_10006 TRD_10007 TRD_10008
+```
+
+## Equity forwards (catalog EQF)
+
+`equity.instrument_type` = **`equity_forward`** (`option_type`: **null**; forward price **K** in `strike`; long/short on `legs[].direction`). Product id pattern: **`FWD_EQF_{UNDERLYING}_{YYYYMMDD}`**. Default sizing in examples: `contract_size = 1`, `quantity` = share count.
+
+**Pricer + import support for `option_type: null` is tracked separately** — bundles are ready before booking/MTM.
+
+**Filled examples (local, gitignored):**
+
+| File | Trade | Side | Underlying | K | Expiry | Shares |
+|------|-------|------|------------|---|--------|--------|
+| `TRD_10009.json` | TRD_10009 | short | AAPL | 290 | 2026-09-18 | 1000 |
+| `TRD_10010.json` | TRD_10010 | long | MSFT | 420 | 2026-12-18 | 500 |
+| `TRD_10011.json` | TRD_10011 | short | NVDA | 130 | 2026-03-20 | 2000 |
+
+All three use **`trade_date` = 2026-05-11**.
+
+```bash
+python3 scripts/import_trade_bundle.py TRD_10009 TRD_10010 TRD_10011
 ```
 
 ## Pipeline
