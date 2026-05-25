@@ -11,7 +11,8 @@ namespace numeraire::products {
 /// `ProductDto::catalog_instrument_type` (`products_equity.instrument_type`) when
 /// set; otherwise `instrument_type` inside `structured_params`/attributes JSON as
 /// before. Omit / vanilla ⇒ `VanillaEquityOptionProduct`; AoN synonyms ⇒
-/// `EquityAssetOrNothingProduct`. `catalog_exercise_style` defaults to european.
+/// `EquityAssetOrNothingProduct`; CoN / digital ⇒ `EquityCashOrNothingProduct`
+/// (`structured_params.cash_payout_per_share` required). `catalog_exercise_style` defaults to european.
 class ProductFactory {
    public:
     [[nodiscard]] static std::unique_ptr<core::IProduct> MakeFromEquityCatalog(

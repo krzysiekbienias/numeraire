@@ -6,6 +6,8 @@
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/pricers/analytic_black_scholes_equity_pricer.hpp>
+#include <numeraire/products/equity_asset_or_nothing_product.hpp>
+#include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -94,7 +96,226 @@ private:
             numeraire::utils::quantlib_bridge::ToQuantLib(kind), strike, forward, std_dev, discount);
 }
 
+[[nodiscard]] double BenchAssetOrNothingNpv(const numeraire::OptionType kind,
+                                            const double spot,
+                                            const double strike,
+                                            const double r,
+                                            const double q,
+                                            const double vol,
+                                            const double tau) {
+    const double srt = vol * std::sqrt(tau);
+    const double d1 = (std::log(spot / strike) + ((r - q) + 0.5 * vol * vol) * tau) / srt;
+    const double eqt = std::exp(-q * tau);
+    if (kind == numeraire::OptionType::kCall) {
+        return spot * eqt * 0.5 * (1.0 + std::erf(d1 / std::sqrt(2.0)));
+    }
+    return spot * eqt * 0.5 * (1.0 + std::erf(-d1 / std::sqrt(2.0)));
+}
+
+[[nodiscard]] double BenchCashOrNothingNpv(const numeraire::OptionType kind,
+                                           const double spot,
+                                           const double strike,
+                                           const double cash_payout,
+                                           const double r,
+                                           const double q,
+                                           const double vol,
+                                           const double tau) {
+    const double srt = vol * std::sqrt(tau);
+    const double d1 = (std::log(spot / strike) + ((r - q) + 0.5 * vol * vol) * tau) / srt;
+    const double d2 = d1 - srt;
+    const double discount = std::exp(-r * tau);
+    if (kind == numeraire::OptionType::kCall) {
+        return cash_payout * discount * 0.5 * (1.0 + std::erf(d2 / std::sqrt(2.0)));
+    }
+    return cash_payout * discount * 0.5 * (1.0 + std::erf(-d2 / std::sqrt(2.0)));
+}
+
 }  // namespace
+
+TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingCallMatchesClosedForm) {
+    const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};
+    const numeraire::schedule::Date expiry{.year = 2026, .month = 1, .day = 1};
+    const double tau = numeraire::schedule::Act365FixedYearFraction(trade, expiry);
+
+    MapMarket m;
+    m.SetValuationDate(trade);
+    m.SetSpot("AAPL", 100.0);
+    m.SetRate(0.05);
+    m.SetDivYield(0.02);
+    m.SetVol(0.25);
+
+    const numeraire::products::EquityAssetOrNothingProduct opt(
+            "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 100.0, trade, expiry);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(opt, m);
+
+    const double expected = BenchAssetOrNothingNpv(numeraire::OptionType::kCall, 100.0, 100.0, 0.05, 0.02, 0.25, tau);
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_NEAR(*out.Npv(), expected, 1e-12);
+    EXPECT_FALSE(out.Greeks().has_value());
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingPutMatchesClosedForm) {
+    const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};
+    const numeraire::schedule::Date expiry{.year = 2026, .month = 1, .day = 1};
+    const double tau = numeraire::schedule::Act365FixedYearFraction(trade, expiry);
+
+    MapMarket m;
+    m.SetValuationDate(trade);
+    m.SetSpot("GOOGL", 100.0);
+    m.SetRate(0.03);
+    m.SetDivYield(0.0);
+    m.SetVol(0.20);
+
+    const numeraire::products::EquityAssetOrNothingProduct opt(
+            "GOOGL", numeraire::OptionType::kPut, numeraire::ExerciseStyle::kEuropean, 110.0, trade, expiry);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(opt, m);
+
+    const double expected = BenchAssetOrNothingNpv(numeraire::OptionType::kPut, 100.0, 110.0, 0.03, 0.0, 0.20, tau);
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_NEAR(*out.Npv(), expected, 1e-12);
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingZeroTimeIsSpotIfItm) {
+    const numeraire::schedule::Date d{.year = 2025, .month = 6, .day = 15};
+
+    MapMarket m;
+    m.SetValuationDate(d);
+    m.SetSpot("AAPL", 105.0);
+    m.SetRate(0.05);
+    m.SetVol(0.2);
+
+    const numeraire::products::EquityAssetOrNothingProduct call(
+            "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 100.0, d, d);
+    const numeraire::products::EquityAssetOrNothingProduct put(
+            "AAPL", numeraire::OptionType::kPut, numeraire::ExerciseStyle::kEuropean, 110.0, d, d);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult call_out = pricer.Price(call, m);
+    const numeraire::core::PricingResult put_out = pricer.Price(put, m);
+
+    ASSERT_TRUE(call_out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*call_out.Npv(), 105.0);
+    ASSERT_TRUE(put_out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*put_out.Npv(), 105.0);
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingZeroTimeOtmIsZero) {
+    const numeraire::schedule::Date d{.year = 2025, .month = 6, .day = 15};
+
+    MapMarket m;
+    m.SetValuationDate(d);
+    m.SetSpot("AAPL", 95.0);
+    m.SetRate(0.05);
+    m.SetVol(0.2);
+
+    const numeraire::products::EquityAssetOrNothingProduct call(
+            "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 100.0, d, d);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(call, m);
+
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*out.Npv(), 0.0);
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingCallMatchesClosedForm) {
+    const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};
+    const numeraire::schedule::Date expiry{.year = 2026, .month = 1, .day = 1};
+    const double tau = numeraire::schedule::Act365FixedYearFraction(trade, expiry);
+
+    MapMarket m;
+    m.SetValuationDate(trade);
+    m.SetSpot("NVDA", 250.0);
+    m.SetRate(0.03);
+    m.SetDivYield(0.0);
+    m.SetVol(0.35);
+
+    const numeraire::products::EquityCashOrNothingProduct opt(
+            "NVDA", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 220.0, 1.0, trade,
+            expiry);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(opt, m);
+
+    const double expected = BenchCashOrNothingNpv(
+            numeraire::OptionType::kCall, 250.0, 220.0, 1.0, 0.03, 0.0, 0.35, tau);
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_NEAR(*out.Npv(), expected, 1e-12);
+    EXPECT_FALSE(out.Greeks().has_value());
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingPutMatchesClosedForm) {
+    const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};
+    const numeraire::schedule::Date expiry{.year = 2026, .month = 1, .day = 1};
+    const double tau = numeraire::schedule::Act365FixedYearFraction(trade, expiry);
+
+    MapMarket m;
+    m.SetValuationDate(trade);
+    m.SetSpot("AAPL", 280.0);
+    m.SetRate(0.03);
+    m.SetDivYield(0.0);
+    m.SetVol(0.22);
+
+    const numeraire::products::EquityCashOrNothingProduct opt(
+            "AAPL", numeraire::OptionType::kPut, numeraire::ExerciseStyle::kEuropean, 295.0, 1.0, trade,
+            expiry);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(opt, m);
+
+    const double expected = BenchCashOrNothingNpv(
+            numeraire::OptionType::kPut, 280.0, 295.0, 1.0, 0.03, 0.0, 0.22, tau);
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_NEAR(*out.Npv(), expected, 1e-12);
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingZeroTimeIsPayoutIfItm) {
+    const numeraire::schedule::Date d{.year = 2025, .month = 6, .day = 15};
+    constexpr double kPayout = 1.0;
+
+    MapMarket m;
+    m.SetValuationDate(d);
+    m.SetSpot("AAPL", 300.0);
+    m.SetRate(0.05);
+    m.SetVol(0.2);
+
+    const numeraire::products::EquityCashOrNothingProduct call(
+            "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 295.0, kPayout, d, d);
+    const numeraire::products::EquityCashOrNothingProduct put(
+            "AAPL", numeraire::OptionType::kPut, numeraire::ExerciseStyle::kEuropean, 305.0, kPayout, d, d);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult call_out = pricer.Price(call, m);
+    const numeraire::core::PricingResult put_out = pricer.Price(put, m);
+
+    ASSERT_TRUE(call_out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*call_out.Npv(), kPayout);
+    ASSERT_TRUE(put_out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*put_out.Npv(), kPayout);
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingZeroTimeOtmIsZero) {
+    const numeraire::schedule::Date d{.year = 2025, .month = 6, .day = 15};
+
+    MapMarket m;
+    m.SetValuationDate(d);
+    m.SetSpot("AAPL", 290.0);
+    m.SetRate(0.05);
+    m.SetVol(0.2);
+
+    const numeraire::products::EquityCashOrNothingProduct call(
+            "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 295.0, 1.0, d, d);
+
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(call, m);
+
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*out.Npv(), 0.0);
+}
 
 TEST(AnalyticBlackScholesEquityPricerTest, EuropeanCallMatchesQuantLibBenchmark) {
     const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};

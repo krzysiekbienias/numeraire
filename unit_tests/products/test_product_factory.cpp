@@ -4,6 +4,7 @@
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
+#include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -122,6 +123,50 @@ TEST(ProductFactoryTest, AssetOrNothingCatalogBuildsDedicatedProductType) {
     EXPECT_EQ(instrument->OptionKind(), numeraire::OptionType::kPut);
     EXPECT_DOUBLE_EQ(instrument->Strike(), 130.0);
     EXPECT_EQ(instrument->UnderlyingId(), "BABA");
+}
+
+TEST(ProductFactoryTest, CashOrNothingCatalogBuildsDedicatedProductType) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "P_NVDA_CON";
+    product.catalog_instrument_type = "CashOrNothingOption";
+    product.option_side = "CALL";
+    product.strike = 220.0;
+    product.attributes_json = R"({"cash_payout_per_share": 1.0})";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "P_NVDA_CON";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "NVDA";
+    equity.expiry_date = std::string{"2026-12-18"};
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr);
+
+    ASSERT_NE(instrument, nullptr);
+    const auto* con = dynamic_cast<numeraire::products::EquityCashOrNothingProduct*>(instrument.get());
+    ASSERT_NE(con, nullptr);
+    EXPECT_DOUBLE_EQ(con->CashPayoutPerShare(), 1.0);
+    EXPECT_EQ(con->OptionKind(), numeraire::OptionType::kCall);
+    EXPECT_DOUBLE_EQ(con->Strike(), 220.0);
+}
+
+TEST(ProductFactoryTest, CashOrNothingMissingPayoutThrows) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "P_BAD";
+    product.catalog_instrument_type = "CashOrNothingOption";
+    product.option_side = "PUT";
+    product.strike = 100.0;
+    product.attributes_json = "{}";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "P_BAD";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+    equity.expiry_date = std::string{"2026-06-01"};
+
+    EXPECT_THROW(static_cast<void>(
+                         numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
+                 numeraire::ValidationError);
 }
 
 TEST(ProductFactoryTest, AsianOptionAttributesThrowsUntilSupported) {

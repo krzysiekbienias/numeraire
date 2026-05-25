@@ -2,6 +2,7 @@
 
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
+#include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -19,6 +20,7 @@ namespace {
 enum class EquityCatalogInstrumentKind : std::uint8_t {
     kVanilla,
     kAssetOrNothing,
+    kCashOrNothing,
 };
 
 [[nodiscard]] std::string NormalizeInstrumentTypeKey(std::string t) {
@@ -51,6 +53,10 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     }
     if (key == "assetornothingoption" || key == "assetornothing") {
         return EquityCatalogInstrumentKind::kAssetOrNothing;
+    }
+    if (key == "cashornothingoption" || key == "cashornothing" || key == "digitaloption" ||
+        key == "digital") {
+        return EquityCatalogInstrumentKind::kCashOrNothing;
     }
     std::ostringstream oss;
     oss << "unsupported instrument_type: \"" << key << "\"";
@@ -128,6 +134,34 @@ void EnsureEquityKind(const std::string& asset_kind) {
     }
 }
 
+[[nodiscard]] double ParseCashPayoutPerShare(const std::string& attributes_json) {
+    const std::string trimmed = numeraire::utils::TrimCopy(attributes_json);
+    if (trimmed.empty() || trimmed == "{}") {
+        throw numeraire::ValidationError(
+                "CashOrNothingOption requires structured_params.cash_payout_per_share (positive number)");
+    }
+
+    const auto j = nlohmann::json::parse(trimmed, nullptr, false);
+    if (j.is_discarded() || !j.is_object()) {
+        throw numeraire::ValidationError("structured_params must be a JSON object for CashOrNothingOption");
+    }
+
+    const auto it = j.find("cash_payout_per_share");
+    if (it == j.end() || it->is_null()) {
+        throw numeraire::ValidationError(
+                "CashOrNothingOption requires structured_params.cash_payout_per_share (positive number)");
+    }
+    if (!it->is_number()) {
+        throw numeraire::ValidationError("structured_params.cash_payout_per_share must be a number");
+    }
+
+    const double payout = it->get<double>();
+    if (!(payout > 0.0)) {
+        throw numeraire::ValidationError("structured_params.cash_payout_per_share must be positive");
+    }
+    return payout;
+}
+
 }  // namespace
 
 namespace numeraire::products {
@@ -163,6 +197,11 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
         case EquityCatalogInstrumentKind::kAssetOrNothing:
             return std::make_unique<EquityAssetOrNothingProduct>(
                     equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
+        case EquityCatalogInstrumentKind::kCashOrNothing: {
+            const double payout = ParseCashPayoutPerShare(product.attributes_json);
+            return std::make_unique<EquityCashOrNothingProduct>(
+                    equity.underlying_id, opt, exercise, *product.strike, payout, trade_date, expiry);
+        }
     }
     throw ValidationError("internal: unhandled equity instrument kind");
 }
