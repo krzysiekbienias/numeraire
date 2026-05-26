@@ -1,5 +1,7 @@
 add_library(numeraire_pricers STATIC
         analytic_black_scholes_equity_pricer.cpp
+        analytic_composite_pricer.cpp
+        analytic_forward_pricer.cpp
         pricer_factory.cpp
 )
 

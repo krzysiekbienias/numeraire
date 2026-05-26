@@ -60,7 +60,7 @@ python3 scripts/import_trade_bundle.py TRD_10005 TRD_10006 TRD_10007 TRD_10008
 
 `equity.instrument_type` = **`equity_forward`** (`option_type`: **null**; forward price **K** in `strike`; long/short on `legs[].direction`). Product id pattern: **`FWD_EQF_{UNDERLYING}_{YYYYMMDD}`**. Default sizing in examples: `contract_size = 1`, `quantity` = share count.
 
-**Pricer + import support for `option_type: null` is tracked separately** — bundles are ready before booking/MTM.
+**Pricer + import:** `equity_forward` with `option_type: null` is supported by `ProductFactory`, analytic pricer, and import.
 
 **Filled examples (local, gitignored):**
 
