@@ -15,20 +15,95 @@ namespace numeraire::market_data_providers::polygon_ingest {
 
 using numeraire::utils::Logger;
 
-int SleepSecAfterPolygonCall() noexcept {
-    const char* raw = std::getenv("NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL");
-    if (raw == nullptr || raw[0] == '\0') {
-        return 13;
+namespace {
+
+constexpr int kBasicTierSleepSec = 13;
+constexpr int kStarterTierSleepSec = 0;
+
+[[nodiscard]] bool EqualsAsciiIgnoreCase(const char* a, const char* b) noexcept {
+    if (a == nullptr || b == nullptr) {
+        return false;
     }
-    char* end = nullptr;
-    const long v = std::strtol(raw, &end, 10);
-    if (end == raw || v < 0) {
-        return 13;
+    for (; *a != '\0' && *b != '\0'; ++a, ++b) {
+        if (std::tolower(static_cast<unsigned char>(*a)) != std::tolower(static_cast<unsigned char>(*b))) {
+            return false;
+        }
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+[[nodiscard]] int ClampSleepSec(const long v) {
+    if (v < 0) {
+        return kBasicTierSleepSec;
     }
     if (v > 3600) {
         return 3600;
     }
     return static_cast<int>(v);
+}
+
+[[nodiscard]] bool TryParseIntEnv(const char* name, int& out) {
+    const char* raw = std::getenv(name);
+    if (raw == nullptr || raw[0] == '\0') {
+        return false;
+    }
+    char* end = nullptr;
+    const long v = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return false;
+    }
+    out = ClampSleepSec(v);
+    return true;
+}
+
+[[nodiscard]] bool TryParsePlanEnv(const char* name, int& out) {
+    const char* raw = std::getenv(name);
+    if (raw == nullptr || raw[0] == '\0') {
+        return false;
+    }
+    if (EqualsAsciiIgnoreCase(raw, "starter") || EqualsAsciiIgnoreCase(raw, "unlimited")) {
+        out = kStarterTierSleepSec;
+        return true;
+    }
+    if (EqualsAsciiIgnoreCase(raw, "basic") || EqualsAsciiIgnoreCase(raw, "free")) {
+        out = kBasicTierSleepSec;
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] int ResolveSleepSec(const char* explicit_sec_env,
+                                  const char* plan_env,
+                                  const char* legacy_env) {
+    int sleep_sec = kBasicTierSleepSec;
+    if (TryParseIntEnv(explicit_sec_env, sleep_sec)) {
+        return sleep_sec;
+    }
+    if (TryParsePlanEnv(plan_env, sleep_sec)) {
+        return sleep_sec;
+    }
+    if (TryParseIntEnv(legacy_env, sleep_sec)) {
+        return sleep_sec;
+    }
+    return kBasicTierSleepSec;
+}
+
+}  // namespace
+
+int SleepSecAfterPolygonEquityCall() noexcept {
+    return ResolveSleepSec("NUMERAIRE_POLYGON_EQUITY_SLEEP_SEC",
+                           "NUMERAIRE_POLYGON_EQUITY_PLAN",
+                           "NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL");
+}
+
+int SleepSecAfterPolygonOptionsCall() noexcept {
+    return ResolveSleepSec("NUMERAIRE_POLYGON_OPTIONS_SLEEP_SEC",
+                           "NUMERAIRE_POLYGON_OPTIONS_PLAN",
+                           "NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL");
+}
+
+int SleepSecAfterPolygonCall() noexcept {
+    return SleepSecAfterPolygonEquityCall();
 }
 
 std::string PolygonBaseUrl() {

@@ -7,6 +7,18 @@
 
 namespace numeraire::market_data_providers::polygon_ingest {
 
+/// Throttle after each Polygon HTTP call (equity + index `v2/aggs` jobs).
+/// Env (first match wins): `NUMERAIRE_POLYGON_EQUITY_SLEEP_SEC`,
+/// `NUMERAIRE_POLYGON_EQUITY_PLAN` (`basic` → 13 s, `starter`/`unlimited` → 0),
+/// legacy `NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL`, else 13.
+[[nodiscard]] int SleepSecAfterPolygonEquityCall() noexcept;
+
+/// Throttle for options jobs (`v3/reference/options/*`, future option EOD aggs).
+/// Env: `NUMERAIRE_POLYGON_OPTIONS_SLEEP_SEC`, `NUMERAIRE_POLYGON_OPTIONS_PLAN`, then legacy.
+[[nodiscard]] int SleepSecAfterPolygonOptionsCall() noexcept;
+
+/// @deprecated Prefer `SleepSecAfterPolygonEquityCall` / `SleepSecAfterPolygonOptionsCall`.
+/// Same resolution as equity (legacy alias).
 [[nodiscard]] int SleepSecAfterPolygonCall() noexcept;
 
 [[nodiscard]] std::string PolygonBaseUrl();
