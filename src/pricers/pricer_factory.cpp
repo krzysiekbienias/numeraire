@@ -1,5 +1,6 @@
 #include <numeraire/pricers/pricer_factory.hpp>
 
+#include <numeraire/pricers/analytic_composite_pricer.hpp>
 #include <numeraire/pricers/analytic_black_scholes_equity_pricer.hpp>
 #include <numeraire/utils/exception.hpp>
 
@@ -24,7 +25,7 @@ std::unique_ptr<core::IPricer> PricerFactory::Make(const PricingEngineType engin
     case PricingEngineType::kAnalytic:
         switch (model) {
         case ModelType::kBlackScholes:
-            return std::make_unique<AnalyticBlackScholesEquityPricer>();
+            return std::make_unique<AnalyticCompositePricer>();
         default:
             ThrowUnsupported(engine, model);
         }

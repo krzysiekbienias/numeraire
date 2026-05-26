@@ -4,11 +4,12 @@
 
 namespace numeraire::pricers {
 
-/// European equity **vanilla**, **asset-or-nothing**, and **cash-or-nothing** via explicit
-/// Black–Scholes closed form.
+/// European equity **options** via explicit Black–Scholes closed form: vanilla,
+/// asset-or-nothing, cash-or-nothing. For forwards use `AnalyticForwardPricer` or
+/// `AnalyticCompositePricer` from `PricerFactory`.
 /// QuantLib is **not** used here—only for benchmarks in unit tests.
 /// Expects `VanillaEquityOptionProduct`, `EquityAssetOrNothingProduct`, or
-/// `EquityCashOrNothingProduct`; other `IProduct` types throw `ValidationError`. `IMarketData`: continuous `r` and `q`, flat vol from
+/// `EquityCashOrNothingProduct`. `IMarketData`: continuous `r` and `q`, flat vol from
 /// `ImpliedVolatility(underlying, K, T)` with `T` = Act/365 from valuation to expiry.
 class AnalyticBlackScholesEquityPricer final : public core::IPricer {
    public:

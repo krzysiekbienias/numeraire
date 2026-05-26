@@ -5,6 +5,7 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
+#include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -166,6 +167,75 @@ TEST(ProductFactoryTest, CashOrNothingMissingPayoutThrows) {
 
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
+                 numeraire::ValidationError);
+}
+
+TEST(ProductFactoryTest, ForwardCatalogBuildsDedicatedProductType) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "FWD_EQF_AAPL_20260918";
+    product.catalog_instrument_type = "equity_forward";
+    product.strike = 290.0;
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "FWD_EQF_AAPL_20260918";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+    equity.expiry_date = std::string{"2026-09-18"};
+
+    numeraire::database::TradeHeaderDto header{};
+    header.trade_id = "TRD_10009";
+    header.trade_date = "2026-05-11";
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &header);
+
+    ASSERT_NE(instrument, nullptr);
+    const auto* forward = dynamic_cast<numeraire::products::EquityForwardProduct*>(instrument.get());
+    ASSERT_NE(forward, nullptr);
+    EXPECT_DOUBLE_EQ(forward->Strike(), 290.0);
+    EXPECT_EQ(forward->UnderlyingId(), "AAPL");
+    EXPECT_EQ(forward->TradeDate().year, 2026);
+    EXPECT_EQ(forward->TradeDate().month, 5);
+    EXPECT_EQ(forward->TradeDate().day, 11);
+}
+
+TEST(ProductFactoryTest, ForwardDoesNotRequireOptionSide) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "FWD_EQF_MSFT_20261218";
+    product.catalog_instrument_type = "equity_forward";
+    product.strike = 420.0;
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "FWD_EQF_MSFT_20261218";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "MSFT";
+    equity.expiry_date = std::string{"2026-12-18"};
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr);
+
+    ASSERT_NE(instrument, nullptr);
+    EXPECT_NE(dynamic_cast<numeraire::products::EquityForwardProduct*>(instrument.get()), nullptr);
+}
+
+TEST(ProductFactoryTest, ExpiryBeforeTradeDateThrows) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "FWD_EQF_NVDA_20260320";
+    product.catalog_instrument_type = "equity_forward";
+    product.strike = 130.0;
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "FWD_EQF_NVDA_20260320";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "NVDA";
+    equity.expiry_date = std::string{"2026-03-20"};
+
+    numeraire::database::TradeHeaderDto header{};
+    header.trade_id = "TRD_10011";
+    header.trade_date = "2026-05-11";
+
+    EXPECT_THROW(static_cast<void>(
+                         numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &header)),
                  numeraire::ValidationError);
 }
 

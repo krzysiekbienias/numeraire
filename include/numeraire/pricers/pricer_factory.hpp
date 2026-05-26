@@ -9,7 +9,8 @@
 namespace numeraire::pricers {
 
 /// Builds `core::IPricer` instances from (`PricingEngineType`, `ModelType`).
-/// Unsupported pairs throw `ValidationError` — one central place for routing.
+/// `kAnalytic` + `kBlackScholes` returns `AnalyticCompositePricer` (equity options +
+/// forwards). Unsupported pairs throw `ValidationError`.
 class PricerFactory {
    public:
     [[nodiscard]] static std::unique_ptr<core::IPricer> Make(PricingEngineType engine, ModelType model);

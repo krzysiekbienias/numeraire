@@ -8,6 +8,7 @@
 #include <numeraire/pricers/analytic_black_scholes_equity_pricer.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
+#include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -315,6 +316,18 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingZeroTimeOtmIsZero) {
 
     ASSERT_TRUE(out.Npv().has_value());
     EXPECT_DOUBLE_EQ(*out.Npv(), 0.0);
+}
+
+TEST(AnalyticBlackScholesEquityPricerTest, RejectsForwardProduct) {
+    const numeraire::schedule::Date d{.year = 2025, .month = 6, .day = 15};
+
+    MapMarket m;
+    m.SetValuationDate(d);
+    m.SetSpot("AAPL", 100.0);
+
+    const numeraire::products::EquityForwardProduct forward("AAPL", 95.0, d, d);
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+    EXPECT_THROW(static_cast<void>(pricer.Price(forward, m)), numeraire::ValidationError);
 }
 
 TEST(AnalyticBlackScholesEquityPricerTest, EuropeanCallMatchesQuantLibBenchmark) {

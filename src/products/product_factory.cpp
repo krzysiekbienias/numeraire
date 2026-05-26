@@ -3,6 +3,7 @@
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
+#include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -21,6 +22,7 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     kVanilla,
     kAssetOrNothing,
     kCashOrNothing,
+    kEquityForward,
 };
 
 [[nodiscard]] std::string NormalizeInstrumentTypeKey(std::string t) {
@@ -55,8 +57,11 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
         return EquityCatalogInstrumentKind::kAssetOrNothing;
     }
     if (key == "cashornothingoption" || key == "cashornothing" || key == "digitaloption" ||
-        key == "digital") {
+        key == "digital" || key == "binarycashornothing") {
         return EquityCatalogInstrumentKind::kCashOrNothing;
+    }
+    if (key == "equityforward" || key == "forward") {
+        return EquityCatalogInstrumentKind::kEquityForward;
     }
     std::ostringstream oss;
     oss << "unsupported instrument_type: \"" << key << "\"";
@@ -185,22 +190,43 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
                     ? schedule::ParseIsoDate(trade_header->trade_date)
                     : expiry;
 
-    const OptionType opt = ParseOptionSide(product.option_side);
+    if (schedule::ToQuantLibDate(expiry) < schedule::ToQuantLibDate(trade_date)) {
+        const std::string trade_date_iso =
+                trade_header != nullptr && !numeraire::utils::TrimCopy(trade_header->trade_date).empty()
+                        ? numeraire::utils::TrimCopy(trade_header->trade_date)
+                        : *equity.expiry_date;
+        throw ValidationError("product " + product.product_id + ": expiry_date " + *equity.expiry_date +
+                              " must be on or after trade_date " + trade_date_iso);
+    }
+
     if (!product.strike.has_value()) {
-        throw ValidationError("equity option product requires strike (barrier level K)");
+        throw ValidationError("equity catalog requires strike (option K or forward price)");
     }
 
     switch (kind) {
+        case EquityCatalogInstrumentKind::kEquityForward:
+            return std::make_unique<EquityForwardProduct>(equity.underlying_id, *product.strike, trade_date,
+                                                          expiry);
         case EquityCatalogInstrumentKind::kVanilla:
-            return std::make_unique<VanillaEquityOptionProduct>(
-                    equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
         case EquityCatalogInstrumentKind::kAssetOrNothing:
-            return std::make_unique<EquityAssetOrNothingProduct>(
-                    equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
         case EquityCatalogInstrumentKind::kCashOrNothing: {
-            const double payout = ParseCashPayoutPerShare(product.attributes_json);
-            return std::make_unique<EquityCashOrNothingProduct>(
-                    equity.underlying_id, opt, exercise, *product.strike, payout, trade_date, expiry);
+            const OptionType opt = ParseOptionSide(product.option_side);
+            switch (kind) {
+                case EquityCatalogInstrumentKind::kVanilla:
+                    return std::make_unique<VanillaEquityOptionProduct>(
+                            equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
+                case EquityCatalogInstrumentKind::kAssetOrNothing:
+                    return std::make_unique<EquityAssetOrNothingProduct>(
+                            equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
+                case EquityCatalogInstrumentKind::kCashOrNothing: {
+                    const double payout = ParseCashPayoutPerShare(product.attributes_json);
+                    return std::make_unique<EquityCashOrNothingProduct>(
+                            equity.underlying_id, opt, exercise, *product.strike, payout, trade_date, expiry);
+                }
+                default:
+                    break;
+            }
+            break;
         }
     }
     throw ValidationError("internal: unhandled equity instrument kind");
