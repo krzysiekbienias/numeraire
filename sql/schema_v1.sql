@@ -65,7 +65,15 @@ CREATE TABLE IF NOT EXISTS universe_instrument (
     provider_symbol TEXT NOT NULL,
     display_name TEXT,
     asset_class TEXT NOT NULL CHECK (
-        asset_class IN ('EQUITY', 'INDEX', 'FX', 'COMMODITY', 'RATE', 'BOND', 'OTHER')
+        asset_class IN (
+            'EQUITY',
+            'INDEX',
+            'FX',
+            'COMMODITY',
+            'RATE',
+            'BOND',
+            'OTHER'
+        )
     ),
     sector TEXT,
     industry TEXT,
@@ -269,3 +277,42 @@ CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod_archive (
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_batch_run ON trade_leg_mtm_eod_archive (batch_run_id);
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_leg_asof_engine_batch ON trade_leg_mtm_eod_archive (leg_id, as_of, pricing_engine, batch_run_id);
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_trade_asof ON trade_leg_mtm_eod_archive (trade_id, as_of);
+-- -------------------------------------------------------
+-- End-of-day OHLC for listed options (e.g. Polygon `v2/aggs` `1/day` on `O:NDXP…`).
+--
+-- Scope: market **prices** only. Implied vol is computed in-app from close + spot + rates;
+-- vendor IV (Polygon snapshot) is out of scope here (future benchmark only).
+--
+-- Join to catalog: `option_ticker` ↔ `option_contract.option_ticker` (by convention; no FK).
+--
+-- Time semantics:
+--   `as_of` — valuation / session calendar date this EOD bar is for (`YYYY-MM-DD`),
+--       US listed options: trading day in ET (`session_calendar`).
+--   NOT the same as `option_contract.listing_as_of` (reference snapshot date).
+--   `provider_timestamp_utc_ms` — raw Unix ms (`t`) from the provider bar; audit only.
+--   `ingested_at` — when this row was written to SQLite (UTC ISO-8601 recommended).
+--
+-- Ingest: one HTTP request per `option_ticker` and date range; upsert one row per trading day
+-- in `results[]`. Missing bar = no row (illiquid / no trades that session).
+CREATE TABLE IF NOT EXISTS option_daily_price_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    option_ticker TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    volume REAL,
+    vwap REAL,
+    trade_count INTEGER,
+    source TEXT NOT NULL,
+    timespan TEXT NOT NULL DEFAULT '1d',
+    adjusted INTEGER NOT NULL CHECK (adjusted IN (0, 1)) DEFAULT 1,
+    provider_timestamp_utc_ms INTEGER,
+    ingested_at TEXT NOT NULL,
+    UNIQUE (option_ticker, as_of, timespan, adjusted)
+);
+CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_ticker_as_of ON option_daily_price_eod (option_ticker, as_of);
+CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_as_of ON option_daily_price_eod (as_of);
