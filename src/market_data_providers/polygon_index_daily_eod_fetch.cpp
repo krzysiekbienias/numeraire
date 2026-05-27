@@ -28,7 +28,7 @@ using numeraire::market_data_providers::polygon_ingest::IsoUtcNow;
 using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
 using numeraire::market_data_providers::polygon_ingest::PolygonApiKey;
 using numeraire::market_data_providers::polygon_ingest::PolygonBaseUrl;
-using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonCall;
+using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonEquityCall;
 
 namespace {
 
@@ -165,7 +165,7 @@ void PrintIndexFetchUsageLines() {
             "    Upsert v2/aggs 1/day into `index_daily_eod` (POLYGON_API_KEY).\n"
             "    Default ticker: I:SPX if no --ticker. Use index symbols (e.g. I:NDX).\n"
             "    Base URL: POLYGON_BASE_URL (polygon.io or massive.com — same API).\n"
-            "    Throttle: NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL (default 13).");
+            "    Throttle: NUMERAIRE_POLYGON_EQUITY_PLAN=basic|starter or NUMERAIRE_POLYGON_EQUITY_SLEEP_SEC.");
 }
 
 int TryRunPolygonIndexDailyEodFetch(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -222,7 +222,7 @@ int TryRunPolygonIndexDailyEodFetch(const int argc, char** argv, const numeraire
     }
 
     const std::string base = PolygonBaseUrl();
-    const int throttle_sec = SleepSecAfterPolygonCall();
+    const int throttle_sec = SleepSecAfterPolygonEquityCall();
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
     Logger::NumInfo("index_daily_eod ingest → SQLite {}", db_path.string());

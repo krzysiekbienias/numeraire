@@ -27,7 +27,7 @@ using numeraire::market_data_providers::polygon_ingest::IsoUtcNow;
 using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
 using numeraire::market_data_providers::polygon_ingest::PolygonApiKey;
 using numeraire::market_data_providers::polygon_ingest::PolygonBaseUrl;
-using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonCall;
+using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonEquityCall;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
 
@@ -164,7 +164,8 @@ void PrintFetchUsageLines() {
             "    Upsert Polygon v2/aggs 1/day into `equity_daily_eod` (needs POLYGON_API_KEY).\n"
             "    Default adjusted=true; pass --raw for adjusted=false.\n"
             "    Base URL: POLYGON_BASE_URL (default https://api.polygon.io; e.g. https://api.massive.com).\n"
-            "    Throttle: NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL (default 13) between HTTP calls.");
+            "    Throttle: NUMERAIRE_POLYGON_EQUITY_PLAN=basic|starter or NUMERAIRE_POLYGON_EQUITY_SLEEP_SEC "
+            "(legacy: NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL; default 13).");
 }
 
 int TryRunPolygonDailyEodFetch(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -226,7 +227,7 @@ int TryRunPolygonDailyEodFetch(const int argc, char** argv, const numeraire::uti
     }
 
     const std::string base = PolygonBaseUrl();
-    const int throttle_sec = SleepSecAfterPolygonCall();
+    const int throttle_sec = SleepSecAfterPolygonEquityCall();
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
     Logger::NumInfo("equity_daily_eod ingest → SQLite {}", db_path.string());

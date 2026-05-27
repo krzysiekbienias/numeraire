@@ -158,6 +158,25 @@ namespace {
     return 0;
 }
 
+[[nodiscard]] std::vector<std::string> LoadOptionTickersFromUniverse(SQLite::Database& db,
+                                                                     const std::string& listing_as_of,
+                                                                     const std::string& underlying,
+                                                                     const std::string& grid_config_name) {
+    SQLite::Statement q(
+            db,
+            "SELECT option_ticker FROM option_universe_eod WHERE listing_as_of = ? AND underlying_ticker = ? AND "
+            "grid_config_name = ? ORDER BY expiration_date, strike_price, option_ticker");
+    q.bind(1, listing_as_of);
+    q.bind(2, underlying);
+    q.bind(3, grid_config_name);
+
+    std::vector<std::string> tickers;
+    while (q.executeStep()) {
+        tickers.emplace_back(q.getColumn(0).getString());
+    }
+    return tickers;
+}
+
 [[nodiscard]] std::vector<std::string> LoadOptionTickersFromCatalog(SQLite::Database& db,
                                                                     const std::string& listing_as_of,
                                                                     const std::string& underlying,
@@ -196,10 +215,11 @@ namespace {
 void PrintOptionDailyPriceEodFetchUsageLines() {
     Logger::NumError(
             "  dev_main --fetch-option-daily-price-eod --from YYYY-MM-DD --to YYYY-MM-DD "
-            "[--listing-as-of YYYY-MM-DD --underlying NDX] [--option-ticker O:… …] "
-            "[--expiration-date YYYY-MM-DD] [--limit N] [--raw]\n"
+            "[--listing-as-of YYYY-MM-DD --underlying NDX] [--grid-config NAME] [--from-catalog] "
+            "[--option-ticker O:… …] [--expiration-date YYYY-MM-DD] [--limit N] [--raw]\n"
             "    Upsert Polygon v2/aggs 1/day into `option_daily_price_eod` (needs POLYGON_API_KEY).\n"
-            "    Tickers: repeated --option-ticker, else all rows in `option_contract` for listing+underlying.\n"
+            "    Tickers: --option-ticker, else `option_universe_eod` (run --build-option-universe first), "
+            "or --from-catalog for full `option_contract`.\n"
             "    Throttle: NUMERAIRE_POLYGON_OPTIONS_PLAN=starter|basic or NUMERAIRE_POLYGON_OPTIONS_SLEEP_SEC.");
 }
 
@@ -210,9 +230,11 @@ int TryRunPolygonOptionDailyPriceEodFetch(const int argc, char** argv, const num
     std::string listing_as_of;
     std::string underlying;
     std::string expiration_date;
+    std::string grid_config_name = "default_index_option_universe";
     std::vector<std::string> explicit_tickers;
     int limit = 0;
     bool adjusted = true;
+    bool from_catalog = false;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--fetch-option-daily-price-eod") == 0) {
@@ -265,6 +287,14 @@ int TryRunPolygonOptionDailyPriceEodFetch(const int argc, char** argv, const num
                 return 1;
             }
             limit = static_cast<int>(v);
+        } else if (std::strcmp(argv[i], "--grid-config") == 0) {
+            if (i + 1 >= argc) {
+                Logger::NumError("--grid-config requires the grid name from option_universe_grid.json (name field).");
+                return 1;
+            }
+            grid_config_name = argv[++i];
+        } else if (std::strcmp(argv[i], "--from-catalog") == 0) {
+            from_catalog = true;
         } else if (std::strcmp(argv[i], "--raw") == 0) {
             adjusted = false;
         }
@@ -318,7 +348,23 @@ int TryRunPolygonOptionDailyPriceEodFetch(const int argc, char** argv, const num
                 PrintOptionDailyPriceEodFetchUsageLines();
                 return 1;
             }
-            tickers = LoadOptionTickersFromCatalog(db, listing_as_of, underlying, expiration_date, limit);
+            if (from_catalog) {
+                tickers = LoadOptionTickersFromCatalog(db, listing_as_of, underlying, expiration_date, limit);
+            } else {
+                tickers = LoadOptionTickersFromUniverse(db, listing_as_of, underlying, grid_config_name);
+                if (tickers.empty()) {
+                    Logger::NumError(
+                            "No rows in option_universe_eod for listing={} underlying={} grid={}. "
+                            "Run --build-option-universe first or pass --from-catalog.",
+                            listing_as_of,
+                            underlying,
+                            grid_config_name);
+                    return 1;
+                }
+                if (limit > 0 && static_cast<int>(tickers.size()) > limit) {
+                    tickers.resize(static_cast<size_t>(limit));
+                }
+            }
         } else if (limit > 0 && static_cast<int>(tickers.size()) > limit) {
             tickers.resize(static_cast<size_t>(limit));
         }
