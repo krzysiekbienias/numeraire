@@ -25,6 +25,7 @@
 #include <numeraire/market_data_providers/polygon_index_daily_eod_fetch.hpp>
 #include <numeraire/market_data_providers/polygon_ingest_common.hpp>
 #include <numeraire/market_data_providers/polygon_option_contract_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_option_daily_price_eod_fetch.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/schedule/date.hpp>
@@ -56,9 +57,11 @@ using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
 using numeraire::market_data_providers::PrintIndexFetchUsageLines;
 using numeraire::market_data_providers::PrintOptionContractFetchUsageLines;
+using numeraire::market_data_providers::PrintOptionDailyPriceEodFetchUsageLines;
 using numeraire::market_data_providers::TryRunPolygonDailyEodFetch;
 using numeraire::market_data_providers::TryRunPolygonIndexDailyEodFetch;
 using numeraire::market_data_providers::TryRunPolygonOptionContractFetch;
+using numeraire::market_data_providers::TryRunPolygonOptionDailyPriceEodFetch;
 using numeraire::pricers::PricerFactory;
 using numeraire::products::ProductFactory;
 using numeraire::schedule::Act365FixedYearFraction;
@@ -355,6 +358,8 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --fetch-option-contracts ... Ingest options reference into `option_contract` "
             "(see --help).\n"
+            "  dev_main --fetch-option-daily-price-eod ... Ingest option EOD closes into "
+            "`option_daily_price_eod` (see --help).\n"
             "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (MTM; flags in any order)\n"
             "  dev_main --price-booking <trade_id> | --all | --trades-json <path>   (book PENDING trades on "
             "trade_date)\n"
@@ -369,6 +374,7 @@ void PrintUsage() {
     PrintFetchUsageLines();
     PrintIndexFetchUsageLines();
     PrintOptionContractFetchUsageLines();
+    PrintOptionDailyPriceEodFetchUsageLines();
 }
 
 [[nodiscard]] std::vector<std::string> LoadTradeIdsFromJsonFile(const std::filesystem::path& path) {
@@ -750,6 +756,10 @@ int main(const int argc, char** argv) {
         const int option_contract_rc = TryRunPolygonOptionContractFetch(argc, argv, cfg);
         if (option_contract_rc >= 0) {
             return option_contract_rc;
+        }
+        const int option_price_rc = TryRunPolygonOptionDailyPriceEodFetch(argc, argv, cfg);
+        if (option_price_rc >= 0) {
+            return option_price_rc;
         }
 
         const std::filesystem::path db_path = ResolveDatabasePath(cfg);
