@@ -1,0 +1,56 @@
+{
+    "schema_version": "1.0.0",
+    "name": "default_index_option_universe",
+    "_comment": "Parametric option universe for EOD price ingest and implied-vol surfaces. Consumed by future universe-build job; not wired in dev_main yet.",
+    "conventions": {
+        "moneyness_measure": "otm_percent_from_spot",
+        "moneyness_definition": "For OTM calls: K/S = 1 + p/100. For OTM puts: K/S = 1 - p/100. ATM is p=0 (both types on same strike when listed).",
+        "otm_only": true,
+        "at_atm_include_call_and_put": true,
+        "expiry_pillar_selection": "nearest_listed_expiration_date_to_target_dte_on_listing_as_of",
+        "strike_selection": "nearest_listed_strike_to_target_k",
+        "skip_point_if_strike_gap_exceeds_ratio": 0.75,
+        "skip_point_gap_reference": "half_of_smallest_adjacent_otm_percent_step_on_same_expiry"
+    },
+    "expiry_pillars": [
+        { "id": "W1", "target_dte_days": 7, "tier": "core" },
+        { "id": "W2", "target_dte_days": 14, "tier": "core" },
+        { "id": "W3", "target_dte_days": 21, "tier": "core" },
+        { "id": "M1", "target_dte_days": 30, "tier": "core" },
+        { "id": "M1p5", "target_dte_days": 45, "tier": "core" },
+        { "id": "M2", "target_dte_days": 60, "tier": "core" },
+        { "id": "M3", "target_dte_days": 90, "tier": "core" },
+        { "id": "M4", "target_dte_days": 120, "tier": "core" },
+        { "id": "M6", "target_dte_days": 180, "tier": "core" },
+        { "id": "M9", "target_dte_days": 270, "tier": "core" },
+        { "id": "Y1", "target_dte_days": 365, "tier": "core" },
+        { "id": "Y1p5", "target_dte_days": 545, "tier": "wing" },
+        { "id": "Y2", "target_dte_days": 730, "tier": "wing" }
+    ],
+    "otm_moneyness_percent": {
+        "_comment": "Distance from spot in percent strike space (not ln). Dense near ATM; extra wing pillars before 50% on both sides.",
+        "atm_dense": [0, 1, 2, 3],
+        "mid": [5, 8, 10, 12, 15, 18],
+        "wing": [20, 25, 30, 35, 38, 40, 42, 45, 46, 48, 50]
+    },
+    "derived_ln_k_over_s_at_otm_percent": {
+        "_comment": "Reference only: ln(K/S) for OTM call at each percent p is ln(1 + p/100). OTM put uses ln(1 - p/100) (negative). p=50 call → ln(1.5) ≈ 0.405465.",
+        "call_examples": {
+            "0": 0.0,
+            "10": 0.095310,
+            "25": 0.223144,
+            "50": 0.405465
+        },
+        "put_example_at_50_percent": -0.693147
+    },
+    "tier_trim_order_when_budget_capped": [
+        "drop_expiry_pillar_tier_wing_first",
+        "drop_otm_bucket_wing_furthest_from_atm_first",
+        "drop_expiry_W3_before_W2",
+        "never_drop_atm_dense_on_core_pillars_before_wing_percent_above_35"
+    ],
+    "budget_hints": {
+        "_comment": "Rough OTM-only ticker count ≈ pillars × (2 × wing_points − 1) + ATM doubles; order ~13 × ~25 ≈ 325–650 before skips.",
+        "approx_max_points_per_listing_day": 650
+    }
+}
