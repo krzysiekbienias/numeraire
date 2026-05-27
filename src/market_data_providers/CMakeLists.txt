@@ -19,6 +19,7 @@ add_library(numeraire_market_data_providers STATIC
         polygon_daily_eod_fetch.cpp
         polygon_index_daily_eod_fetch.cpp
         polygon_option_contract_fetch.cpp
+        polygon_option_daily_price_eod_fetch.cpp
 )
 
 target_include_directories(numeraire_market_data_providers

@@ -33,6 +33,7 @@ target_link_libraries(test_environment
         numeraire_market_data
         numeraire_pricers
         numeraire_products
+        numeraire_quant
         numeraire_schedule
         numeraire_utils
         SQLiteCpp
