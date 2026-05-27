@@ -66,6 +66,26 @@ These match `BlackScholesNpv` in the pricer implementation.
 - **\(\tau \le 0\):** \(V = \max(S-K,\,0)\) (call) or \(\max(K-S,\,0)\) (put) — intrinsic only (`IntrinsicNpv`).
 - **\(\sigma \le 0\):** forward intrinsic with discounting (`DiscountedForwardIntrinsic`), using \(F = S\,e^{(r-q)\tau}\).
 
+### Implied-vol inversion (European vanilla)
+
+**Scope in repo:** [`ImpliedVolEuropeanVanilla`](../src/quant/implied_vol_european.cpp) in `numeraire_quant`, used by EOD surface build flow.
+
+Given observed premium \(V_{\mathrm{mkt}}\) (per one underlying unit), solve:
+
+$$V_{\mathrm{BS}}(\sigma; S, K, r, q, \tau) = V_{\mathrm{mkt}}$$
+
+Implementation is a **hybrid solver**:
+
+- **Primary:** Newton-Raphson update
+
+$$\sigma_{n+1} = \sigma_n - \frac{V_{\mathrm{BS}}(\sigma_n) - V_{\mathrm{mkt}}}{\mathcal{V}(\sigma_n)}$$
+
+- **Fallback:** bisection on \([\sigma_{\min}, \sigma_{\max}]\) when Newton stalls or becomes numerically unsafe (e.g., very small vega / poor local conditioning).
+
+Why hybrid: Newton is typically much faster near the root; bisection is slower but robust once a valid bracket exists. This balances throughput and stability on large market batches.
+
+Pre-checks reject impossible or unstable points before solve (invalid inputs, below intrinsic, outside bracket at \(\sigma_{\max}\)); status is returned as `kInvalidInputs`, `kBelowIntrinsic`, `kNoConvergence`, or `kOk`.
+
 ---
 
 ## Greeks (vanilla only; same conventions as persisted MTM)
