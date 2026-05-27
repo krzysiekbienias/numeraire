@@ -316,3 +316,52 @@ CREATE TABLE IF NOT EXISTS option_daily_price_eod (
 );
 CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_ticker_as_of ON option_daily_price_eod (option_ticker, as_of);
 CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_as_of ON option_daily_price_eod (as_of);
+-- -------------------------------------------------------
+-- EOD implied-volatility surfaces (sparse points, not a dense strike/expiry matrix).
+--
+-- Built in-app from option closes + spot + rates (see `option_daily_price_eod` comment).
+-- `IMarketData::ImpliedVolatility(underlying, K, T)` should interpolate these points in C++.
+--
+-- `vol_surface_eod` — one official surface per (underlying, as_of, surface_kind).
+-- `vol_surface_point_eod` — variable row count per surface (only strikes/expiries with data).
+--
+-- `underlying_id` — same convention as `products.underlying_id` (e.g. NDX), not the Polygon
+--     index ticker (I:NDX) unless you deliberately align them.
+-- `surface_kind` — e.g. implied_bs_eod (EOD close inversion); room for intraday kinds later.
+-- `coordinate_system` — strike_expiry v1 (absolute K + expiration_date + years_to_maturity).
+-- `contract_type` — call and put may both exist at the same (K, T); store separately or
+--     publish a mid surface in a later job — schema allows both legs.
+CREATE TABLE IF NOT EXISTS vol_surface_eod (
+    surface_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    underlying_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    surface_kind TEXT NOT NULL DEFAULT 'implied_bs_eod',
+    coordinate_system TEXT NOT NULL DEFAULT 'strike_expiry',
+    spot_used REAL NOT NULL,
+    risk_free_rate REAL NOT NULL,
+    dividend_yield REAL NOT NULL DEFAULT 0.0,
+    model TEXT NOT NULL DEFAULT 'black_scholes_european',
+    price_source TEXT NOT NULL DEFAULT 'option_daily_price_eod.close',
+    currency TEXT NOT NULL DEFAULT 'USD',
+    point_count INTEGER,
+    ingested_at TEXT NOT NULL,
+    batch_run_id TEXT,
+    UNIQUE (underlying_id, as_of, surface_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_vol_surface_eod_underlying_as_of ON vol_surface_eod (underlying_id, as_of);
+CREATE TABLE IF NOT EXISTS vol_surface_point_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    surface_id INTEGER NOT NULL,
+    expiration_date TEXT NOT NULL,
+    years_to_maturity REAL NOT NULL,
+    strike REAL NOT NULL,
+    contract_type TEXT NOT NULL CHECK (contract_type IN ('call', 'put')),
+    implied_vol REAL NOT NULL,
+    source_option_ticker TEXT,
+    input_price REAL,
+    quality TEXT NOT NULL DEFAULT 'ok',
+    FOREIGN KEY (surface_id) REFERENCES vol_surface_eod (surface_id) ON DELETE CASCADE,
+    UNIQUE (surface_id, expiration_date, strike, contract_type)
+);
+CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_id ON vol_surface_point_eod (surface_id);
+CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_expiry ON vol_surface_point_eod (surface_id, expiration_date);
