@@ -28,7 +28,7 @@ using numeraire::market_data_providers::polygon_ingest::IsoUtcNow;
 using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
 using numeraire::market_data_providers::polygon_ingest::PolygonApiKey;
 using numeraire::market_data_providers::polygon_ingest::PolygonBaseUrl;
-using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonCall;
+using numeraire::market_data_providers::polygon_ingest::SleepSecAfterPolygonOptionsCall;
 
 namespace {
 
@@ -85,14 +85,17 @@ namespace {
                                                    const std::string& underlying,
                                                    const std::string& listing_as_of,
                                                    const std::string& contract_type,
+                                                   const bool filter_strike,
                                                    const std::int64_t strike_min,
                                                    const std::int64_t strike_max) {
     std::ostringstream oss;
     oss << base << "/v3/reference/options/contracts?underlying_ticker=" << cpr::util::urlEncode(underlying)
         << "&as_of=" << cpr::util::urlEncode(listing_as_of) << "&contract_type=" << cpr::util::urlEncode(contract_type)
-        << "&exercise_style=" << cpr::util::urlEncode(std::string("european"))
-        << "&strike_price.gte=" << strike_min << "&strike_price.lte=" << strike_max
-        << "&limit=1000&sort=strike_price";
+        << "&exercise_style=" << cpr::util::urlEncode(std::string("european"));
+    if (filter_strike) {
+        oss << "&strike_price.gte=" << strike_min << "&strike_price.lte=" << strike_max;
+    }
+    oss << "&limit=1000&sort=strike_price";
     return oss.str();
 }
 
@@ -201,12 +204,14 @@ namespace {
                                            const std::string& underlying,
                                            const std::string& listing_as_of,
                                            const std::string& contract_type,
+                                           const bool filter_strike,
                                            const std::int64_t strike_min,
                                            const std::int64_t strike_max,
                                            const int throttle_sec,
                                            const std::string& source_label,
                                            const std::string& ingested_at) {
-    std::string url = BuildOptionsContractsUrl(base_url, underlying, listing_as_of, contract_type, strike_min, strike_max);
+    std::string url = BuildOptionsContractsUrl(
+            base_url, underlying, listing_as_of, contract_type, filter_strike, strike_min, strike_max);
     int total = 0;
     for (;;) {
         nlohmann::json j;
@@ -217,22 +222,36 @@ namespace {
         if (j.contains("results") && j["results"].is_array() && !j["results"].empty()) {
             const int chunk = UpsertContractRows(db, j["results"], listing_as_of, source_label, ingested_at);
             total += chunk;
-            Logger::NumInfo("option contracts {} {} .. {} ({}): upserted {} row(s) (running {}).",
-                            contract_type,
-                            listing_as_of,
-                            strike_min,
-                            strike_max,
-                            chunk,
-                            total);
+            if (filter_strike) {
+                Logger::NumInfo("option contracts {} {} strike {}..{}: upserted {} row(s) (running {}).",
+                                contract_type,
+                                listing_as_of,
+                                strike_min,
+                                strike_max,
+                                chunk,
+                                total);
+            } else {
+                Logger::NumInfo("option contracts {} {} (full chain): upserted {} row(s) (running {}).",
+                                contract_type,
+                                listing_as_of,
+                                chunk,
+                                total);
+            }
             if (j["results"].size() == 1000 && !next_url.empty()) {
                 Logger::NumWarn("option contracts: page full (1000); following next_url (may exceed plan targets).");
             }
         } else {
-            Logger::NumWarn("option contracts: no results for {} {} strike {}..{}.",
-                            listing_as_of,
-                            contract_type,
-                            strike_min,
-                            strike_max);
+            if (filter_strike) {
+                Logger::NumWarn("option contracts: no results for {} {} strike {}..{}.",
+                                listing_as_of,
+                                contract_type,
+                                strike_min,
+                                strike_max);
+            } else {
+                Logger::NumWarn("option contracts: no results for {} {} (full chain).",
+                                listing_as_of,
+                                contract_type);
+            }
         }
         if (next_url.empty()) {
             break;
@@ -248,38 +267,73 @@ namespace {
                                    const std::string& underlying,
                                    const std::string& index_ticker,
                                    const std::string& listing_as_of,
+                                   const bool use_strike_band,
                                    const double strike_band,
                                    const int throttle_sec,
                                    const std::string& source_label) {
-    double spot = 0.0;
-    if (!TryIndexClose(db, index_ticker, listing_as_of, spot)) {
-        Logger::NumError("No index_daily_eod row for ticker={} as_of={} (need close for strike band).",
-                         index_ticker,
-                         listing_as_of);
-        return 1;
-    }
+    bool filter_strike = false;
+    std::int64_t strike_min = 0;
+    std::int64_t strike_max = 0;
 
-    const auto strike_min = static_cast<std::int64_t>(std::llround(spot - strike_band));
-    const auto strike_max = static_cast<std::int64_t>(std::llround(spot + strike_band));
-    if (strike_min > strike_max) {
-        Logger::NumError("Invalid strike band: spot={} band={} → min>max.", spot, strike_band);
-        return 1;
+    if (use_strike_band) {
+        double spot = 0.0;
+        if (!TryIndexClose(db, index_ticker, listing_as_of, spot)) {
+            Logger::NumError("No index_daily_eod row for ticker={} as_of={} (need close for --strike-band).",
+                             index_ticker,
+                             listing_as_of);
+            return 1;
+        }
+
+        strike_min = static_cast<std::int64_t>(std::llround(spot - strike_band));
+        strike_max = static_cast<std::int64_t>(std::llround(spot + strike_band));
+        if (strike_min > strike_max) {
+            Logger::NumError("Invalid strike band: spot={} band={} → min>max.", spot, strike_band);
+            return 1;
+        }
+        filter_strike = true;
     }
 
     const std::string ingested_at = IsoUtcNow();
-    if (IngestContractsForType(
-                db, base_url, api_key, underlying, listing_as_of, "call", strike_min, strike_max, throttle_sec, source_label, ingested_at) != 0) {
+    if (IngestContractsForType(db,
+                               base_url,
+                               api_key,
+                               underlying,
+                               listing_as_of,
+                               "call",
+                               filter_strike,
+                               strike_min,
+                               strike_max,
+                               throttle_sec,
+                               source_label,
+                               ingested_at) != 0) {
         return 1;
     }
-    if (IngestContractsForType(
-                db, base_url, api_key, underlying, listing_as_of, "put", strike_min, strike_max, throttle_sec, source_label, ingested_at) != 0) {
+    if (IngestContractsForType(db,
+                               base_url,
+                               api_key,
+                               underlying,
+                               listing_as_of,
+                               "put",
+                               filter_strike,
+                               strike_min,
+                               strike_max,
+                               throttle_sec,
+                               source_label,
+                               ingested_at) != 0) {
         return 1;
     }
-    Logger::NumInfo("option contracts: finished {} (spot≈{} strikes {}..{}).",
-                    listing_as_of,
-                    spot,
-                    strike_min,
-                    strike_max);
+
+    if (filter_strike) {
+        Logger::NumInfo("option contracts: finished {} (strike band ±{} → {}..{}).",
+                        listing_as_of,
+                        strike_band,
+                        strike_min,
+                        strike_max);
+    } else {
+        Logger::NumInfo("option contracts: finished {} (full European chain for {}).",
+                        listing_as_of,
+                        underlying);
+    }
     return 0;
 }
 
@@ -288,11 +342,13 @@ namespace {
 void PrintOptionContractFetchUsageLines() {
     Logger::NumError(
             "  dev_main --fetch-option-contracts --from YYYY-MM-DD --to YYYY-MM-DD --underlying NDX "
-            "[--index-ticker I:NDX] [--strike-band 250]\n"
+            "[--strike-band 250] [--index-ticker I:NDX]\n"
             "    Loads European options reference into `option_contract` (needs POLYGON_API_KEY).\n"
-            "    Strike window: index close from `index_daily_eod` ± strike-band (default 250).\n"
+            "    Default: full chain (no strike filter) — discovery map for strike/expiry span.\n"
+            "    Optional --strike-band: limit to index_daily_eod close ± band (requires index row).\n"
             "    Default --index-ticker I:NDX when --underlying is NDX; else pass --index-ticker.\n"
-            "    Base URL: POLYGON_BASE_URL. Throttle: NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL.");
+            "    Base URL: POLYGON_BASE_URL. Throttle: NUMERAIRE_POLYGON_OPTIONS_PLAN=basic|starter or "
+            "NUMERAIRE_POLYGON_OPTIONS_SLEEP_SEC.");
 }
 
 int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -301,6 +357,7 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
     std::string to_iso;
     std::string underlying;
     std::string index_ticker;
+    bool use_strike_band = false;
     double strike_band = 250.0;
 
     for (int i = 1; i < argc; ++i) {
@@ -342,6 +399,7 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
                 return 1;
             }
             strike_band = v;
+            use_strike_band = true;
         }
     }
 
@@ -367,11 +425,11 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
         PrintOptionContractFetchUsageLines();
         return 1;
     }
-    if (index_ticker.empty()) {
+    if (use_strike_band && index_ticker.empty()) {
         if (underlying == "NDX") {
             index_ticker = "I:NDX";
         } else {
-            Logger::NumError("--index-ticker is required unless --underlying is NDX (default I:NDX).");
+            Logger::NumError("--index-ticker is required with --strike-band unless --underlying is NDX.");
             PrintOptionContractFetchUsageLines();
             return 1;
         }
@@ -384,11 +442,15 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
     }
 
     const std::string base = PolygonBaseUrl();
-    const int throttle_sec = SleepSecAfterPolygonCall();
+    const int throttle_sec = SleepSecAfterPolygonOptionsCall();
     const std::string source_label = DataSourceLabelForBaseUrl(base);
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
-    Logger::NumInfo("option_contract ingest → SQLite {}", db_path.string());
+    if (use_strike_band) {
+        Logger::NumInfo("option_contract ingest → SQLite {} (strike band ±{}).", db_path.string(), strike_band);
+    } else {
+        Logger::NumInfo("option_contract ingest → SQLite {} (full chain, no strike filter).", db_path.string());
+    }
 
     try {
         SQLite::Database db(db_path.string(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
@@ -396,7 +458,16 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
 
         std::string day = from_iso;
         for (;;) {
-            if (RunOneListingDay(db, base, key, underlying, index_ticker, day, strike_band, throttle_sec, source_label) != 0) {
+            if (RunOneListingDay(db,
+                                 base,
+                                 key,
+                                 underlying,
+                                 index_ticker,
+                                 day,
+                                 use_strike_band,
+                                 strike_band,
+                                 throttle_sec,
+                                 source_label) != 0) {
                 return 1;
             }
             if (day == to_iso) {

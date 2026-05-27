@@ -6,7 +6,8 @@ class Config;
 
 namespace numeraire::market_data_providers {
 
-/// Polygon `v3/reference/options/contracts` → `option_contract` (strike band from `index_daily_eod` close).
+/// Polygon `v3/reference/options/contracts` → `option_contract`.
+/// Default: full European chain per underlying/listing day. Optional `--strike-band` narrows by index close.
 ///
 /// \return `-1` if not `--fetch-option-contracts` mode.
 [[nodiscard]] int TryRunPolygonOptionContractFetch(int argc, char** argv, const numeraire::utils::Config& cfg);
