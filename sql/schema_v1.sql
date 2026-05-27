@@ -177,6 +177,41 @@ CREATE INDEX IF NOT EXISTS idx_option_contract_expiry ON option_contract (
     listing_as_of,
     expiration_date
 );
+-- Parametric subset of `option_contract` for EOD option price ingest (built from grid JSON).
+--
+-- One row per selected `option_ticker` per (`listing_as_of`, `underlying_ticker`, `grid_config_name`).
+-- Grid coordinates (`pillar_id`, `otm_percent`, `contract_type`) record why the contract was chosen.
+CREATE TABLE IF NOT EXISTS option_universe_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    listing_as_of TEXT NOT NULL,
+    underlying_ticker TEXT NOT NULL,
+    grid_config_name TEXT NOT NULL,
+    option_ticker TEXT NOT NULL,
+    pillar_id TEXT NOT NULL,
+    target_dte_days INTEGER NOT NULL,
+    expiration_date TEXT NOT NULL,
+    otm_percent REAL NOT NULL,
+    contract_type TEXT NOT NULL CHECK (contract_type IN ('call', 'put')),
+    strike_price REAL NOT NULL,
+    target_strike REAL NOT NULL,
+    spot_used REAL NOT NULL,
+    strike_gap_pct REAL NOT NULL,
+    built_at TEXT NOT NULL,
+    UNIQUE (listing_as_of, underlying_ticker, grid_config_name, option_ticker),
+    UNIQUE (
+        listing_as_of,
+        underlying_ticker,
+        grid_config_name,
+        pillar_id,
+        otm_percent,
+        contract_type
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_option_universe_listing_underlying ON option_universe_eod (
+    listing_as_of,
+    underlying_ticker,
+    grid_config_name
+);
 -- ---------------------------------------------------------------------------
 -- Reference codes for `products_equity.instrument_type` (optional seed / UI).
 CREATE TABLE IF NOT EXISTS catalog_instrument_type (
