@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "numeraire-viz"
+version = "0.1.0"
+description = "SQLite → plots for Numeraire++ market data and vol surfaces"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "ipykernel>=6.29",
+    "jupyter>=1.0",
+    "jupyterlab>=4.0",
+]
+dev = [
+    "numeraire-viz[notebook]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["numeraire_viz*"]
