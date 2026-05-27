@@ -27,7 +27,7 @@ flowchart LR
   E --> F[IMarketData interpolate]
 ```
 
-**Today:** catalog ingest (full chain), surface build from prices, and viz are partially shipped. Universe build from [`configs/option_universe_grid.json`](../configs/option_universe_grid.json) is **documented and config-only** until a job writes selected tickers (table or view) and price ingest reads it.
+**Today:** catalog ingest (full chain), **`--build-option-universe`** → `option_universe_eod`, default price fetch from universe, surface build from prices, and viz are shipped. Interpolation into `IMarketData` is still open.
 
 ---
 
@@ -175,9 +175,22 @@ Heatmap analysis (DTE × |ln(K/S)| buckets) on full catalog informs grid tuning;
 
 ---
 
+## CLI
+
+```bash
+# After index EOD + option_contract for the window:
+./build/dev_main --build-option-universe --from 2026-05-01 --to 2026-05-22 --underlying NDX
+
+# Prices for universe only (default); full catalog with --from-catalog:
+./build/dev_main --fetch-option-daily-price-eod --from 2026-05-01 --to 2026-05-22 \
+  --listing-as-of 2026-05-15 --underlying NDX
+
+./build/dev_main --build-vol-surface-eod --underlying NDX --from 2026-05-01 --to 2026-05-22
+```
+
 ## Open work
 
-- [ ] Job: build universe rows from `option_universe_grid.json` + `option_contract` + spot.
-- [ ] Price ingest: read universe instead of full catalog.
+- [x] Job: build universe rows from `option_universe_grid.json` + `option_contract` + spot.
+- [x] Price ingest: read universe by default (`--from-catalog` for full catalog).
 - [ ] `IMarketData` provider: interpolate `vol_surface_point_eod` for MTM.
 - [ ] Optional: per-underlier override JSON (e.g. cap wing % at 35% for single stocks).

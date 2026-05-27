@@ -7,6 +7,8 @@ JSON configurations consumed by `numeraire::utils::Config` (Sprint 2+).
 - **`default.json`** — baseline configuration committed to the repo. Acts as
   the source of defaults and as documentation of every supported key. Loaded
   by `Config::Load("configs/default.json")`.
+- **`option_universe_grid.json`** — parametric expiry pillars and OTM % levels for
+  `dev_main --build-option-universe` (see [`docs/volatility_surface.md`](../docs/volatility_surface.md)).
 
 ## Conventions
 

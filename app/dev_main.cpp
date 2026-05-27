@@ -16,6 +16,8 @@
 #include <numeraire/database/trade_booking_rules.hpp>
 #include <numeraire/database/trade_leg_booking_update.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
+#include <numeraire/database/option_universe_eod_builder.hpp>
+#include <numeraire/database/vol_surface_eod_builder.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
@@ -52,6 +54,10 @@ using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
 using numeraire::database::TradeLegBookingUpdate;
 using numeraire::database::TradeLegMtmEodRow;
+using numeraire::database::PrintOptionUniverseEodBuildUsageLines;
+using numeraire::database::PrintVolSurfaceEodBuildUsageLines;
+using numeraire::database::TryRunOptionUniverseEodBuild;
+using numeraire::database::TryRunVolSurfaceEodBuild;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -360,6 +366,10 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --fetch-option-daily-price-eod ... Ingest option EOD closes into "
             "`option_daily_price_eod` (see --help).\n"
+            "  dev_main --build-option-universe ... Build `option_universe_eod` from catalog + grid JSON "
+            "(see --help).\n"
+            "  dev_main --build-vol-surface-eod ... Build implied-vol surface from option/index EOD "
+            "(see --help).\n"
             "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (MTM; flags in any order)\n"
             "  dev_main --price-booking <trade_id> | --all | --trades-json <path>   (book PENDING trades on "
             "trade_date)\n"
@@ -375,6 +385,7 @@ void PrintUsage() {
     PrintIndexFetchUsageLines();
     PrintOptionContractFetchUsageLines();
     PrintOptionDailyPriceEodFetchUsageLines();
+    PrintVolSurfaceEodBuildUsageLines();
 }
 
 [[nodiscard]] std::vector<std::string> LoadTradeIdsFromJsonFile(const std::filesystem::path& path) {
@@ -757,9 +768,17 @@ int main(const int argc, char** argv) {
         if (option_contract_rc >= 0) {
             return option_contract_rc;
         }
+        const int option_universe_rc = TryRunOptionUniverseEodBuild(argc, argv, cfg);
+        if (option_universe_rc >= 0) {
+            return option_universe_rc;
+        }
         const int option_price_rc = TryRunPolygonOptionDailyPriceEodFetch(argc, argv, cfg);
         if (option_price_rc >= 0) {
             return option_price_rc;
+        }
+        const int vol_surface_rc = TryRunVolSurfaceEodBuild(argc, argv, cfg);
+        if (vol_surface_rc >= 0) {
+            return vol_surface_rc;
         }
 
         const std::filesystem::path db_path = ResolveDatabasePath(cfg);

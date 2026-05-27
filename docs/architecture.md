@@ -339,7 +339,8 @@ classDiagram
 
 - **Booking / catalog:** `products`, `products_equity`, `trades`, `trade_legs` — loaded via [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) (or fixtures); **`trade_legs.execution_price`** and **`commission`** are placeholders until booking (see § *Booking price*).
 - **Market-data universe:** `universe_instrument` — controlled ingest/pricing scope (`instrument_id`, `provider_symbol`, `asset_class`, `sector`, `data_vendor`, ingest flags). Seed separately; not auto-filled by Polygon jobs.
-- **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract` — populated by optional Polygon REST jobs run via `[dev_main](../app/dev_main.cpp)`.
+- **Market history / reference:** `equity_daily_eod`, `index_daily_eod`, `option_contract`, `option_daily_price_eod` — populated by optional Polygon REST jobs run via `[dev_main](../app/dev_main.cpp)`.
+- **Implied vol surfaces (DDL shipped, build job open):** `vol_surface_eod` (header per `underlying_id` + `as_of` + `surface_kind`) and `vol_surface_point_eod` (sparse `strike` × `expiration_date` points, separate `call`/`put`). IV is inverted in-app from EOD option closes; interpolation for pricing belongs in a future `IMarketData` DB provider.
 - **EOD MTM:** `trade_leg_mtm_eod` (current mark per `leg_id` + `as_of` + `pricing_engine`) and `trade_leg_mtm_eod_archive` (append-only history per `batch_run_id`) — written by **MTM** pricing mode in `[dev_main](../app/dev_main.cpp)` (`--as-of`; does not update `execution_price`).
 
 There are **no foreign keys** from the Polygon-fed tables into `products` / `trades`. Business joins are by convention (e.g. `products.underlying_id` aligned with `equity_daily_eod.ticker`).
@@ -377,6 +378,23 @@ erDiagram
         real strike_price
         text contract_type
         text source
+    }
+
+    vol_surface_eod {
+        int surface_id PK
+        text underlying_id
+        text as_of
+        text surface_kind
+        real spot_used
+    }
+
+    vol_surface_point_eod {
+        int id PK
+        int surface_id FK
+        text expiration_date
+        real strike
+        text contract_type
+        real implied_vol
     }
 
     products {

@@ -26,6 +26,7 @@ Sprint history and what is actually shipped (including SQLite schema and Polygon
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
 | [`cmake/`](cmake/) | `NumeraireCompileOptions.cmake`, `NumeraireDependencies.cmake` |
 | [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, `format.sh`, `clean.sh`, [`import_trade_bundle.py`](scripts/import_trade_bundle.py), [`daily_dev_eod.sh`](scripts/daily_dev_eod.sh) (Hetzner cron) |
+| [`viz/`](viz/) | Python [`numeraire_viz`](viz/numeraire_viz/) + Jupyter notebooks (SQLite → plots; vol surface, …) |
 | [`trades/incoming/`](trades/incoming/) | Draft trade bundle JSON for import (only [`trade_bundle.sample.json`](trades/incoming/trade_bundle.sample.json) tracked; other `*.json` ignored) |
 | [`configs/`](configs/) | JSON defaults loaded by [`utils::Config`](include/numeraire/utils/config.hpp) |
 | [`docs/`](docs/) | [`architecture.md`](docs/architecture.md), [`development.md`](docs/development.md) (sprints / stages), [`mathematical_background.md`](docs/mathematical_background.md), [`coding_style.md`](docs/coding_style.md) |
@@ -89,6 +90,7 @@ Run `app` / `dev_main` from the **repository root** so relative paths resolve
 | **Index daily EOD** (Polygon) | `--fetch-index-eod-daily …` | Upserts [`index_daily_eod`](sql/schema_v1.sql) |
 | **Equity daily EOD** (Polygon) | `--fetch-eod-daily …` | Upserts [`equity_daily_eod`](sql/schema_v1.sql) |
 | **Option contracts reference** (Polygon) | `--fetch-option-contracts …` | Upserts [`option_contract`](sql/schema_v1.sql) |
+| **Implied vol surface (EOD)** | `--build-vol-surface-eod …` | Builds [`vol_surface_eod`](sql/schema_v1.sql) from option/index closes |
 | **Price trades** (SQLite + env quotes) | `--as-of` + `<trade_id>`, `--all`, `--trades-json`, or env `NUMERAIRE_DEV_TRADE_ID` | Reads `trades` + catalog; NPV via analytic composite pricer; optional MTM rows in `trade_leg_mtm_eod` |
 
 **Dispatch:** ingest handlers are checked **in order**: `--fetch-index-eod-daily` → `--fetch-eod-daily` → `--fetch-option-contracts`. The first matching branch runs and exits. If argv matches none of those, `dev_main` opens the SQLite repo and runs **pricing**.
@@ -176,7 +178,7 @@ Requires **`POLYGON_API_KEY`** in `.env`. Optional: **`POLYGON_BASE_URL`** (defa
 # Indices → index_daily_eod (defaults to I:SPX if you omit --ticker)
 ./build/dev_main --fetch-index-eod-daily --from 2025-01-02 --to 2025-01-31 --ticker I:NDX
 
-# Options reference → option_contract (--underlying / --index-ticker / --strike-band per --help)
+# Options reference → option_contract (full chain by default; optional --strike-band)
 ./build/dev_main --fetch-option-contracts --from 2025-01-02 --to 2025-01-02 --underlying NDX
 ```
 
