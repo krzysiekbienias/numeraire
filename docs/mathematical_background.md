@@ -191,3 +191,118 @@ $$V_{\mathrm{fwd}} = S\,e^{-q\tau} - K\,e^{-r\tau}$$
 ## Planned extensions (placeholder)
 
 Future sections may cover: local/stochastic vol, American bounds, Monte Carlo GBM, FX forwards (**FXF**), FRAs (**IRF**), etc., as corresponding pricers land in `src/pricers/`.
+
+**Scope:** Sparse EOD points built at surface ingest; loaded from SQLite; interpolated in `InterpolateImpliedVol`; consumed by `SqliteVolSurfaceMarketData` via `IMarketData::ImpliedVolatility`.
+
+**Out of scope:** SVI/SSVI calibration, arbitrage-free projection, American vol. We use **piecewise linear** interpolation on inverted EOD points only.
+
+---
+
+### Coordinates
+
+Each grid point has:
+
+- **Tenor** $\tau$ — `years_to_maturity` (Act/365 year fraction, same basis as pricers: valuation date → expiry).
+- **Log-moneyness**
+
+$$
+m = \ln\frac{K}{S_{\mathrm{ref}}}
+$$
+
+$S_{\mathrm{ref}}$ = `spot_used` on the surface header (fixed at build/as-of). It need not equal live spot at MTM.
+
+For a leg being priced:
+
+$$
+m_{\mathrm{leg}} = \ln\frac{K_{\mathrm{leg}}}{S_{\mathrm{ref}}}
+$$
+
+$K_{\mathrm{leg}}$ = product strike; $\tau_{\mathrm{leg}}$ = pricer time to expiry.
+
+---
+
+### Call vs put legs
+
+- Call quotes → **call** grid; put quotes → **put** grid.
+- `ImpliedVolatility(..., option_kind)` selects the grid for the product side.
+- No put–call parity blend of $\sigma$ at runtime.
+- Only rows with `quality = ok` are used.
+
+---
+
+### Within one expiry slice (fixed $\tau$)
+
+Points with the same $\tau$ (bucket tolerance $10^{-8}$) form one **smile slice**.
+
+1. Sort points by $m$.
+2. **Inside** $[m_{\min}, m_{\max}]$: $\sigma$ is **linear in** $m$ between adjacent nodes.
+3. **Outside** the smile: **flat extrapolation** — use $\sigma$ at the nearest wing ($m \le m_{\min}$ or $m \ge m_{\max}$).
+4. **Single point** in the slice: return that $\sigma$.
+
+No cubic spline, no SVI.
+
+---
+
+### Across tenors
+
+Distinct pillars $\tau_1 < \tau_2 < \cdots < \tau_N$. Let $\sigma_{\tau}(m)$ denote the slice interpolator above.
+
+**One pillar only**
+
+$$
+\sigma(m_{\mathrm{leg}}, \tau_{\mathrm{leg}}) = \sigma_{\tau_1}(m_{\mathrm{leg}})
+$$
+
+**Below shortest pillar** ($\tau_{\mathrm{leg}} < \tau_1$)
+
+$$
+\sigma(m_{\mathrm{leg}}, \tau_{\mathrm{leg}}) = \sigma_{\tau_1}(m_{\mathrm{leg}})
+$$
+
+**Above longest pillar** ($\tau_{\mathrm{leg}} > \tau_N$)
+
+$$
+\sigma(m_{\mathrm{leg}}, \tau_{\mathrm{leg}}) = \sigma_{\tau_N}(m_{\mathrm{leg}})
+$$
+
+**Between** $\tau_j < \tau_{\mathrm{leg}} < \tau_{j+1}$
+
+$$
+\sigma(m_{\mathrm{leg}}, \tau_{\mathrm{leg}}) = w\,\sigma_{\tau_j}(m_{\mathrm{leg}}) + (1 - w)\,\sigma_{\tau_{j+1}}(m_{\mathrm{leg}})
+$$
+
+$$
+w = \frac{\tau_{j+1} - \tau_{\mathrm{leg}}}{\tau_{j+1} - \tau_j}
+$$
+
+**Summary:** interpolate each smile, then **linear blend in** $\tau$; **flat** extension beyond end pillars. This is a **separable** scheme (smile, then tenor), **not** full bilinear interpolation on a filled $(m,\tau)$ rectangle.
+
+---
+
+### Edge cases
+
+- Empty grid → error.
+- Non-positive $\tau$ inside the interpolator → error.
+- Non-positive $\tau$ in the SQLite market-data provider → returns $0$ (pricer may use intrinsic / zero-vol branch).
+- Missing surface or empty call/put leg → error on load or query.
+- Static dev provider (flat env vol): ignores strike, $\tau$, and call/put; always returns `NUMERAIRE_DEV_VOL`.
+
+---
+
+### Link to Black–Scholes pricing
+
+Returned $\sigma$ is treated as **constant over the leg’s** $\tau_{\mathrm{leg}}$: one `ImpliedVolatility` call per price; no smile inside the BS integral.
+
+**Dev MTM today:** still flat vol from env unless `VOL_SOURCE=db` is wired in `dev_main`.
+
+---
+
+### Short notation cheat sheet (for your repo table later)
+
+| Symbol | Meaning |
+|--------|---------|
+| $S_{\mathrm{ref}}$ | `spot_used` on surface header |
+| $m_{\mathrm{leg}}$ | $\ln(K_{\mathrm{leg}}/S_{\mathrm{ref}})$ |
+| $\tau_{\mathrm{leg}}$ | Act/365 year fraction to expiry |
+| $\sigma_{\tau}(m)$ | Linear-in-$m$ smile at fixed $\tau$ |
+| $w$ | Tenor blend weight between $\tau_j$ and $\tau_{j+1}$ |
