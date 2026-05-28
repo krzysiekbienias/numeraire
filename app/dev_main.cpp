@@ -4,9 +4,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <numeraire/core/imarket_data.hpp>
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/core/pricing_result.hpp>
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
+#include <numeraire/database/index_daily_eod_lookup.hpp>
 #include <numeraire/database/leg_mtm_pnl.hpp>
 #include <numeraire/database/leg_pv.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
@@ -22,6 +24,7 @@
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
 #include <numeraire/market_data/market_snapshot.hpp>
+#include <numeraire/market_data/sqlite_vol_surface_market_data.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
 #include <numeraire/market_data_providers/polygon_daily_eod_fetch.hpp>
 #include <numeraire/market_data_providers/polygon_index_daily_eod_fetch.hpp>
@@ -48,6 +51,7 @@
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
 using numeraire::database::LookupEquityDailyClose;
+using numeraire::database::LookupIndexDailyClose;
 using numeraire::database::SqliteTradeLegBookingRepository;
 using numeraire::database::SqliteTradeLegMtmRepository;
 using numeraire::database::SqliteTradeRepository;
@@ -124,9 +128,11 @@ constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
 }
 
 struct DevMainMarketQuotesConfig {
-    enum SpotSourceKind { kEnv, kDb };
+    enum class SpotSourceKind { kEnv, kDb };
+    enum class VolSourceKind { kEnv, kDb };
 
-    SpotSourceKind spot_source{kEnv};
+    SpotSourceKind spot_source{SpotSourceKind::kEnv};
+    VolSourceKind vol_source{VolSourceKind::kEnv};
     double env_fallback_spot{240.0};
     std::string as_of_iso;
     int equity_eod_adjusted{1};
@@ -139,12 +145,25 @@ struct DevMainMarketQuotesConfig {
     if (src_raw != nullptr && src_raw[0] != '\0') {
         const std::string_view sv{src_raw};
         if (EqualsAsciiIgnoreCase(sv, "db")) {
-            c.spot_source = DevMainMarketQuotesConfig::kDb;
+            c.spot_source = DevMainMarketQuotesConfig::SpotSourceKind::kDb;
         } else if (EqualsAsciiIgnoreCase(sv, "env")) {
-            c.spot_source = DevMainMarketQuotesConfig::kEnv;
+            c.spot_source = DevMainMarketQuotesConfig::SpotSourceKind::kEnv;
         } else {
             throw numeraire::ValidationError(std::string{"NUMERAIRE_DEV_SPOT_SOURCE must be 'env' or 'db' (got: "} +
                                              src_raw + ")");
+        }
+    }
+
+    const char* const vol_raw = std::getenv("NUMERAIRE_DEV_VOL_SOURCE");
+    if (vol_raw != nullptr && vol_raw[0] != '\0') {
+        const std::string_view sv{vol_raw};
+        if (EqualsAsciiIgnoreCase(sv, "db")) {
+            c.vol_source = DevMainMarketQuotesConfig::VolSourceKind::kDb;
+        } else if (EqualsAsciiIgnoreCase(sv, "env")) {
+            c.vol_source = DevMainMarketQuotesConfig::VolSourceKind::kEnv;
+        } else {
+            throw numeraire::ValidationError(std::string{"NUMERAIRE_DEV_VOL_SOURCE must be 'env' or 'db' (got: "} +
+                                             vol_raw + ")");
         }
     }
 
@@ -226,12 +245,17 @@ struct PricingArgvScan {
 
 [[nodiscard]] std::string BuildMtmRemarks(const DevMainMarketQuotesConfig& mq) {
     std::ostringstream oss;
-    if (mq.spot_source == DevMainMarketQuotesConfig::kDb) {
+    if (mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb) {
         oss << "SPOT_DB;";
     } else {
         oss << "SPOT_ENV;";
     }
-    oss << "IV_ENV;R_ENV;Q_ENV";
+    if (mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb) {
+        oss << "IV_DB;";
+    } else {
+        oss << "IV_ENV;";
+    }
+    oss << "R_ENV;Q_ENV";
     return oss.str();
 }
 
@@ -293,7 +317,13 @@ struct PricingArgvScan {
         mtm.underlying_spot = spot_used;
         mtm.risk_free_rate = snap.risk_free_rate;
         mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
-        mtm.implied_vol_used = snap.flat_implied_volatility;
+        const double strike = product->Strike();
+        if (years_to_maturity > 0.0 && strike > 0.0) {
+            mtm.implied_vol_used =
+                    mkt.ImpliedVolatility(underlying, strike, years_to_maturity, product->OptionKind());
+        } else {
+            mtm.implied_vol_used = 0.0;
+        }
         mtm.years_to_maturity = years_to_maturity;
         mtm.numeraire_currency = row.equity.currency.empty() ? "USD" : row.equity.currency;
         mtm.pv_unit = unit_npv;
@@ -377,7 +407,8 @@ void PrintUsage() {
             "MTM requires --as-of or NUMERAIRE_DEV_AS_OF. Booking forbids --as-of; ValuationDate = trade_date.\n"
             "Booking: status PENDING → LIVE when every leg execution_price > 0. MTM requires LIVE + booked legs.\n"
             "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
-            "Rate/vol from NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL.\n"
+            "Implied vol: NUMERAIRE_DEV_VOL_SOURCE=env|db (`db` reads vol_surface_eod; needs --build-vol-surface-eod). "
+            "Rate/dividends: NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL (flat fallback) / NUMERAIRE_DEV_DIV_YIELD.\n"
             "MTM persist: writes one row per leg into trade_leg_mtm_eod (same batch_run_id for the whole run).\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
@@ -431,6 +462,34 @@ void PrintUsage() {
     return out;
 }
 
+namespace {
+
+/// Polygon index daily bars use provider tickers (e.g. I:NDX); book/vol use canonical ids (e.g. NDX).
+[[nodiscard]] std::optional<std::string> IndexDailyTickerForUnderlying(const std::string_view underlying_id) {
+    if (underlying_id == "NDX") {
+        return std::string{"I:NDX"};
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<double> LookupDbSpotForUnderlying(const std::filesystem::path& db_path_file,
+                                                              const std::string_view underlying_id,
+                                                              const std::string_view as_of_iso,
+                                                              const int equity_eod_adjusted) {
+    if (const std::optional<double> equity_close =
+                LookupEquityDailyClose(db_path_file.string(), underlying_id, as_of_iso, equity_eod_adjusted);
+        equity_close.has_value()) {
+        return equity_close;
+    }
+    if (const std::optional<std::string> index_ticker = IndexDailyTickerForUnderlying(underlying_id);
+        index_ticker.has_value()) {
+        return LookupIndexDailyClose(db_path_file.string(), *index_ticker, as_of_iso, equity_eod_adjusted);
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
                                       const std::vector<TradeCatalogBundle>& bundles,
                                       const std::filesystem::path& db_path_file,
@@ -444,7 +503,7 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
             }
             seen.insert(u);
 
-            if (mq.spot_source == DevMainMarketQuotesConfig::kEnv) {
+            if (mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kEnv) {
                 snap.spots[u] = mq.env_fallback_spot;
                 Logger::NumInfo("Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
                                 u,
@@ -453,19 +512,30 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
             }
 
             const std::optional<double> close =
-                    LookupEquityDailyClose(db_path_file.string(), u, mq.as_of_iso, mq.equity_eod_adjusted);
+                    LookupDbSpotForUnderlying(db_path_file, u, mq.as_of_iso, mq.equity_eod_adjusted);
             if (!close.has_value()) {
                 throw numeraire::ValidationError(
-                        "equity_daily_eod: missing row for ticker=" + u + " as_of=" + mq.as_of_iso +
+                        "missing EOD spot for underlying=" + u + " as_of=" + mq.as_of_iso +
                         " adjusted=" + std::to_string(mq.equity_eod_adjusted) +
-                        " — ingest daily bars before pricing with NUMERAIRE_DEV_SPOT_SOURCE=db.");
+                        " — ingest equity_daily_eod or index_daily_eod (e.g. NDX → I:NDX) before "
+                        "NUMERAIRE_DEV_SPOT_SOURCE=db.");
             }
             snap.spots[u] = *close;
-            Logger::NumInfo("Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
-                            u,
-                            *close,
-                            mq.as_of_iso,
-                            mq.equity_eod_adjusted);
+            if (LookupEquityDailyClose(db_path_file.string(), u, mq.as_of_iso, mq.equity_eod_adjusted).has_value()) {
+                Logger::NumInfo("Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
+                                u,
+                                *close,
+                                mq.as_of_iso,
+                                mq.equity_eod_adjusted);
+            } else if (const std::optional<std::string> index_ticker = IndexDailyTickerForUnderlying(u);
+                       index_ticker.has_value()) {
+                Logger::NumInfo("Underlying {} spot={} from index_daily_eod ticker={} (as_of={}, adjusted={}).",
+                                u,
+                                *close,
+                                *index_ticker,
+                                mq.as_of_iso,
+                                mq.equity_eod_adjusted);
+            }
         }
     }
 }
@@ -484,6 +554,36 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
             }
         }
     }
+}
+
+[[nodiscard]] std::unique_ptr<numeraire::core::IMarketData> CreateDevMainMarketData(
+        const DevMainMarketQuotesConfig& mq,
+        const std::string& db_path,
+        MarketSnapshot snap) {
+    if (mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb) {
+        if (mq.as_of_iso.empty() || !LooksIsoDate(mq.as_of_iso)) {
+            throw numeraire::ValidationError(
+                    "NUMERAIRE_DEV_VOL_SOURCE=db requires a valuation date (--as-of or NUMERAIRE_DEV_AS_OF).");
+        }
+        std::vector<std::string> underlying_ids;
+        underlying_ids.reserve(snap.spots.size());
+        for (const auto& [uid, _] : snap.spots) {
+            underlying_ids.push_back(uid);
+        }
+        if (underlying_ids.empty()) {
+            throw numeraire::ValidationError(
+                    "NUMERAIRE_DEV_VOL_SOURCE=db: no underlyings in spot map — price spots first.");
+        }
+        Logger::NumInfo("Implied vol from vol_surface_eod as_of={} underlyings={}.", mq.as_of_iso,
+                        underlying_ids.size());
+        return numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.spots,
+                                                                        snap.risk_free_rate, snap.dividend_yields,
+                                                                        underlying_ids, mq.as_of_iso);
+    }
+
+    Logger::NumInfo("Implied vol flat={} from env (NUMERAIRE_DEV_VOL).", snap.flat_implied_volatility);
+    StaticMarketDataProvider provider(std::move(snap));
+    return provider.CreateMarketData();
 }
 
 [[nodiscard]] int RunWithTradeIds(const SqliteTradeRepository& repo,
@@ -517,16 +617,18 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     FillUnderlyingSpotsAcrossBundles(snap, bundles, db_path, mq);
     FillDividendYieldsAcrossBundles(snap, bundles, q);
 
-    Logger::NumInfo("Quotes: risk_free_rate={} (env) flat_iv={} (env) dividends={} (env); spot_source={} as_of={}.",
-                    snap.risk_free_rate,
-                    snap.flat_implied_volatility,
-                    q,
-                    mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
-                    mq.spot_source == DevMainMarketQuotesConfig::kDb ? mq.as_of_iso : std::string{"n/a"});
+    Logger::NumInfo(
+            "Quotes: risk_free_rate={} (env) vol_source={} flat_iv_fallback={} dividends={} (env); spot_source={} "
+            "as_of={}.",
+            snap.risk_free_rate,
+            mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb ? "db" : "env",
+            snap.flat_implied_volatility,
+            q,
+            mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb ? "db" : "env",
+            mq.as_of_iso);
 
     const MarketSnapshot snap_for_mtm = snap;
-    StaticMarketDataProvider market(std::move(snap));
-    const auto mkt_handle = market.CreateMarketData();
+    const auto mkt_handle = CreateDevMainMarketData(mq, db_path.string(), std::move(snap));
     auto pricer = PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
 
     const bool persist_mtm = ShouldPersistMtmEod(mq);
@@ -628,15 +730,17 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         FillUnderlyingSpotsAcrossBundles(snap, {bundle}, db_path, mq);
         FillDividendYieldsAcrossBundles(snap, {bundle}, q);
 
-        Logger::NumInfo("Booking quotes trade_id={} trade_date={} spot_source={} risk_free_rate={} flat_iv={}.",
-                        tid,
-                        mq.as_of_iso,
-                        mq.spot_source == DevMainMarketQuotesConfig::kDb ? "db" : "env",
-                        snap.risk_free_rate,
-                        snap.flat_implied_volatility);
+        Logger::NumInfo(
+                "Booking quotes trade_id={} trade_date={} spot_source={} vol_source={} risk_free_rate={} "
+                "flat_iv_fallback={}.",
+                tid,
+                mq.as_of_iso,
+                mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb ? "db" : "env",
+                mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb ? "db" : "env",
+                snap.risk_free_rate,
+                snap.flat_implied_volatility);
 
-        StaticMarketDataProvider market(std::move(snap));
-        const auto mkt_handle = market.CreateMarketData();
+        const auto mkt_handle = CreateDevMainMarketData(mq, db_path.string(), std::move(snap));
 
         const std::vector<TradeLegBookingUpdate> updates = PriceBundleForBooking(bundle, *mkt_handle, *pricer);
         booking_repo.ApplyTradeBooking(tid, updates, std::nullopt);
