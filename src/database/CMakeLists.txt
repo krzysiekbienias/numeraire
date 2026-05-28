@@ -9,6 +9,7 @@ add_library(numeraire_database STATIC
         sqlite_trade_leg_mtm_repository.cpp
         sqlite_trade_repository.cpp
         sqlite_vol_surface_repository.cpp
+        sqlite_vol_surface_eod_read.cpp
         option_universe_grid_config.cpp
         option_universe_eod_builder.cpp
         vol_surface_eod_builder.cpp
