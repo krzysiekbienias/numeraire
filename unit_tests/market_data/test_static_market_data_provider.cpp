@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <numeraire/core/imarket_data.hpp>
+#include <numeraire/enums/option_type.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -23,7 +24,7 @@ TEST(StaticMarketDataProviderTest, CreatesMarketDataFromSnapshot) {
     EXPECT_DOUBLE_EQ(mdt->Spot("AMZN"), 211.65);
     EXPECT_DOUBLE_EQ(mdt->RiskFreeRate(), 0.03);
     EXPECT_DOUBLE_EQ(mdt->DividendYield("AMZN"), 0.01);
-    EXPECT_DOUBLE_EQ(mdt->ImpliedVolatility("AMZN", 200.0, 0.5), 0.25);
+    EXPECT_DOUBLE_EQ(mdt->ImpliedVolatility("AMZN", 200.0, 0.5, numeraire::OptionType::kCall), 0.25);
 }
 
 TEST(StaticMarketDataProviderTest, MissingUnderlyingSpotThrows) {

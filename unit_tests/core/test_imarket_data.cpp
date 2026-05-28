@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <numeraire/core/imarket_data.hpp>
+#include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 
 #include <string>
@@ -43,10 +44,12 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
     }
 
     [[nodiscard]] double ImpliedVolatility(const std::string_view underlying_id, const double strike,
-                                           const double time_to_expiry_years) const override {
+                                           const double time_to_expiry_years,
+                                           const numeraire::OptionType option_kind) const override {
         static_cast<void>(underlying_id);
         static_cast<void>(strike);
         static_cast<void>(time_to_expiry_years);
+        static_cast<void>(option_kind);
         return flat_vol_;
     }
 
@@ -69,5 +72,5 @@ TEST(IMarketDataTest, ConcreteImplementationReturnsConfiguredValues) {
     EXPECT_DOUBLE_EQ(m.Spot("AAPL"), 180.0);
     EXPECT_DOUBLE_EQ(m.DividendYield("AAPL"), 0.005);
     EXPECT_DOUBLE_EQ(m.RiskFreeRate(), 0.04);
-    EXPECT_DOUBLE_EQ(m.ImpliedVolatility("AAPL", 170.0, 0.25), 0.22);
+    EXPECT_DOUBLE_EQ(m.ImpliedVolatility("AAPL", 170.0, 0.25, numeraire::OptionType::kCall), 0.22);
 }

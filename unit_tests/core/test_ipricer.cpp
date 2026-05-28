@@ -33,10 +33,12 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
     }
 
     [[nodiscard]] double ImpliedVolatility(const std::string_view underlying_id, const double strike,
-                                           const double time_to_expiry_years) const override {
+                                           const double time_to_expiry_years,
+                                           const numeraire::OptionType option_kind) const override {
         static_cast<void>(underlying_id);
         static_cast<void>(strike);
         static_cast<void>(time_to_expiry_years);
+        static_cast<void>(option_kind);
         return 0.20;
     }
 

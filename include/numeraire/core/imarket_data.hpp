@@ -1,5 +1,6 @@
 #pragma once
 
+#include <numeraire/enums/option_type.hpp>
 #include <string_view>
 
 #include "numeraire/schedule/date.hpp"
@@ -36,11 +37,11 @@ public:
 
     [[nodiscard]] virtual double DividendYield(std::string_view underlying_id) const = 0;
 
-    /// Flat Black–Scholes-style vol for the slice \((K, T)\). Overrides may
-    /// interpolate a surface; `underlying_id` selects the name.
+    /// Black–Scholes-style vol for \((K, T)\) and option side (call/put surface leg).
     [[nodiscard]] virtual double ImpliedVolatility(std::string_view underlying_id,
                                                    double strike,
-                                                   double time_to_expiry_years) const = 0;
+                                                   double time_to_expiry_years,
+                                                   OptionType option_kind) const = 0;
 };
 
 }  // namespace numeraire::core

@@ -201,7 +201,7 @@ constexpr double kPi = std::numbers::pi;
         return result;
     }
 
-    const double vol = market.ImpliedVolatility(vanilla.UnderlyingId(), strike, time_to_expiry);
+    const double vol = market.ImpliedVolatility(vanilla.UnderlyingId(), strike, time_to_expiry, vanilla.OptionKind());
 
     if (vol <= 0.0) {
         const double forward = spot * std::exp((r - q) * time_to_expiry);
@@ -235,7 +235,7 @@ constexpr double kPi = std::numbers::pi;
         return result;
     }
 
-    const double vol = market.ImpliedVolatility(aon.UnderlyingId(), strike, time_to_expiry);
+    const double vol = market.ImpliedVolatility(aon.UnderlyingId(), strike, time_to_expiry, aon.OptionKind());
 
     if (vol <= 0.0) {
         result.SetNpv(AssetOrNothingZeroVolNpv(aon.OptionKind(), spot, strike, r, q, time_to_expiry));
@@ -266,7 +266,7 @@ constexpr double kPi = std::numbers::pi;
         return result;
     }
 
-    const double vol = market.ImpliedVolatility(con.UnderlyingId(), strike, time_to_expiry);
+    const double vol = market.ImpliedVolatility(con.UnderlyingId(), strike, time_to_expiry, con.OptionKind());
 
     if (vol <= 0.0) {
         result.SetNpv(
