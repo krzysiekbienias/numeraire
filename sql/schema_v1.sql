@@ -92,6 +92,88 @@ CREATE TABLE IF NOT EXISTS universe_instrument (
 );
 CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_equity ON universe_instrument (is_active, ingest_equity_eod);
 CREATE INDEX IF NOT EXISTS idx_universe_instrument_data_vendor ON universe_instrument (data_vendor, is_active);
+-- ---------------------------------------------------------------------------
+-- Explicit scope for `daily_market_prep.sh` (not derived from `trade_legs`).
+--
+-- `instrument_id` — canonical key (`vol_surface_eod.underlying_id`, `option_contract.underlying_ticker`).
+-- `provider_symbol` — Polygon / vendor symbol (`AAPL`, `I:NDX`, …).
+-- Cron session `as_of` must satisfy ingest_from_date <= as_of and (ingest_to_date IS NULL OR ingest_to_date >= as_of).
+--
+-- Quotation / curves (v1 reserved): NULL = use env (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_DIV_YIELD`) until
+-- `discount_curve_*` / `forward_curve_*` tables and loaders exist.
+CREATE TABLE IF NOT EXISTS market_data_prep_scope (
+    scope_id TEXT PRIMARY KEY,
+    instrument_id TEXT NOT NULL,
+    provider_symbol TEXT NOT NULL,
+    asset_class TEXT NOT NULL CHECK (
+        asset_class IN (
+            'EQUITY',
+            'INDEX',
+            'FX',
+            'COMMODITY',
+            'RATE',
+            'BOND',
+            'OTHER'
+        )
+    ),
+    ingest_from_date TEXT NOT NULL,
+    ingest_to_date TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    ingest_index_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_index_eod IN (0, 1)),
+    ingest_equity_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_equity_eod IN (0, 1)),
+    ingest_option_contracts INTEGER NOT NULL DEFAULT 0 CHECK (ingest_option_contracts IN (0, 1)),
+    build_option_universe INTEGER NOT NULL DEFAULT 0 CHECK (build_option_universe IN (0, 1)),
+    fetch_option_daily_price_eod INTEGER NOT NULL DEFAULT 0 CHECK (fetch_option_daily_price_eod IN (0, 1)),
+    build_vol_surface_eod INTEGER NOT NULL DEFAULT 0 CHECK (build_vol_surface_eod IN (0, 1)),
+    option_underlying_id TEXT,
+    option_grid_config_name TEXT NOT NULL DEFAULT 'default_index_option_universe',
+    surface_kind TEXT NOT NULL DEFAULT 'implied_bs_eod',
+    quote_currency TEXT NOT NULL DEFAULT 'USD',
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    data_vendor TEXT NOT NULL DEFAULT 'POLYGON',
+    equity_eod_adjusted INTEGER NOT NULL DEFAULT 1 CHECK (equity_eod_adjusted IN (0, 1)),
+    ingest_priority INTEGER NOT NULL DEFAULT 100,
+    discount_curve_id TEXT,
+    discount_curve_source TEXT CHECK (
+        discount_curve_source IS NULL
+        OR discount_curve_source IN ('ENV', 'SQLITE', 'FLAT_OVERRIDE', 'VENDOR')
+    ),
+    forward_curve_id TEXT,
+    forward_curve_source TEXT CHECK (
+        forward_curve_source IS NULL
+        OR forward_curve_source IN ('ENV', 'SQLITE', 'FLAT_OVERRIDE', 'VENDOR')
+    ),
+    risk_free_rate_override REAL,
+    dividend_yield_override REAL,
+    valuation_curve_set TEXT,
+    notes TEXT,
+    last_prep_as_of TEXT,
+    last_prep_at TEXT,
+    last_prep_status TEXT,
+    created_at TEXT,
+    updated_at TEXT,
+    CHECK (ingest_to_date IS NULL OR ingest_to_date >= ingest_from_date),
+    CHECK (
+        option_underlying_id IS NOT NULL
+        OR (
+            ingest_option_contracts = 0
+            AND build_option_universe = 0
+            AND fetch_option_daily_price_eod = 0
+            AND build_vol_surface_eod = 0
+        )
+    ),
+    CHECK (
+        risk_free_rate_override IS NULL
+        OR discount_curve_id IS NULL
+        OR discount_curve_source = 'FLAT_OVERRIDE'
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_market_data_prep_scope_active ON market_data_prep_scope (
+    is_active,
+    ingest_from_date,
+    ingest_to_date
+);
+CREATE INDEX IF NOT EXISTS idx_market_data_prep_scope_instrument ON market_data_prep_scope (instrument_id);
 -- End-of-day OHLCV for listed equities (e.g. Polygon `v2/aggs` `1/day`, adjusted flag).
 --
 -- Time semantics:
