@@ -136,7 +136,7 @@ WHERE t.trade_id = 'TRD_10004';
 | 3 | `dev_main --price-booking` + mutual exclusion with `--as-of` | **Shipped** |
 | 4 | Rules + repo UT (`trade_booking_rules`, booking repository) | **Shipped** |
 | 5 | [`README.md`](../README.md) § *dev_main* — booking row in capabilities table | Planned |
-| 6 | Hetzner daily cron — [`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) | **Shipped** (script + docs; crontab on host is manual) |
+| 6 | Hetzner daily cron — [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) + [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **Shipped** (crontab on host is manual) |
 
 ### PnL on MTM rows (next)
 
@@ -152,78 +152,81 @@ WHERE t.trade_id = 'TRD_10004';
 
 ---
 
-## Daily dev job (Hetzner / cron) — ticket #3
+## Daily jobs (Hetzner / cron)
 
-Script: [`scripts/daily_dev_eod.sh`](../scripts/daily_dev_eod.sh). Uses system **cron** (free, pre-installed on Ubuntu). **Polygon** may rate-limit on a cheap tier before any “extra billing” applies.
+Two scripts (booking is **manual** in `dev_main`, not cron):
 
-### What it runs (in order)
+| Script | Role |
+|--------|------|
+| [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) | **All Polygon ingest** — `market_data_prep_scope` + equity catch-up for book underlyings not in scope |
+| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **MTM only** — `LIVE` trades, `SPOT_SOURCE=db`, `VOL_SOURCE=db` |
 
-1. **`dev_main --fetch-eod-daily`** — one `as_of` day, `--ticker` per distinct `products.underlying_id` from booked legs (+ optional `NUMERAIRE_EXTRA_TICKERS`).
-2. **`dev_main --price-booking --all`** — **off by default** (`NUMERAIRE_SKIP_BOOKING` defaults to `1`). Opt in with `NUMERAIRE_SKIP_BOOKING=0` for **PENDING** trades only; failures (e.g. LIVE) are logged and **do not** stop step 3.
-3. **`dev_main --as-of <as_of> --all`** with **`NUMERAIRE_DEV_SPOT_SOURCE=db`** — MTM for **LIVE** trades with booked legs.
+[`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) is **deprecated** (wrapper: prep → book MTM).
 
-**`as_of` default:** **`NUMERAIRE_AS_OF_LAG_DAYS`** calendar days ago (default **2**, UTC) — fits cheap Polygon tiers that lag vs “today”. Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US **holidays** are not skipped (override manually or extend the script later).
+**`as_of` default:** `NUMERAIRE_AS_OF_LAG_DAYS` calendar days ago (default **1** in scripts, UTC). Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US holidays are not skipped.
 
 ### One-off test on the server
 
 ```bash
 cd /opt/numeraire/dev
 ./scripts/build.sh Release
-NUMERAIRE_DRY_RUN=1 ./scripts/daily_dev_eod.sh    # print steps only
-./scripts/daily_dev_eod.sh                          # real run (needs POLYGON_API_KEY in .env)
+NUMERAIRE_DRY_RUN=1 ./scripts/daily_market_prep.sh
+NUMERAIRE_DRY_RUN=1 ./scripts/daily_book_mtm.sh
+./scripts/daily_market_prep.sh    # needs POLYGON_API_KEY in .env
+./scripts/daily_book_mtm.sh       # after prep; LIVE + execution_price > 0 per leg
 ```
 
 ### Cron install (example)
 
 ```bash
-chmod +x /opt/numeraire/dev/scripts/daily_dev_eod.sh
+chmod +x /opt/numeraire/dev/scripts/daily_market_prep.sh
+chmod +x /opt/numeraire/dev/scripts/daily_book_mtm.sh
 sudo crontab -e
 ```
 
 ```cron
-30 3 * * 2-6 /opt/numeraire/dev/scripts/daily_dev_eod.sh >> /var/log/numeraire-daily.log 2>&1
+0 4 * * 2-6 /opt/numeraire/dev/scripts/daily_market_prep.sh >> /var/log/numeraire-prep.log 2>&1
+0 6 * * 2-6 /opt/numeraire/dev/scripts/daily_book_mtm.sh >> /var/log/numeraire-mtm.log 2>&1
 ```
 
-(Booking skipped by default; ingest + MTM only. Uses `AS_OF` = 2 days ago unless you set `NUMERAIRE_AS_OF`.)
+Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). MTM: only trades with `status = LIVE` (see `daily_book_mtm.sh`).
 
-Ensure repo `.env` contains `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, and dev quote vars (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …). Run as the user that owns the repo and `db.sqlite3`.
+Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …
 
-### Skip flags (debug)
+### Environment (debug)
 
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `NUMERAIRE_SKIP_INGEST` | `0` | `1` = skip Polygon |
-| `NUMERAIRE_SKIP_BOOKING` | **`1`** | `0` = run `--price-booking` (non-fatal errors) |
-| `NUMERAIRE_SKIP_MTM` | `0` | `1` = skip MTM |
-| `NUMERAIRE_AS_OF_LAG_DAYS` | `2` | when `NUMERAIRE_AS_OF` unset |
-| `NUMERAIRE_DRY_RUN` | `0` | `1` = log commands only |
+| Variable | Script | Effect |
+|----------|--------|--------|
+| `NUMERAIRE_AS_OF_LAG_DAYS` | both | when `NUMERAIRE_AS_OF` unset |
+| `NUMERAIRE_PREP_SKIP_BOOK_EQUITY` | prep | `1` = skip book equity catch-up |
+| `NUMERAIRE_DRY_RUN` | both | `1` = log commands only |
 
 ### Manual backfill (gaps)
 
-From the **repository root** on the server. Set **`NUMERAIRE_AS_OF`** to each missing **session date** (inclusive). Trades must be **LIVE** with **`execution_price > 0`** on every leg (same rules as cron).
+Set **`NUMERAIRE_AS_OF`** per missing session date. MTM requires **LIVE** trades with **`execution_price > 0`** on every leg.
 
-**Ingest only** (`equity_daily_eod` for book underlyings; no MTM):
+**Market data only:**
 
 ```bash
-cd /opt/numeraire/dev
 for d in 2026-05-20 2026-05-21; do
-  NUMERAIRE_AS_OF=$d NUMERAIRE_SKIP_MTM=1 ./scripts/daily_dev_eod.sh
+  NUMERAIRE_AS_OF=$d ./scripts/daily_market_prep.sh
 done
 ```
 
-**MTM only** (spots already in `equity_daily_eod`; skip Polygon):
+**MTM only** (data already in DB):
 
 ```bash
 for d in 2026-05-20 2026-05-21; do
-  NUMERAIRE_AS_OF=$d NUMERAIRE_SKIP_INGEST=1 ./scripts/daily_dev_eod.sh
+  NUMERAIRE_AS_OF=$d ./scripts/daily_book_mtm.sh
 done
 ```
 
-**Full catch-up** (ingest + MTM per day — e.g. after a missed cron run or restoring an older `db.sqlite3`):
+**Full day** (prep + MTM):
 
 ```bash
 for d in 2026-05-20 2026-05-21; do
-  NUMERAIRE_AS_OF=$d ./scripts/daily_dev_eod.sh
+  NUMERAIRE_AS_OF=$d ./scripts/daily_market_prep.sh
+  NUMERAIRE_AS_OF=$d ./scripts/daily_book_mtm.sh
 done
 ```
 
@@ -288,7 +291,7 @@ sqlite3 "${DB}" "
 "
 ```
 
-**Note:** [`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) still ingests **book underlyings** only (+ `NUMERAIRE_EXTRA_TICKERS`); it does not read `universe_instrument` yet. Use this backfill for the full equity universe; use the daily script for booked names on each session date.
+**Note:** All Polygon ingest lives in [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) (`market_data_prep_scope` + book equity catch-up). [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) only prices **LIVE** trades. Use Polygon backfill below for `universe_instrument`; NDX vol pipeline is in prep scope.
 
 ---
 

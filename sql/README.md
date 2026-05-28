@@ -11,11 +11,8 @@
 ## Cron (two jobs)
 
 ```bash
-# Market prep — reads market_data_prep_scope (per-ticker 0/1 flags)
-./scripts/daily_market_prep.sh
-
-# Book MTM — trade_legs underlyings + NUMERAIRE_DEV_SPOT_SOURCE/VOL_SOURCE=db
-NUMERAIRE_SKIP_INGEST=1 ./scripts/daily_dev_eod.sh
+./scripts/daily_market_prep.sh   # all ingest (scope + book underlyings not in scope)
+./scripts/daily_book_mtm.sh      # LIVE trades MTM (spot/vol from DB; no booking)
 ```
 
 ```bash
@@ -41,3 +38,5 @@ Each column is **0 or 1** per `scope_id` — not all-or-nothing.
 **Deactivate** a name without deleting: `UPDATE market_data_prep_scope SET is_active = 0 WHERE scope_id = 'MSFT_EOD';`
 
 **Date window:** cron `as_of` must satisfy `ingest_from_date <= as_of` and (`ingest_to_date` IS NULL OR `ingest_to_date >= as_of`).
+
+**Book catch-up:** after scope rows, `daily_market_prep.sh` fetches equity EOD for any `trade_legs` underlying not covered by an active `ingest_equity_eod=1` scope row (`NUMERAIRE_PREP_SKIP_BOOK_EQUITY=1` to disable).
