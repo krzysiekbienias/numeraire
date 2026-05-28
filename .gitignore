@@ -78,12 +78,17 @@ refactor.sql
 # --- cached data ---
 cached_market_data
 
-# --- Trade bundle drafts (sample stays committed) ---
+# --- Trade bundle drafts (samples stay committed) ---
 trades/incoming/*.json
 !trades/incoming/trade_bundle.sample.json
+!trades/incoming/trade_bundle_binary.sample.json
+!trades/incoming/trade_bundle_forward.sample.json
 
 
 # --- python ---
 __pycache__/
 *.py[cod]
 *$py.class
+.venv-viz/
+.ipynb_checkpoints/
+viz/**/.ipynb_checkpoints/
