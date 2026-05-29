@@ -20,6 +20,8 @@
 # ============================================================================
 set -euo pipefail
 
+_TRADES_JSON=""
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 DEV_MAIN="${REPO_ROOT}/${BUILD_DIR}/dev_main"
@@ -118,14 +120,13 @@ main() {
 
     log "LIVE trades (${#live_ids[@]}): ${live_ids[*]}"
 
-    local trades_json
-    trades_json="$(mktemp "${TMPDIR:-/tmp}/numeraire_live_trades.XXXXXX.json")"
-    trap 'rm -f "${trades_json}"' EXIT
-    write_live_trades_json "${trades_json}" "${live_ids[@]}"
+    _TRADES_JSON="$(mktemp "${TMPDIR:-/tmp}/numeraire_live_trades.XXXXXX.json")"
+    trap 'rm -f "${_TRADES_JSON}"' EXIT
+    write_live_trades_json "${_TRADES_JSON}" "${live_ids[@]}"
 
     log "MTM EOD: spot/vol from DB (run daily_market_prep first)"
     run_cmd env NUMERAIRE_DEV_SPOT_SOURCE=db NUMERAIRE_DEV_VOL_SOURCE=db \
-        "${DEV_MAIN}" --as-of "${as_of}" --trades-json "${trades_json}"
+        "${DEV_MAIN}" --as-of "${as_of}" --trades-json "${_TRADES_JSON}"
 
     log "daily_book_mtm done as_of=${as_of} trades=${#live_ids[@]}"
 }

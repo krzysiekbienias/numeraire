@@ -19,6 +19,7 @@
 #include <numeraire/database/trade_leg_booking_update.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
 #include <numeraire/database/option_universe_eod_builder.hpp>
+#include <numeraire/database/vol_surface_eod_read.hpp>
 #include <numeraire/database/vol_surface_eod_builder.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
@@ -58,6 +59,7 @@ using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
 using numeraire::database::TradeLegBookingUpdate;
 using numeraire::database::TradeLegMtmEodRow;
+using numeraire::database::HasVolSurfaceEod;
 using numeraire::database::PrintOptionUniverseEodBuildUsageLines;
 using numeraire::database::PrintVolSurfaceEodBuildUsageLines;
 using numeraire::database::TryRunOptionUniverseEodBuild;
@@ -125,6 +127,20 @@ constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
         }
     }
     return true;
+}
+
+[[nodiscard]] std::string JoinCsv(const std::vector<std::string>& ids) {
+    if (ids.empty()) {
+        return "(none)";
+    }
+    std::ostringstream oss;
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i > 0) {
+            oss << ',';
+        }
+        oss << ids[i];
+    }
+    return oss.str();
 }
 
 struct DevMainMarketQuotesConfig {
@@ -574,11 +590,27 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
             throw numeraire::ValidationError(
                     "NUMERAIRE_DEV_VOL_SOURCE=db: no underlyings in spot map — price spots first.");
         }
-        Logger::NumInfo("Implied vol from vol_surface_eod as_of={} underlyings={}.", mq.as_of_iso,
-                        underlying_ids.size());
+        std::vector<std::string> iv_db_ids;
+        std::vector<std::string> iv_env_ids;
+        iv_db_ids.reserve(underlying_ids.size());
+        iv_env_ids.reserve(underlying_ids.size());
+        for (const std::string& uid : underlying_ids) {
+            if (HasVolSurfaceEod(db_path, uid, mq.as_of_iso)) {
+                iv_db_ids.push_back(uid);
+            } else {
+                iv_env_ids.push_back(uid);
+            }
+        }
+        Logger::NumInfo(
+                "Implied vol as_of={}: {} from vol_surface_eod; {} use env flat={}.",
+                mq.as_of_iso,
+                JoinCsv(iv_db_ids),
+                JoinCsv(iv_env_ids),
+                snap.flat_implied_volatility);
         return numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.spots,
                                                                         snap.risk_free_rate, snap.dividend_yields,
-                                                                        underlying_ids, mq.as_of_iso);
+                                                                        underlying_ids, mq.as_of_iso,
+                                                                        snap.flat_implied_volatility);
     }
 
     Logger::NumInfo("Implied vol flat={} from env (NUMERAIRE_DEV_VOL).", snap.flat_implied_volatility);
