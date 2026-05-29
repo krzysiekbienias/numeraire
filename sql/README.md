@@ -40,3 +40,32 @@ Each column is **0 or 1** per `scope_id` — not all-or-nothing.
 **Date window:** cron `as_of` must satisfy `ingest_from_date <= as_of` and (`ingest_to_date` IS NULL OR `ingest_to_date >= as_of`).
 
 **Book catch-up:** after scope rows, `daily_market_prep.sh` fetches equity EOD for any `trade_legs` underlying not covered by an active `ingest_equity_eod=1` scope row (`NUMERAIRE_PREP_SKIP_BOOK_EQUITY=1` to disable).
+
+## Par yield curve (FRED)
+
+| Table | Role |
+|-------|------|
+| `par_curve_eod` | One par-yield snapshot per `(curve_id, as_of)` — header (currency, day_count, source) |
+| `par_curve_point_eod` | Pillars: `tenor`, `quoted_rate` (decimal par quote), `fred_series_id`, `instrument_type` |
+
+Default `curve_id`: **`USD_TREASURY_PAR_FRED`**. Link from prep scope via `discount_curve_id` + `discount_curve_source` (`SQLITE` / `FRED` when wired).
+
+**Existing DB** (par tables missing, or legacy `discount_curve_*` to remove):
+
+```bash
+sqlite3 "${NUMERAIRE_DB_PATH:-db.sqlite3}" < sql/apply_par_curve_fred.sql
+```
+
+Legacy tables only (no par tables yet):
+
+```bash
+sqlite3 "${NUMERAIRE_DB_PATH:-db.sqlite3}" < sql/drop_legacy_discount_curve.sql
+```
+
+**Ingest** (after `FRED_API_KEY` in `.env`):
+
+```bash
+python3 scripts/fetch_fred_treasury_par_yields.py --as-of 2026-05-27
+```
+
+Bootstrap discount factors from quoted pillars is a follow-up (C++ or script); v1 only stores market par quotes.

@@ -115,7 +115,7 @@ def _upsert_curve(
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO discount_curve_eod (
+        INSERT INTO par_curve_eod (
             curve_id, as_of, currency, curve_kind, source,
             day_count, session_calendar, ingested_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -126,24 +126,24 @@ def _upsert_curve(
             curve_id,
             as_of,
             str(cfg.get("currency", "USD")),
-            str(cfg.get("curve_kind", "treasury_par_zero_fred")),
+            str(cfg.get("curve_kind", "treasury_par_fred")),
             str(cfg.get("source", "FRED")),
             str(cfg.get("day_count", "Actual365Fixed")),
             str(cfg.get("session_calendar", "America/New_York")),
         ),
     )
-    for pillar, zero_rate in points:
+    for pillar, quoted_rate in points:
         cur.execute(
             """
-            INSERT INTO discount_curve_point_eod (
+            INSERT INTO par_curve_point_eod (
                 curve_id, as_of, tenor, tenor_days, instrument_type,
-                fred_series_id, zero_rate
+                fred_series_id, quoted_rate
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (curve_id, as_of, tenor) DO UPDATE SET
                 tenor_days = excluded.tenor_days,
                 instrument_type = excluded.instrument_type,
                 fred_series_id = excluded.fred_series_id,
-                zero_rate = excluded.zero_rate
+                quoted_rate = excluded.quoted_rate
             """,
             (
                 curve_id,
@@ -152,7 +152,7 @@ def _upsert_curve(
                 pillar.get("tenor_days"),
                 str(pillar["instrument_type"]),
                 str(pillar["fred_series_id"]),
-                zero_rate,
+                quoted_rate,
             ),
         )
     conn.commit()
@@ -162,7 +162,7 @@ def main() -> None:
     _load_dotenv(REPO_ROOT / ".env")
 
     parser = argparse.ArgumentParser(
-        description="Fetch FRED Treasury par yields (DGS*) into SQLite discount_curve_* tables."
+        description="Fetch FRED Treasury par yields (DGS*) into SQLite par_curve_* tables."
     )
     parser.add_argument("--as-of", required=True, help="Valuation date YYYY-MM-DD")
     parser.add_argument(
@@ -209,7 +209,7 @@ def main() -> None:
 
     db_path = Path(args.db_path)
     if not db_path.is_file():
-        _die(f"database not found: {db_path} (run schema or sql/apply_discount_curve_fred.sql)")
+        _die(f"database not found: {db_path} (run schema or sql/apply_par_curve_fred.sql)")
 
     conn = sqlite3.connect(db_path)
     try:

@@ -100,7 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_universe_instrument_data_vendor ON universe_instr
 -- Cron session `as_of` must satisfy ingest_from_date <= as_of and (ingest_to_date IS NULL OR ingest_to_date >= as_of).
 --
 -- Quotation / curves (v1 reserved): NULL = use env (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_DIV_YIELD`) until
--- `discount_curve_*` / `forward_curve_*` tables and loaders exist.
+-- `par_curve_*` / `forward_curve_*` tables and loaders exist.
 CREATE TABLE IF NOT EXISTS market_data_prep_scope (
     scope_id TEXT PRIMARY KEY,
     instrument_id TEXT NOT NULL,
@@ -136,7 +136,13 @@ CREATE TABLE IF NOT EXISTS market_data_prep_scope (
     discount_curve_id TEXT,
     discount_curve_source TEXT CHECK (
         discount_curve_source IS NULL
-        OR discount_curve_source IN ('ENV', 'SQLITE', 'FLAT_OVERRIDE', 'VENDOR')
+        OR discount_curve_source IN (
+            'ENV',
+            'SQLITE',
+            'FLAT_OVERRIDE',
+            'VENDOR',
+            'FRED'
+        )
     ),
     forward_curve_id TEXT,
     forward_curve_source TEXT CHECK (
@@ -152,7 +158,10 @@ CREATE TABLE IF NOT EXISTS market_data_prep_scope (
     last_prep_status TEXT,
     created_at TEXT,
     updated_at TEXT,
-    CHECK (ingest_to_date IS NULL OR ingest_to_date >= ingest_from_date),
+    CHECK (
+        ingest_to_date IS NULL
+        OR ingest_to_date >= ingest_from_date
+    ),
     CHECK (
         option_underlying_id IS NOT NULL
         OR (
@@ -279,7 +288,12 @@ CREATE TABLE IF NOT EXISTS option_universe_eod (
     spot_used REAL NOT NULL,
     strike_gap_pct REAL NOT NULL,
     built_at TEXT NOT NULL,
-    UNIQUE (listing_as_of, underlying_ticker, grid_config_name, option_ticker),
+    UNIQUE (
+        listing_as_of,
+        underlying_ticker,
+        grid_config_name,
+        option_ticker
+    ),
     UNIQUE (
         listing_as_of,
         underlying_ticker,
@@ -433,6 +447,47 @@ CREATE TABLE IF NOT EXISTS option_daily_price_eod (
 );
 CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_ticker_as_of ON option_daily_price_eod (option_ticker, as_of);
 CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_as_of ON option_daily_price_eod (as_of);
+-- ---------------------------------------------------------------------------
+-- EOD par-yield curves (FRED Treasury DGS* — second data provider).
+--
+-- `curve_id` — canonical name referenced by `market_data_prep_scope.discount_curve_id`
+--     (e.g. USD_TREASURY_PAR_FRED). Bootstrapping discount factors from these quotes is a
+--     separate job (not in v1 ingest).
+--
+-- `quoted_rate` — market par/simple quote, annualized decimal (0.0525 = 5.25%), from FRED % / 100.
+--     **Not** a bootstrapped zero rate; see `numeraire::quant::BootstrapDiscountCurve`.
+-- `tenor` — pillar label (1M, 3M, …); `tenor_days` optional calendar-day hint for bootstrap.
+-- `instrument_type` — curve pillar product: deposit | fra | futures | swap | other (FRED DGS* → deposit/swap).
+--
+-- Time semantics: `as_of` = valuation session date (YYYY-MM-DD, US calendar for DGS*).
+CREATE TABLE IF NOT EXISTS par_curve_eod (
+    curve_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    curve_kind TEXT NOT NULL DEFAULT 'treasury_par_fred',
+    source TEXT NOT NULL DEFAULT 'FRED',
+    day_count TEXT NOT NULL DEFAULT 'Actual365Fixed',
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    notes TEXT,
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (curve_id, as_of)
+);
+CREATE INDEX IF NOT EXISTS idx_par_curve_eod_as_of ON par_curve_eod (as_of);
+CREATE TABLE IF NOT EXISTS par_curve_point_eod (
+    curve_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    tenor TEXT NOT NULL,
+    tenor_days INTEGER,
+    instrument_type TEXT NOT NULL CHECK (
+        instrument_type IN ('deposit', 'fra', 'futures', 'swap', 'other')
+    ),
+    fred_series_id TEXT NOT NULL,
+    quoted_rate REAL NOT NULL CHECK (quoted_rate >= 0.0),
+    quote_style TEXT NOT NULL DEFAULT 'annualized_decimal',
+    PRIMARY KEY (curve_id, as_of, tenor),
+    FOREIGN KEY (curve_id, as_of) REFERENCES par_curve_eod (curve_id, as_of) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_par_curve_point_curve_as_of ON par_curve_point_eod (curve_id, as_of);
 -- -------------------------------------------------------
 -- EOD implied-volatility surfaces (sparse points, not a dense strike/expiry matrix).
 --
@@ -478,7 +533,12 @@ CREATE TABLE IF NOT EXISTS vol_surface_point_eod (
     input_price REAL,
     quality TEXT NOT NULL DEFAULT 'ok',
     FOREIGN KEY (surface_id) REFERENCES vol_surface_eod (surface_id) ON DELETE CASCADE,
-    UNIQUE (surface_id, expiration_date, strike, contract_type)
+    UNIQUE (
+        surface_id,
+        expiration_date,
+        strike,
+        contract_type
+    )
 );
 CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_id ON vol_surface_point_eod (surface_id);
 CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_expiry ON vol_surface_point_eod (surface_id, expiration_date);

@@ -6,7 +6,7 @@
 
 namespace numeraire::quant {
 
-/// Curve pillar product used during bootstrap (mirrors `discount_curve_point_eod.instrument_type`).
+/// Curve pillar product used during bootstrap (mirrors `par_curve_point_eod.instrument_type`).
 enum class CurvePillarKind : std::uint8_t {
     kDeposit,
     kSwap,
