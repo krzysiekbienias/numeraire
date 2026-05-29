@@ -2,6 +2,7 @@
 
 #include <numeraire/schedule/date.hpp>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,19 @@ struct VolSurfaceEodRead {
     std::vector<VolSurfaceGridPoint> call_points;
     std::vector<VolSurfaceGridPoint> put_points;
 };
+
+/// True when a vol surface header exists for the given key.
+[[nodiscard]] bool HasVolSurfaceEod(const std::string& database_file_path,
+                                    std::string_view underlying_id,
+                                    std::string_view as_of_iso_yyyy_mm_dd,
+                                    std::string_view surface_kind = "implied_bs_eod");
+
+/// Loads header + ok-quality points, or std::nullopt when the surface is missing.
+[[nodiscard]] std::optional<VolSurfaceEodRead> TryLoadVolSurfaceEod(
+        const std::string& database_file_path,
+        std::string_view underlying_id,
+        std::string_view as_of_iso_yyyy_mm_dd,
+        std::string_view surface_kind = "implied_bs_eod");
 
 /// Loads header + ok-quality points. Throws `ValidationError` if surface missing.
 [[nodiscard]] VolSurfaceEodRead LoadVolSurfaceEod(const std::string& database_file_path,

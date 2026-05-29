@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <numeraire/database/sqlite_vol_surface_repository.hpp>
+#include <numeraire/database/vol_surface_eod_read.hpp>
 #include <numeraire/database/vol_surface_types.hpp>
 #include <numeraire/market_data/sqlite_vol_surface_market_data.hpp>
 #include <numeraire/schedule/date.hpp>
@@ -75,7 +76,7 @@ TEST(SqliteVolSurfaceMarketDataTest, LoadsAndInterpolatesCallVol) {
     std::unordered_map<std::string, double> spots{{"NDX", 28000.0}};
 
     auto market = numeraire::market_data::SqliteVolSurfaceMarketData::Load(
-            db_path.string(), valuation, spots, 0.03, {}, {"NDX"}, "2026-05-15");
+            db_path.string(), valuation, spots, 0.03, {}, {"NDX"}, "2026-05-15", 0.20);
 
     const double iv_atm_short = market->ImpliedVolatility("NDX", 28000.0, 0.10, numeraire::OptionType::kCall);
     EXPECT_NEAR(iv_atm_short, 0.20, 1.0e-6);
@@ -92,7 +93,31 @@ TEST(SqliteVolSurfaceMarketDataTest, LoadsAndInterpolatesCallVol) {
     fs::remove(db_path, ec);
 }
 
-TEST(SqliteVolSurfaceMarketDataTest, MissingSurfaceThrows) {
+TEST(SqliteVolSurfaceMarketDataTest, MissingSurfaceUsesFlatFallback) {
+    const fs::path db_path = fs::temp_directory_path() / "numeraire_sqlite_vol_surface_md_hybrid.sqlite3";
+    std::error_code ec;
+    fs::remove(db_path, ec);
+
+    SQLite::Database db(db_path.string(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+    db.exec(ReadSchemaFile());
+    SeedSurface(db_path);
+
+    const auto valuation = numeraire::schedule::ParseIsoDate("2026-05-15");
+    std::unordered_map<std::string, double> spots{{"NDX", 28000.0}, {"MSFT", 400.0}};
+
+    auto market = numeraire::market_data::SqliteVolSurfaceMarketData::Load(
+            db_path.string(), valuation, spots, 0.03, {}, {"NDX", "MSFT"}, "2026-05-15", 0.25);
+
+    const double iv_ndx = market->ImpliedVolatility("NDX", 28000.0, 0.10, numeraire::OptionType::kCall);
+    EXPECT_NEAR(iv_ndx, 0.20, 1.0e-6);
+
+    const double iv_msft = market->ImpliedVolatility("MSFT", 400.0, 0.50, numeraire::OptionType::kCall);
+    EXPECT_NEAR(iv_msft, 0.25, 1.0e-6);
+
+    fs::remove(db_path, ec);
+}
+
+TEST(SqliteVolSurfaceMarketDataTest, LoadVolSurfaceEodThrowsWhenMissing) {
     const fs::path db_path = fs::temp_directory_path() / "numeraire_sqlite_vol_surface_md_empty.sqlite3";
     std::error_code ec;
     fs::remove(db_path, ec);
@@ -100,9 +125,7 @@ TEST(SqliteVolSurfaceMarketDataTest, MissingSurfaceThrows) {
     SQLite::Database db(db_path.string(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
     db.exec(ReadSchemaFile());
 
-    const auto valuation = numeraire::schedule::ParseIsoDate("2026-05-15");
-    EXPECT_THROW(numeraire::market_data::SqliteVolSurfaceMarketData::Load(
-                         db_path.string(), valuation, {{"NDX", 1.0}}, 0.03, {}, {"NDX"}, "2026-05-15"),
+    EXPECT_THROW(numeraire::database::LoadVolSurfaceEod(db_path.string(), "NDX", "2026-05-15"),
                  numeraire::ValidationError);
 
     fs::remove(db_path, ec);

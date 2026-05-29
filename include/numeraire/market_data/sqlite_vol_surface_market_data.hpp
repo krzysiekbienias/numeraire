@@ -17,9 +17,10 @@ class SqliteVolSurfaceMarketData final : public core::IMarketData {
                                std::unordered_map<std::string, double> spots,
                                double risk_free_rate,
                                std::unordered_map<std::string, double> dividend_yields,
-                               std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces);
+                               std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces,
+                               double flat_implied_volatility_fallback);
 
-    /// Loads surfaces for each underlying in `underlying_ids` from the database.
+    /// Loads persisted surfaces where available; missing underlyings use `flat_implied_volatility_fallback`.
     [[nodiscard]] static std::unique_ptr<SqliteVolSurfaceMarketData> Load(
             const std::string& database_file_path,
             schedule::Date valuation_date,
@@ -28,6 +29,7 @@ class SqliteVolSurfaceMarketData final : public core::IMarketData {
             std::unordered_map<std::string, double> dividend_yields,
             const std::vector<std::string>& underlying_ids,
             std::string_view as_of_iso_yyyy_mm_dd,
+            double flat_implied_volatility_fallback,
             std::string_view surface_kind = "implied_bs_eod");
 
     [[nodiscard]] const schedule::Date& ValuationDate() const override;
@@ -51,6 +53,7 @@ class SqliteVolSurfaceMarketData final : public core::IMarketData {
     double risk_free_rate_;
     std::unordered_map<std::string, double> dividend_yields_;
     std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces_;
+    double flat_implied_volatility_fallback_{0.0};
 };
 
 }  // namespace numeraire::market_data
