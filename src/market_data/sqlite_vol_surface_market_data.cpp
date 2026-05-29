@@ -15,12 +15,14 @@ SqliteVolSurfaceMarketData::SqliteVolSurfaceMarketData(
         std::unordered_map<std::string, double> spots,
         const double risk_free_rate,
         std::unordered_map<std::string, double> dividend_yields,
-        std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces)
+        std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces,
+        const double flat_implied_volatility_fallback)
         : valuation_date_(valuation_date),
           spots_(std::move(spots)),
           risk_free_rate_(risk_free_rate),
           dividend_yields_(std::move(dividend_yields)),
-          surfaces_(std::move(surfaces)) {}
+          surfaces_(std::move(surfaces)),
+          flat_implied_volatility_fallback_(flat_implied_volatility_fallback) {}
 
 std::unique_ptr<SqliteVolSurfaceMarketData> SqliteVolSurfaceMarketData::Load(
         const std::string& database_file_path,
@@ -30,19 +32,24 @@ std::unique_ptr<SqliteVolSurfaceMarketData> SqliteVolSurfaceMarketData::Load(
         std::unordered_map<std::string, double> dividend_yields,
         const std::vector<std::string>& underlying_ids,
         const std::string_view as_of_iso_yyyy_mm_dd,
+        const double flat_implied_volatility_fallback,
         const std::string_view surface_kind) {
     std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces;
     for (const std::string& underlying_id : underlying_ids) {
-        database::VolSurfaceEodRead leg =
-                database::LoadVolSurfaceEod(database_file_path, underlying_id, as_of_iso_yyyy_mm_dd, surface_kind);
-        if (dividend_yields.find(underlying_id) == dividend_yields.end()) {
-            dividend_yields[underlying_id] = leg.dividend_yield;
+        std::optional<database::VolSurfaceEodRead> leg =
+                database::TryLoadVolSurfaceEod(database_file_path, underlying_id, as_of_iso_yyyy_mm_dd, surface_kind);
+        if (!leg.has_value()) {
+            continue;
         }
-        surfaces.emplace(underlying_id, std::move(leg));
+        if (dividend_yields.find(underlying_id) == dividend_yields.end()) {
+            dividend_yields[underlying_id] = leg->dividend_yield;
+        }
+        surfaces.emplace(underlying_id, std::move(*leg));
     }
 
     return std::make_unique<SqliteVolSurfaceMarketData>(valuation_date, std::move(spots), risk_free_rate,
-                                                        std::move(dividend_yields), std::move(surfaces));
+                                                        std::move(dividend_yields), std::move(surfaces),
+                                                        flat_implied_volatility_fallback);
 }
 
 const schedule::Date& SqliteVolSurfaceMarketData::ValuationDate() const { return valuation_date_; }
@@ -80,11 +87,6 @@ double SqliteVolSurfaceMarketData::ImpliedVolatility(const std::string_view unde
                                                      const double strike,
                                                      const double time_to_expiry_years,
                                                      const OptionType option_kind) const {
-    const database::VolSurfaceEodRead* leg = FindSurface(underlying_id);
-    if (leg == nullptr) {
-        throw MarketDataError("ImpliedVolatility: no vol surface for underlying \"" + std::string(underlying_id) +
-                              "\"");
-    }
     if (strike <= 0.0) {
         throw MarketDataError("ImpliedVolatility: strike must be positive");
     }
@@ -92,11 +94,17 @@ double SqliteVolSurfaceMarketData::ImpliedVolatility(const std::string_view unde
         return 0.0;
     }
 
+    const database::VolSurfaceEodRead* leg = FindSurface(underlying_id);
+    if (leg == nullptr) {
+        return flat_implied_volatility_fallback_;
+    }
+
     const double ln_m = std::log(strike / leg->spot_used);
     const auto& points = option_kind == OptionType::kCall ? leg->call_points : leg->put_points;
     if (points.empty()) {
-        throw MarketDataError("ImpliedVolatility: empty " + std::string(option_kind == OptionType::kCall ? "call" : "put") +
-                              " surface for \"" + std::string(underlying_id) + "\"");
+        throw MarketDataError("ImpliedVolatility: empty " +
+                              std::string(option_kind == OptionType::kCall ? "call" : "put") + " surface for \"" +
+                              std::string(underlying_id) + "\"");
     }
 
     return InterpolateImpliedVol(points, ln_m, time_to_expiry_years);
