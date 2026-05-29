@@ -1,0 +1,64 @@
+{
+  "curve_id": "USD_TREASURY_PAR_FRED",
+  "currency": "USD",
+  "curve_kind": "treasury_par_zero_fred",
+  "source": "FRED",
+  "day_count": "Actual365Fixed",
+  "session_calendar": "America/New_York",
+  "pillars": [
+    {
+      "tenor": "1M",
+      "tenor_days": 30,
+      "instrument_type": "deposit",
+      "fred_series_id": "DGS1MO"
+    },
+    {
+      "tenor": "3M",
+      "tenor_days": 91,
+      "instrument_type": "deposit",
+      "fred_series_id": "DGS3MO"
+    },
+    {
+      "tenor": "6M",
+      "tenor_days": 182,
+      "instrument_type": "deposit",
+      "fred_series_id": "DGS6MO"
+    },
+    {
+      "tenor": "1Y",
+      "tenor_days": 365,
+      "instrument_type": "deposit",
+      "fred_series_id": "DGS1"
+    },
+    {
+      "tenor": "2Y",
+      "tenor_days": 730,
+      "instrument_type": "swap",
+      "fred_series_id": "DGS2"
+    },
+    {
+      "tenor": "3Y",
+      "tenor_days": 1095,
+      "instrument_type": "swap",
+      "fred_series_id": "DGS3"
+    },
+    {
+      "tenor": "5Y",
+      "tenor_days": 1825,
+      "instrument_type": "swap",
+      "fred_series_id": "DGS5"
+    },
+    {
+      "tenor": "7Y",
+      "tenor_days": 2555,
+      "instrument_type": "swap",
+      "fred_series_id": "DGS7"
+    },
+    {
+      "tenor": "10Y",
+      "tenor_days": 3650,
+      "instrument_type": "swap",
+      "fred_series_id": "DGS10"
+    }
+  ]
+}
