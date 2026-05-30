@@ -1,9 +1,8 @@
+#include <SQLiteCpp/SQLiteCpp.h>
+
 #include <numeraire/database/par_curve_quote_loader.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <numeraire/utils/string.hpp>
-
-#include <SQLiteCpp/SQLiteCpp.h>
-
 #include <string>
 #include <vector>
 
@@ -28,10 +27,10 @@ std::vector<quant::CurvePillarQuote> ToCurvePillarQuotes(const std::vector<ParCu
             throw ValidationError("par curve pillar " + pillar.tenor + ": missing tenor_days");
         }
         out.push_back(quant::CurvePillarQuote{
-                pillar.tenor,
-                pillar.tenor_days,
-                ParCurveInstrumentToKind(pillar.instrument_type),
-                pillar.quoted_rate,
+                .tenor = pillar.tenor,
+                .tenor_days = pillar.tenor_days,
+                .kind = ParCurveInstrumentToKind(pillar.instrument_type),
+                .quoted_rate = pillar.quoted_rate,
         });
     }
     return out;
@@ -42,21 +41,20 @@ std::optional<ParCurveEodHeader> LoadParCurveEodHeader(const std::string& databa
                                                        const std::string_view as_of_iso_yyyy_mm_dd) {
     try {
         SQLite::Database db(database_file_path, SQLite::OPEN_READONLY);
-        SQLite::Statement st(
-                db,
-                "SELECT curve_id, as_of, currency, day_count, session_calendar "
-                "FROM par_curve_eod WHERE curve_id = ? AND as_of = ?");
+        SQLite::Statement st(db,
+                             "SELECT curve_id, as_of, currency, day_count, session_calendar "
+                             "FROM par_curve_eod WHERE curve_id = ? AND as_of = ?");
         st.bind(1, std::string(curve_id));
         st.bind(2, std::string(as_of_iso_yyyy_mm_dd));
         if (!st.executeStep()) {
             return std::nullopt;
         }
         return ParCurveEodHeader{
-                st.getColumn(0).getString(),
-                st.getColumn(1).getString(),
-                st.getColumn(2).getString(),
-                st.getColumn(3).getString(),
-                st.getColumn(4).getString(),
+                .curve_id = st.getColumn(0).getString(),
+                .as_of = st.getColumn(1).getString(),
+                .currency = st.getColumn(2).getString(),
+                .day_count = st.getColumn(3).getString(),
+                .session_calendar = st.getColumn(4).getString(),
         };
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"LoadParCurveEodHeader: "} + e.what());
@@ -68,11 +66,10 @@ std::vector<ParCurvePillarInput> LoadParCurvePillarInputs(const std::string& dat
                                                           const std::string_view as_of_iso_yyyy_mm_dd) {
     try {
         SQLite::Database db(database_file_path, SQLite::OPEN_READONLY);
-        SQLite::Statement st(
-                db,
-                "SELECT tenor, tenor_days, instrument_type, quoted_rate "
-                "FROM par_curve_point_eod WHERE curve_id = ? AND as_of = ? "
-                "ORDER BY tenor_days, tenor");
+        SQLite::Statement st(db,
+                             "SELECT tenor, tenor_days, instrument_type, quoted_rate "
+                             "FROM par_curve_point_eod WHERE curve_id = ? AND as_of = ? "
+                             "ORDER BY tenor_days, tenor");
         st.bind(1, std::string(curve_id));
         st.bind(2, std::string(as_of_iso_yyyy_mm_dd));
 

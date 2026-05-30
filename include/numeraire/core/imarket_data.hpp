@@ -35,6 +35,11 @@ public:
 
     [[nodiscard]] virtual double RiskFreeRate() const = 0;
 
+    /// Continuous zero rate for tenor `time_to_expiry_years` (curve interpolation when wired).
+    [[nodiscard]] virtual double RiskFreeRateForTenor(const double time_to_expiry_years) const {
+        return RiskFreeRate();
+    }
+
     [[nodiscard]] virtual double DividendYield(std::string_view underlying_id) const = 0;
 
     /// Black–Scholes-style vol for \((K, T)\) and option side (call/put surface leg).

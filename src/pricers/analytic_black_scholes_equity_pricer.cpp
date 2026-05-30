@@ -191,7 +191,7 @@ constexpr double kPi = std::numbers::pi;
             schedule::Act365FixedYearFraction(market.ValuationDate(), vanilla.ExpiryDate());
     const double spot = market.Spot(vanilla.UnderlyingId());
     const double strike = vanilla.Strike();
-    const double r = market.RiskFreeRate();
+    const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(vanilla.UnderlyingId());
 
     core::PricingResult result;
@@ -225,7 +225,7 @@ constexpr double kPi = std::numbers::pi;
     const double time_to_expiry = schedule::Act365FixedYearFraction(market.ValuationDate(), aon.ExpiryDate());
     const double spot = market.Spot(aon.UnderlyingId());
     const double strike = aon.Strike();
-    const double r = market.RiskFreeRate();
+    const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(aon.UnderlyingId());
 
     core::PricingResult result;
@@ -256,7 +256,7 @@ constexpr double kPi = std::numbers::pi;
     const double spot = market.Spot(con.UnderlyingId());
     const double strike = con.Strike();
     const double cash_payout = con.CashPayoutPerShare();
-    const double r = market.RiskFreeRate();
+    const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(con.UnderlyingId());
 
     core::PricingResult result;

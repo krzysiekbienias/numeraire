@@ -28,7 +28,7 @@ namespace {
             schedule::Act365FixedYearFraction(market.ValuationDate(), forward.ExpiryDate());
     const double spot = market.Spot(forward.UnderlyingId());
     const double forward_price = forward.Strike();
-    const double r = market.RiskFreeRate();
+    const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(forward.UnderlyingId());
 
     core::PricingResult result;
