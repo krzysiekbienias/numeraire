@@ -12,6 +12,10 @@ add_library(numeraire_database STATIC
         sqlite_vol_surface_eod_read.cpp
         option_universe_grid_config.cpp
         option_universe_eod_builder.cpp
+        discount_curve_eod_builder.cpp
+        par_curve_quote_loader.cpp
+        sqlite_discount_curve_repository.cpp
+        sqlite_discount_curve_eod_read.cpp
         vol_surface_eod_builder.cpp
         vol_surface_quote_loader.cpp
 )

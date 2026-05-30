@@ -19,11 +19,15 @@
 #include <numeraire/database/trade_leg_booking_update.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
 #include <numeraire/database/option_universe_eod_builder.hpp>
+#include <numeraire/database/discount_curve_eod_read.hpp>
 #include <numeraire/database/vol_surface_eod_read.hpp>
+#include <numeraire/database/discount_curve_eod_builder.hpp>
 #include <numeraire/database/vol_surface_eod_builder.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
+#include <numeraire/market_data/curved_rate_market_data.hpp>
+#include <numeraire/market_data/discount_curve_rate.hpp>
 #include <numeraire/market_data/market_snapshot.hpp>
 #include <numeraire/market_data/sqlite_vol_surface_market_data.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
@@ -60,8 +64,10 @@ using numeraire::database::TradeCatalogBundle;
 using numeraire::database::TradeLegBookingUpdate;
 using numeraire::database::TradeLegMtmEodRow;
 using numeraire::database::HasVolSurfaceEod;
+using numeraire::database::PrintDiscountCurveEodBuildUsageLines;
 using numeraire::database::PrintOptionUniverseEodBuildUsageLines;
 using numeraire::database::PrintVolSurfaceEodBuildUsageLines;
+using numeraire::database::TryRunDiscountCurveEodBuild;
 using numeraire::database::TryRunOptionUniverseEodBuild;
 using numeraire::database::TryRunVolSurfaceEodBuild;
 using numeraire::market_data::MarketSnapshot;
@@ -146,12 +152,15 @@ constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
 struct DevMainMarketQuotesConfig {
     enum class SpotSourceKind { kEnv, kDb };
     enum class VolSourceKind { kEnv, kDb };
+    enum class RateSourceKind { kEnv, kDb };
 
     SpotSourceKind spot_source{SpotSourceKind::kEnv};
     VolSourceKind vol_source{VolSourceKind::kEnv};
+    RateSourceKind rate_source{RateSourceKind::kEnv};
     double env_fallback_spot{240.0};
     std::string as_of_iso;
     int equity_eod_adjusted{1};
+    std::string discount_curve_id{"USD_TREASURY_PAR_FRED"};
 };
 
 [[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(const std::optional<std::string>& cli_as_of,
@@ -181,6 +190,24 @@ struct DevMainMarketQuotesConfig {
             throw numeraire::ValidationError(std::string{"NUMERAIRE_DEV_VOL_SOURCE must be 'env' or 'db' (got: "} +
                                              vol_raw + ")");
         }
+    }
+
+    const char* const rate_raw = std::getenv("NUMERAIRE_DEV_RATE_SOURCE");
+    if (rate_raw != nullptr && rate_raw[0] != '\0') {
+        const std::string_view sv{rate_raw};
+        if (EqualsAsciiIgnoreCase(sv, "db")) {
+            c.rate_source = DevMainMarketQuotesConfig::RateSourceKind::kDb;
+        } else if (EqualsAsciiIgnoreCase(sv, "env")) {
+            c.rate_source = DevMainMarketQuotesConfig::RateSourceKind::kEnv;
+        } else {
+            throw numeraire::ValidationError(std::string{"NUMERAIRE_DEV_RATE_SOURCE must be 'env' or 'db' (got: "} +
+                                             rate_raw + ")");
+        }
+    }
+
+    if (const char* curve_id = std::getenv("NUMERAIRE_DEV_DISCOUNT_CURVE_ID");
+        curve_id != nullptr && curve_id[0] != '\0') {
+        c.discount_curve_id = curve_id;
     }
 
     c.env_fallback_spot = EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
@@ -271,7 +298,12 @@ struct PricingArgvScan {
     } else {
         oss << "IV_ENV;";
     }
-    oss << "R_ENV;Q_ENV";
+    if (mq.rate_source == DevMainMarketQuotesConfig::RateSourceKind::kDb) {
+        oss << "R_DB;";
+    } else {
+        oss << "R_ENV;";
+    }
+    oss << "Q_ENV";
     return oss.str();
 }
 
@@ -331,7 +363,7 @@ struct PricingArgvScan {
         mtm.leg_id = row.leg.leg_id;
         mtm.batch_run_id = batch_run_id;
         mtm.underlying_spot = spot_used;
-        mtm.risk_free_rate = snap.risk_free_rate;
+        mtm.risk_free_rate = mkt.RiskFreeRateForTenor(years_to_maturity);
         mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
         const double strike = product->Strike();
         if (years_to_maturity > 0.0 && strike > 0.0) {
@@ -416,6 +448,8 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --build-vol-surface-eod ... Build implied-vol surface from option/index EOD "
             "(see --help).\n"
+            "  dev_main --build-discount-curve-eod ... Bootstrap discount factors from par_curve_* "
+            "(see --help).\n"
             "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (MTM; flags in any order)\n"
             "  dev_main --price-booking <trade_id> | --all | --trades-json <path>   (book PENDING trades on "
             "trade_date)\n"
@@ -424,7 +458,8 @@ void PrintUsage() {
             "Booking: status PENDING → LIVE when every leg execution_price > 0. MTM requires LIVE + booked legs.\n"
             "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
             "Implied vol: NUMERAIRE_DEV_VOL_SOURCE=env|db (`db` reads vol_surface_eod; needs --build-vol-surface-eod). "
-            "Rate/dividends: NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL (flat fallback) / NUMERAIRE_DEV_DIV_YIELD.\n"
+            "Rate: NUMERAIRE_DEV_RATE_SOURCE=env|db (`db` reads discount_curve_eod; run daily_market_prep first). "
+            "Flat fallbacks: NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL / NUMERAIRE_DEV_DIV_YIELD.\n"
             "MTM persist: writes one row per leg into trade_leg_mtm_eod (same batch_run_id for the whole run).\n"
             "Options: --help, -h";
     Logger::NumError("{}", msg);
@@ -432,6 +467,7 @@ void PrintUsage() {
     PrintIndexFetchUsageLines();
     PrintOptionContractFetchUsageLines();
     PrintOptionDailyPriceEodFetchUsageLines();
+    PrintDiscountCurveEodBuildUsageLines();
     PrintVolSurfaceEodBuildUsageLines();
 }
 
@@ -572,6 +608,43 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
     }
 }
 
+void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
+                                   const std::string& db_path,
+                                   MarketSnapshot& snap) {
+    const double flat_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
+    if (mq.rate_source != DevMainMarketQuotesConfig::RateSourceKind::kDb) {
+        snap.risk_free_rate = flat_rate;
+        return;
+    }
+    if (mq.as_of_iso.empty() || !LooksIsoDate(mq.as_of_iso)) {
+        throw numeraire::ValidationError(
+                "NUMERAIRE_DEV_RATE_SOURCE=db requires a valuation date (--as-of or NUMERAIRE_DEV_AS_OF).");
+    }
+
+    std::optional<numeraire::database::DiscountCurveEodRead> curve =
+            numeraire::database::TryLoadLatestDiscountCurveEod(db_path, mq.discount_curve_id, mq.as_of_iso);
+    if (!curve.has_value()) {
+        Logger::NumWarn(
+                "No discount_curve_eod on or before as_of={} for curve_id={}; using env flat rate={}.",
+                mq.as_of_iso,
+                mq.discount_curve_id,
+                flat_rate);
+        snap.risk_free_rate = flat_rate;
+        snap.discount_curve.reset();
+        return;
+    }
+
+    snap.discount_curve = std::move(curve);
+    snap.risk_free_rate =
+            numeraire::market_data::RepresentativeRiskFreeRate(snap.discount_curve, flat_rate);
+    Logger::NumInfo(
+            "Discount curve curve_id={} loaded @ {} (requested as_of={}; representative 1Y r={}).",
+            mq.discount_curve_id,
+            snap.discount_curve->as_of,
+            mq.as_of_iso,
+            snap.risk_free_rate);
+}
+
 [[nodiscard]] std::unique_ptr<numeraire::core::IMarketData> CreateDevMainMarketData(
         const DevMainMarketQuotesConfig& mq,
         const std::string& db_path,
@@ -607,15 +680,23 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
                 JoinCsv(iv_db_ids),
                 JoinCsv(iv_env_ids),
                 snap.flat_implied_volatility);
-        return numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.spots,
-                                                                        snap.risk_free_rate, snap.dividend_yields,
-                                                                        underlying_ids, mq.as_of_iso,
-                                                                        snap.flat_implied_volatility);
+        const double flat_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
+        return numeraire::market_data::CurvedRateMarketData::MaybeWrap(
+                numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.spots,
+                                                                         snap.risk_free_rate, snap.dividend_yields,
+                                                                         underlying_ids, mq.as_of_iso,
+                                                                         snap.flat_implied_volatility),
+                snap.discount_curve,
+                flat_rate);
     }
 
     Logger::NumInfo("Implied vol flat={} from env (NUMERAIRE_DEV_VOL).", snap.flat_implied_volatility);
-    StaticMarketDataProvider provider(std::move(snap));
-    return provider.CreateMarketData();
+    const std::optional<numeraire::database::DiscountCurveEodRead> discount_curve = snap.discount_curve;
+    const double flat_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
+    return numeraire::market_data::CurvedRateMarketData::MaybeWrap(
+            numeraire::market_data::StaticMarketDataProvider(std::move(snap)).CreateMarketData(),
+            discount_curve,
+            flat_rate);
 }
 
 [[nodiscard]] int RunWithTradeIds(const SqliteTradeRepository& repo,
@@ -642,17 +723,19 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
 
     MarketSnapshot snap;
     snap.valuation_date = numeraire::schedule::ParseIsoDate(mq.as_of_iso);
-    snap.risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
     snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
     const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
 
     FillUnderlyingSpotsAcrossBundles(snap, bundles, db_path, mq);
     FillDividendYieldsAcrossBundles(snap, bundles, q);
+    AttachDiscountCurveToSnapshot(mq, db_path.string(), snap);
 
     Logger::NumInfo(
-            "Quotes: risk_free_rate={} (env) vol_source={} flat_iv_fallback={} dividends={} (env); spot_source={} "
-            "as_of={}.",
+            "Quotes: risk_free_rate={} ({} curve_as_of={}) vol_source={} flat_iv_fallback={} dividends={} (env); "
+            "spot_source={} as_of={}.",
             snap.risk_free_rate,
+            mq.rate_source == DevMainMarketQuotesConfig::RateSourceKind::kDb ? "db" : "env",
+            snap.discount_curve.has_value() ? snap.discount_curve->as_of : "-",
             mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb ? "db" : "env",
             snap.flat_implied_volatility,
             q,
@@ -755,20 +838,21 @@ void FillDividendYieldsAcrossBundles(MarketSnapshot& snap,
         MarketSnapshot snap;
         snap.valuation_date = ParseIsoDate(mq.as_of_iso);
         numeraire::database::RequireValuationDateEqualsTradeDate(snap.valuation_date, bundle.trade);
-        snap.risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
         snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
         const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
 
         FillUnderlyingSpotsAcrossBundles(snap, {bundle}, db_path, mq);
         FillDividendYieldsAcrossBundles(snap, {bundle}, q);
+        AttachDiscountCurveToSnapshot(mq, db_path.string(), snap);
 
         Logger::NumInfo(
-                "Booking quotes trade_id={} trade_date={} spot_source={} vol_source={} risk_free_rate={} "
-                "flat_iv_fallback={}.",
+                "Booking quotes trade_id={} trade_date={} spot_source={} vol_source={} rate_source={} "
+                "risk_free_rate={} flat_iv_fallback={}.",
                 tid,
                 mq.as_of_iso,
                 mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb ? "db" : "env",
                 mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb ? "db" : "env",
+                mq.rate_source == DevMainMarketQuotesConfig::RateSourceKind::kDb ? "db" : "env",
                 snap.risk_free_rate,
                 snap.flat_implied_volatility);
 
@@ -911,6 +995,10 @@ int main(const int argc, char** argv) {
         const int option_price_rc = TryRunPolygonOptionDailyPriceEodFetch(argc, argv, cfg);
         if (option_price_rc >= 0) {
             return option_price_rc;
+        }
+        const int discount_curve_rc = TryRunDiscountCurveEodBuild(argc, argv, cfg);
+        if (discount_curve_rc >= 0) {
+            return discount_curve_rc;
         }
         const int vol_surface_rc = TryRunVolSurfaceEodBuild(argc, argv, cfg);
         if (vol_surface_rc >= 0) {
