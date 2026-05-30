@@ -124,8 +124,8 @@ main() {
     trap 'rm -f "${_TRADES_JSON}"' EXIT
     write_live_trades_json "${_TRADES_JSON}" "${live_ids[@]}"
 
-    log "MTM EOD: spot/vol from DB (run daily_market_prep first)"
-    run_cmd env NUMERAIRE_DEV_SPOT_SOURCE=db NUMERAIRE_DEV_VOL_SOURCE=db \
+    log "MTM EOD: spot/vol/rate from DB (run daily_market_prep first)"
+    run_cmd env NUMERAIRE_DEV_SPOT_SOURCE=db NUMERAIRE_DEV_VOL_SOURCE=db NUMERAIRE_DEV_RATE_SOURCE=db \
         "${DEV_MAIN}" --as-of "${as_of}" --trades-json "${_TRADES_JSON}"
 
     log "daily_book_mtm done as_of=${as_of} trades=${#live_ids[@]}"

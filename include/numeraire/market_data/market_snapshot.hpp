@@ -1,17 +1,15 @@
 #pragma once
 
+#include <numeraire/database/discount_curve_eod_read.hpp>
 #include <numeraire/schedule/date.hpp>
+
+#include <optional>
 #include <string>
 #include <unordered_map>
 
 namespace numeraire::market_data {
 
 /// Immutable bundle of quotes fed into pricing (`IMarketData`).
-///
-/// Sprint 8 keeps this intentionally small: equity spots, a single discount
-/// rate, per-name dividend yields, and one flat Black–Scholes-style vol used
-/// for every \((K,T)\) slice. Finer structure (surfaces, curves) can extend
-/// this type later without changing `IMarketData`.
 struct MarketSnapshot {
     schedule::Date valuation_date{};  // as_of
     std::unordered_map<std::string, double> spots;
@@ -19,6 +17,8 @@ struct MarketSnapshot {
     std::unordered_map<std::string, double> dividend_yields;
     /// Used for all `ImpliedVolatility` calls until a surface ships.
     double flat_implied_volatility{0.0};
+    /// Bootstrapped discount curve; when set, pricing uses tenor-dependent zero rates.
+    std::optional<database::DiscountCurveEodRead> discount_curve;
 };
 
 }  // namespace numeraire::market_data

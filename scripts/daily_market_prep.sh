@@ -9,6 +9,7 @@
 # Run before scripts/daily_book_mtm.sh (MTM only; no ingest there).
 #
 # Typical flow:
+#   0. FRED par yields + discount_curve_eod bootstrap (T-2 lag; see NUMERAIRE_FRED_AS_OF_LAG_DAYS)
 #   1. index_daily_eod / equity_daily_eod (per scope)
 #   2. option_contract catalog (optional)
 #   3. option_universe_eod build (optional)
@@ -23,7 +24,11 @@
 #
 # Environment:
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)
-#   NUMERAIRE_AS_OF_LAG_DAYS=1
+#   NUMERAIRE_AS_OF_LAG_DAYS=1        lag for scope ingest / vol (default 1)
+#   NUMERAIRE_FRED_AS_OF_LAG_DAYS=2   lag for FRED par yields + discount bootstrap (default 2)
+#   NUMERAIRE_FRED_AS_OF=YYYY-MM-DD   override FRED curve as_of (optional)
+#   NUMERAIRE_DISCOUNT_CURVE_ID=USD_TREASURY_PAR_FRED
+#   NUMERAIRE_PREP_SKIP_FRED_CURVE=1  skip FRED fetch + discount-curve build
 #   NUMERAIRE_DB_PATH=db.sqlite3
 #   NUMERAIRE_GRID_CONFIG=configs/option_universe_grid.json
 #   NUMERAIRE_PREP_SKIP_BOOK_EQUITY=1   skip equity fetch for book underlyings not in scope
@@ -57,12 +62,8 @@ run_cmd() {
     )
 }
 
-resolve_as_of() {
-    if [[ -n "${NUMERAIRE_AS_OF:-}" ]]; then
-        echo "${NUMERAIRE_AS_OF}"
-        return
-    fi
-    local lag_days="${NUMERAIRE_AS_OF_LAG_DAYS:-1}"
+resolve_as_of_with_lag() {
+    local lag_days="$1"
     local d
     d="$(date -u -d "${lag_days} days ago" +%Y-%m-%d)"
     while true; do
@@ -74,6 +75,22 @@ resolve_as_of() {
         fi
         d="$(date -I -d "${d} - 1 day")"
     done
+}
+
+resolve_as_of() {
+    if [[ -n "${NUMERAIRE_AS_OF:-}" ]]; then
+        echo "${NUMERAIRE_AS_OF}"
+        return
+    fi
+    resolve_as_of_with_lag "${NUMERAIRE_AS_OF_LAG_DAYS:-1}"
+}
+
+resolve_fred_as_of() {
+    if [[ -n "${NUMERAIRE_FRED_AS_OF:-}" ]]; then
+        echo "${NUMERAIRE_FRED_AS_OF}"
+        return
+    fi
+    resolve_as_of_with_lag "${NUMERAIRE_FRED_AS_OF_LAG_DAYS:-2}"
 }
 
 table_exists() {
@@ -313,6 +330,28 @@ run_book_equity_catchup() {
     return 0
 }
 
+run_usd_treasury_discount_curve() {
+    if [[ "${NUMERAIRE_PREP_SKIP_FRED_CURVE:-0}" == "1" ]]; then
+        log "USD Treasury curve prep skipped (NUMERAIRE_PREP_SKIP_FRED_CURVE=1)"
+        return 0
+    fi
+
+    local fred_as_of curve_id failed=0
+    fred_as_of="$(resolve_fred_as_of)"
+    curve_id="${NUMERAIRE_DISCOUNT_CURVE_ID:-USD_TREASURY_PAR_FRED}"
+    log "USD Treasury curve prep fred_as_of=${fred_as_of} curve_id=${curve_id} (FRED lag=${NUMERAIRE_FRED_AS_OF_LAG_DAYS:-2})"
+
+    if ! run_cmd python3 scripts/fetch_fred_treasury_par_yields.py \
+        --as-of "${fred_as_of}" --db-path "${DB_PATH}"; then
+        failed=1
+    fi
+    if [[ "${failed}" -eq 0 ]] && ! run_cmd "${DEV_MAIN}" \
+        --build-discount-curve-eod --as-of "${fred_as_of}" --curve-id "${curve_id}"; then
+        failed=1
+    fi
+    return "${failed}"
+}
+
 main() {
     log "daily_market_prep start repo=${REPO_ROOT}"
 
@@ -332,6 +371,10 @@ main() {
 
     local count=0
     local failed_scopes=0
+    if ! run_usd_treasury_discount_curve; then
+        failed_scopes=$((failed_scopes + 1))
+    fi
+
     while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
         count=$((count + 1))
