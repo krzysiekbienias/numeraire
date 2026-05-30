@@ -1,6 +1,8 @@
 # Market data providers and snapshots (Sprint 8).
 add_library(numeraire_market_data STATIC
         static_market_data_provider.cpp
+        curved_rate_market_data.cpp
+        discount_curve_rate.cpp
         vol_surface_interpolation.cpp
         sqlite_vol_surface_market_data.cpp
 )

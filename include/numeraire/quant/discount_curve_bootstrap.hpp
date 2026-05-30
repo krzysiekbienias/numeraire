@@ -52,6 +52,10 @@ struct BootstrapResult {
 /// Continuous zero rate → discount factor \(DF(t) = e^{-Z t}\).
 [[nodiscard]] double DiscountFactorFromZeroRate(const double zero_rate, const double time_years) noexcept;
 
+/// Linear zero-rate interpolation on bootstrapped pillars (same convention as the swap solver).
+[[nodiscard]] double InterpolateZeroRateAtTime(const std::vector<BootstrappedCurvePoint>& pillars,
+                                               double time_years) noexcept;
+
 /// Build a continuously compounded zero curve from quoted deposit/swap pillars.
 ///
 /// Deposits (short end): \(DF = 1 / (1 + R T)\), \(Z = -\ln(DF) / T\).

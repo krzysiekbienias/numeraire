@@ -182,6 +182,44 @@ double DiscountFactorFromZeroRate(const double zero_rate, const double time_year
     return std::exp(-zero_rate * time_years);
 }
 
+double InterpolateZeroRateAtTime(const std::vector<BootstrappedCurvePoint>& pillars,
+                                 const double time_years) noexcept {
+    if (pillars.empty() || !std::isfinite(time_years)) {
+        return 0.0;
+    }
+
+    std::vector<SolvedNode> curve;
+    curve.reserve(pillars.size());
+    for (const BootstrappedCurvePoint& pillar : pillars) {
+        curve.push_back({pillar.time_years, pillar.zero_rate});
+    }
+    std::sort(curve.begin(), curve.end(), [](const SolvedNode& a, const SolvedNode& b) {
+        return a.time_years < b.time_years;
+    });
+
+    if (time_years <= curve.front().time_years + kTimeTol) {
+        return curve.front().zero_rate;
+    }
+    if (time_years + kTimeTol >= curve.back().time_years) {
+        return curve.back().zero_rate;
+    }
+
+    for (std::size_t i = 0; i + 1 < curve.size(); ++i) {
+        const double t0 = curve[i].time_years;
+        const double t1 = curve[i + 1].time_years;
+        if (time_years + kTimeTol < t0 || time_years > t1 + kTimeTol) {
+            continue;
+        }
+        if (std::abs(t1 - t0) <= kTimeTol) {
+            return curve[i].zero_rate;
+        }
+        const double weight = (time_years - t0) / (t1 - t0);
+        return curve[i].zero_rate + (weight * (curve[i + 1].zero_rate - curve[i].zero_rate));
+    }
+
+    return curve.back().zero_rate;
+}
+
 BootstrapResult BootstrapDiscountCurve(const std::vector<CurvePillarQuote>& quotes) {
     BootstrapResult result;
     if (quotes.empty()) {
