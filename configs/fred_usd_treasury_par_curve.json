@@ -1,7 +1,7 @@
 {
   "curve_id": "USD_TREASURY_PAR_FRED",
   "currency": "USD",
-  "curve_kind": "treasury_par_zero_fred",
+  "curve_kind": "treasury_par_fred",
   "source": "FRED",
   "day_count": "Actual365Fixed",
   "session_calendar": "America/New_York",

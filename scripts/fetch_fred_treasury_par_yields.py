@@ -209,7 +209,7 @@ def main() -> None:
 
     db_path = Path(args.db_path)
     if not db_path.is_file():
-        _die(f"database not found: {db_path} (run schema or sql/apply_par_curve_fred.sql)")
+        _die(f"database not found: {db_path} (apply sql/schema_v1.sql or run dev_main bootstrap)")
 
     conn = sqlite3.connect(db_path)
     try:

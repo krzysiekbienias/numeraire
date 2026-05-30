@@ -2,7 +2,12 @@
 
 ## Schema
 
-- **`schema_v1.sql`** — full DDL (run on empty DB or via `dev_main` bootstrap).
+- **`schema_v1.sql`** — **single source of truth** for all table DDL (idempotent `CREATE IF NOT EXISTS`).
+  Run on an empty DB, re-run safely on an existing DB, or let `dev_main` / ingest jobs call
+  `BootstrapTradeDatabaseSchema`.
+
+There are **no separate `apply_*.sql` migration scripts** for curve tables — everything lives in
+`schema_v1.sql`.
 
 ## Seeds
 
@@ -12,7 +17,7 @@
 
 ```bash
 ./scripts/daily_market_prep.sh   # all ingest (scope + book underlyings not in scope)
-./scripts/daily_book_mtm.sh      # LIVE trades MTM (spot/vol from DB; no booking)
+./scripts/daily_book_mtm.sh      # LIVE trades MTM (spot/vol/rates from DB when configured)
 ```
 
 ```bash
@@ -41,6 +46,8 @@ Each column is **0 or 1** per `scope_id` — not all-or-nothing.
 
 **Book catch-up:** after scope rows, `daily_market_prep.sh` fetches equity EOD for any `trade_legs` underlying not covered by an active `ingest_equity_eod=1` scope row (`NUMERAIRE_PREP_SKIP_BOOK_EQUITY=1` to disable).
 
+**USD discount curve (global, before scope loop):** FRED par ingest + `--build-discount-curve-eod` with **`NUMERAIRE_FRED_AS_OF_LAG_DAYS=2`** (FRED T-2). Scope ingest uses **`NUMERAIRE_AS_OF_LAG_DAYS=1`** by default. Skip: `NUMERAIRE_PREP_SKIP_FRED_CURVE=1`.
+
 ## Par yield curve (FRED)
 
 | Table | Role |
@@ -50,22 +57,30 @@ Each column is **0 or 1** per `scope_id` — not all-or-nothing.
 
 Default `curve_id`: **`USD_TREASURY_PAR_FRED`**. Link from prep scope via `discount_curve_id` + `discount_curve_source` (`SQLITE` / `FRED` when wired).
 
-**Existing DB** (par tables missing, or legacy `discount_curve_*` to remove):
-
-```bash
-sqlite3 "${NUMERAIRE_DB_PATH:-db.sqlite3}" < sql/apply_par_curve_fred.sql
-```
-
-Legacy tables only (no par tables yet):
-
-```bash
-sqlite3 "${NUMERAIRE_DB_PATH:-db.sqlite3}" < sql/drop_legacy_discount_curve.sql
-```
-
-**Ingest** (after `FRED_API_KEY` in `.env`):
+**Ingest** (after `schema_v1.sql` and `FRED_API_KEY` in `.env`):
 
 ```bash
 python3 scripts/fetch_fred_treasury_par_yields.py --as-of 2026-05-27
 ```
 
-Bootstrap discount factors from quoted pillars is a follow-up (C++ or script); v1 only stores market par quotes.
+## Discount curve (bootstrap)
+
+| Table | Role |
+|-------|------|
+| `discount_curve_eod` | Bootstrapped curve header per `(curve_id, as_of)` — links to source `par_curve_*` |
+| `discount_curve_point_eod` | Pillars: `tenor`, `time_years`, `zero_rate`, `discount_factor` (solver output only) |
+
+**Build** (requires par quotes for the same `curve_id` / `as_of`):
+
+```bash
+./build/dev_main --build-discount-curve-eod --as-of 2026-05-27 --curve-id USD_TREASURY_PAR_FRED
+```
+
+Full USD Treasury EOD pipeline:
+
+```bash
+python3 scripts/fetch_fred_treasury_par_yields.py --as-of 2026-05-27
+./build/dev_main --build-discount-curve-eod --as-of 2026-05-27
+```
+
+Pricing: set `NUMERAIRE_DEV_RATE_SOURCE=db` (see `.env.example`, `daily_book_mtm.sh`).

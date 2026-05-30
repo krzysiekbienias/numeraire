@@ -99,8 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_universe_instrument_data_vendor ON universe_instr
 -- `provider_symbol` — Polygon / vendor symbol (`AAPL`, `I:NDX`, …).
 -- Cron session `as_of` must satisfy ingest_from_date <= as_of and (ingest_to_date IS NULL OR ingest_to_date >= as_of).
 --
--- Quotation / curves (v1 reserved): NULL = use env (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_DIV_YIELD`) until
--- `par_curve_*` / `forward_curve_*` tables and loaders exist.
+-- Quotation / curves: `discount_curve_id` → `par_curve_eod` / bootstrapped `discount_curve_eod`
+-- (pricing via `NUMERAIRE_DEV_RATE_SOURCE=db`). NULL columns fall back to env
+-- (`NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_DIV_YIELD`). `forward_curve_*` reserved for future use.
 CREATE TABLE IF NOT EXISTS market_data_prep_scope (
     scope_id TEXT PRIMARY KEY,
     instrument_id TEXT NOT NULL,
@@ -451,8 +452,8 @@ CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_as_of ON option_daily_pric
 -- EOD par-yield curves (FRED Treasury DGS* — second data provider).
 --
 -- `curve_id` — canonical name referenced by `market_data_prep_scope.discount_curve_id`
---     (e.g. USD_TREASURY_PAR_FRED). Bootstrapping discount factors from these quotes is a
---     separate job (not in v1 ingest).
+--     (e.g. USD_TREASURY_PAR_FRED). Ingest: `fetch_fred_treasury_par_yields.py`; bootstrap:
+--     `dev_main --build-discount-curve-eod` (see `daily_market_prep.sh`).
 --
 -- `quoted_rate` — market par/simple quote, annualized decimal (0.0525 = 5.25%), from FRED % / 100.
 --     **Not** a bootstrapped zero rate; see `numeraire::quant::BootstrapDiscountCurve`.
@@ -488,6 +489,43 @@ CREATE TABLE IF NOT EXISTS par_curve_point_eod (
     FOREIGN KEY (curve_id, as_of) REFERENCES par_curve_eod (curve_id, as_of) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_par_curve_point_curve_as_of ON par_curve_point_eod (curve_id, as_of);
+-- ---------------------------------------------------------------------------
+-- EOD bootstrapped discount curves (zero rates + discount factors at pillars).
+--
+-- Built from `par_curve_*` quotes via `BootstrapDiscountCurve` (deposit/swap bootstrap,
+-- linear zero-rate interpolation between pillars during solve; runtime DF uses same convention).
+--
+-- `curve_id` — canonical name for pricing (`market_data_prep_scope.discount_curve_id`).
+-- `source_par_curve_id` / `source_par_as_of` — input par-yield snapshot used for bootstrap.
+-- `zero_rate` / `discount_factor` — solved at pillar times only (no dense coupon grid stored).
+CREATE TABLE IF NOT EXISTS discount_curve_eod (
+    curve_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    source_par_curve_id TEXT NOT NULL,
+    source_par_as_of TEXT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    day_count TEXT NOT NULL DEFAULT 'Actual365Fixed',
+    session_calendar TEXT NOT NULL DEFAULT 'America/New_York',
+    interpolation_method TEXT NOT NULL DEFAULT 'linear_zero_rate',
+    bootstrap_engine TEXT NOT NULL DEFAULT 'deposit_swap_v1',
+    batch_run_id TEXT,
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (curve_id, as_of),
+    FOREIGN KEY (source_par_curve_id, source_par_as_of) REFERENCES par_curve_eod (curve_id, as_of)
+);
+CREATE INDEX IF NOT EXISTS idx_discount_curve_eod_as_of ON discount_curve_eod (as_of);
+CREATE INDEX IF NOT EXISTS idx_discount_curve_eod_source_par ON discount_curve_eod (source_par_curve_id, source_par_as_of);
+CREATE TABLE IF NOT EXISTS discount_curve_point_eod (
+    curve_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    tenor TEXT NOT NULL,
+    time_years REAL NOT NULL CHECK (time_years > 0.0),
+    zero_rate REAL NOT NULL CHECK (zero_rate >= 0.0),
+    discount_factor REAL NOT NULL CHECK (discount_factor > 0.0 AND discount_factor <= 1.0),
+    PRIMARY KEY (curve_id, as_of, tenor),
+    FOREIGN KEY (curve_id, as_of) REFERENCES discount_curve_eod (curve_id, as_of) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_discount_curve_point_curve_as_of ON discount_curve_point_eod (curve_id, as_of);
 -- -------------------------------------------------------
 -- EOD implied-volatility surfaces (sparse points, not a dense strike/expiry matrix).
 --
