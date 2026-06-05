@@ -64,6 +64,14 @@ def _load_curve_config(path: Path) -> Mapping[str, Any]:
     return cfg
 
 
+def _pillar_quoted_price(pillar: Mapping[str, Any]) -> float | None:
+    if "futures_price" in pillar:
+        return float(pillar["futures_price"])
+    if "quoted_price" in pillar:
+        return float(pillar["quoted_price"])
+    return None
+
+
 def _pillar_quoted_rate(pillar: Mapping[str, Any]) -> float:
     if "quoted_rate" in pillar:
         return float(pillar["quoted_rate"])
@@ -82,6 +90,14 @@ def _collect_points(cfg: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], flo
         points.append((pillar, rate))
         print(f"  {str(pillar['tenor']):>4}  {str(pillar['instrument_type']):>8}  {rate:.6f}")
     return points
+
+
+def _ensure_schema_patches(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after an existing DB was first created."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(par_curve_point_eod)")}
+    if "quoted_price" not in cols:
+        conn.execute("ALTER TABLE par_curve_point_eod ADD COLUMN quoted_price REAL")
+        conn.commit()
 
 
 def _upsert_curve(
@@ -122,17 +138,19 @@ def _upsert_curve(
     for pillar, quoted_rate in points:
         series_id = str(pillar.get("fred_series_id", STATIC_FRED_PLACEHOLDER))
         quote_style = str(pillar.get("quote_style", "annualized_decimal"))
+        quoted_price = _pillar_quoted_price(pillar)
         cur.execute(
             """
             INSERT INTO par_curve_point_eod (
                 curve_id, as_of, tenor, tenor_days, instrument_type,
-                fred_series_id, quoted_rate, quote_style
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                fred_series_id, quoted_rate, quoted_price, quote_style
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (curve_id, as_of, tenor) DO UPDATE SET
                 tenor_days = excluded.tenor_days,
                 instrument_type = excluded.instrument_type,
                 fred_series_id = excluded.fred_series_id,
                 quoted_rate = excluded.quoted_rate,
+                quoted_price = excluded.quoted_price,
                 quote_style = excluded.quote_style
             """,
             (
@@ -143,6 +161,7 @@ def _upsert_curve(
                 str(pillar["instrument_type"]),
                 series_id,
                 quoted_rate,
+                quoted_price,
                 quote_style,
             ),
         )
@@ -194,6 +213,7 @@ def main() -> None:
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
+        _ensure_schema_patches(conn)
         _upsert_curve(conn, cfg, as_of, points)
     finally:
         conn.close()
