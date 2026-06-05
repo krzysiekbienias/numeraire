@@ -1,0 +1,180 @@
+{
+  "curve_id": "EUR_EURO_RATES_PAR_STATIC",
+  "currency": "EUR",
+  "curve_kind": "euro_rates_par_textbook",
+  "source": "STATIC",
+  "day_count": "Actual365Fixed",
+  "session_calendar": "TARGET",
+  "as_of_anchor": "2026-06-01",
+  "notes": "Table 2.1 Euro rates (27 Nov 2014) — quotations unchanged; calendar shifted to anchor 2026-06-01. Futures: quoted_rate = (100 - futures_price) / 100.",
+  "pillars": [
+    {
+      "tenor": "O/N",
+      "tenor_days": 1,
+      "instrument_type": "deposit",
+      "begin": "2026-06-01",
+      "end": "2026-06-02",
+      "quoted_rate": 0.0
+    },
+    {
+      "tenor": "T/N",
+      "tenor_days": 4,
+      "instrument_type": "deposit",
+      "begin": "2026-06-02",
+      "end": "2026-06-05",
+      "quoted_rate": 0.0015
+    },
+    {
+      "tenor": "1M",
+      "tenor_days": 36,
+      "instrument_type": "deposit",
+      "begin": "2026-06-05",
+      "end": "2026-07-07",
+      "quoted_rate": 0.0004
+    },
+    {
+      "tenor": "2M",
+      "tenor_days": 67,
+      "instrument_type": "deposit",
+      "begin": "2026-06-05",
+      "end": "2026-08-07",
+      "quoted_rate": 0.0004
+    },
+    {
+      "tenor": "3M",
+      "tenor_days": 95,
+      "instrument_type": "deposit",
+      "begin": "2026-06-05",
+      "end": "2026-09-04",
+      "quoted_rate": 0.0014
+    },
+    {
+      "tenor": "Fut1",
+      "tenor_days": 110,
+      "instrument_type": "futures",
+      "expiry": "2026-06-19",
+      "begin": "2026-06-21",
+      "end": "2026-09-19",
+      "quote_style": "futures_price",
+      "futures_price": 99.91,
+      "quoted_rate": 0.0009
+    },
+    {
+      "tenor": "Fut2",
+      "tenor_days": 203,
+      "instrument_type": "futures",
+      "expiry": "2026-09-18",
+      "begin": "2026-09-20",
+      "end": "2026-12-21",
+      "quote_style": "futures_price",
+      "futures_price": 99.915,
+      "quoted_rate": 0.00085
+    },
+    {
+      "tenor": "Fut3",
+      "tenor_days": 294,
+      "instrument_type": "futures",
+      "expiry": "2026-12-18",
+      "begin": "2026-12-20",
+      "end": "2027-03-22",
+      "quote_style": "futures_price",
+      "futures_price": 99.93,
+      "quoted_rate": 0.0007
+    },
+    {
+      "tenor": "Fut4",
+      "tenor_days": 384,
+      "instrument_type": "futures",
+      "expiry": "2027-03-19",
+      "begin": "2027-03-21",
+      "end": "2027-06-20",
+      "quote_style": "futures_price",
+      "futures_price": 99.925,
+      "quoted_rate": 0.00075
+    },
+    {
+      "tenor": "Fut5",
+      "tenor_days": 475,
+      "instrument_type": "futures",
+      "expiry": "2027-06-18",
+      "begin": "2027-06-20",
+      "end": "2027-09-19",
+      "quote_style": "futures_price",
+      "futures_price": 99.91,
+      "quoted_rate": 0.0009
+    },
+    {
+      "tenor": "Fut6",
+      "tenor_days": 567,
+      "instrument_type": "futures",
+      "expiry": "2027-09-17",
+      "begin": "2027-09-19",
+      "end": "2027-12-20",
+      "quote_style": "futures_price",
+      "futures_price": 99.89,
+      "quoted_rate": 0.0011
+    },
+    {
+      "tenor": "Fut7",
+      "tenor_days": 658,
+      "instrument_type": "futures",
+      "expiry": "2027-12-17",
+      "begin": "2027-12-19",
+      "end": "2028-03-20",
+      "quote_style": "futures_price",
+      "futures_price": 99.87,
+      "quoted_rate": 0.0013
+    },
+    {
+      "tenor": "Fut8",
+      "tenor_days": 755,
+      "instrument_type": "futures",
+      "expiry": "2028-03-24",
+      "begin": "2028-03-26",
+      "end": "2028-06-25",
+      "quote_style": "futures_price",
+      "futures_price": 99.84,
+      "quoted_rate": 0.0016
+    },
+    {
+      "tenor": "3Y",
+      "tenor_days": 1100,
+      "instrument_type": "swap",
+      "begin": "2026-06-05",
+      "end": "2029-06-05",
+      "quoted_rate": 0.00257
+    },
+    {
+      "tenor": "4Y",
+      "tenor_days": 1467,
+      "instrument_type": "swap",
+      "begin": "2026-06-05",
+      "end": "2030-06-07",
+      "quoted_rate": 0.003208
+    },
+    {
+      "tenor": "5Y",
+      "tenor_days": 1831,
+      "instrument_type": "swap",
+      "begin": "2026-06-05",
+      "end": "2031-06-06",
+      "quoted_rate": 0.00396
+    },
+    {
+      "tenor": "6Y",
+      "tenor_days": 2196,
+      "instrument_type": "swap",
+      "begin": "2026-06-05",
+      "end": "2032-06-05",
+      "quoted_rate": 0.00484
+    },
+    {
+      "tenor": "7Y",
+      "tenor_days": 2561,
+      "instrument_type": "swap",
+      "begin": "2026-06-05",
+      "end": "2033-06-05",
+      "quoted_rate": 0.00583
+    }
+  ]
+}
