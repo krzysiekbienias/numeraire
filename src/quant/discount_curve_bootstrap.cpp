@@ -182,6 +182,25 @@ double DiscountFactorFromZeroRate(const double zero_rate, const double time_year
     return std::exp(-zero_rate * time_years);
 }
 
+double ForwardZeroRateFromQuote(const double quoted_rate,
+                                const double prev_time_years,
+                                const double prev_zero_rate,
+                                const double time_years) noexcept {
+    if (time_years <= 0.0) {
+        return 0.0;
+    }
+    const double accrual = time_years - prev_time_years;
+    if (accrual <= 0.0) {
+        return DepositZeroRateFromQuote(quoted_rate, time_years);
+    }
+    const double df_prev = DiscountFactorFromZeroRate(prev_zero_rate, prev_time_years);
+    const double discount_factor = df_prev / (1.0 + (quoted_rate * accrual));
+    if (discount_factor <= 0.0) {
+        return 0.0;
+    }
+    return -std::log(discount_factor) / time_years;
+}
+
 double InterpolateZeroRateAtTime(const std::vector<BootstrappedCurvePoint>& pillars,
                                  const double time_years) noexcept {
     if (pillars.empty() || !std::isfinite(time_years)) {
@@ -248,6 +267,12 @@ BootstrapResult BootstrapDiscountCurve(const std::vector<CurvePillarQuote>& quot
         switch (quote.kind) {
             case CurvePillarKind::kDeposit: {
                 zero_rate = DepositZeroRateFromQuote(quote.quoted_rate, time_years);
+                break;
+            }
+            case CurvePillarKind::kFutures: {
+                const double prev_time = nodes.empty() ? 0.0 : nodes.back().time_years;
+                const double prev_zero = nodes.empty() ? 0.0 : nodes.back().zero_rate;
+                zero_rate = ForwardZeroRateFromQuote(quote.quoted_rate, prev_time, prev_zero, time_years);
                 break;
             }
             case CurvePillarKind::kSwap: {
