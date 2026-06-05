@@ -11,6 +11,15 @@
 namespace numeraire::database {
 namespace {
 
+void ApplySchemaPatches(SQLite::Database& db) {
+    SQLite::Statement columns(
+            db,
+            "SELECT 1 FROM pragma_table_info('par_curve_point_eod') WHERE name = 'quoted_price'");
+    if (!columns.executeStep()) {
+        db.exec("ALTER TABLE par_curve_point_eod ADD COLUMN quoted_price REAL");
+    }
+}
+
 [[nodiscard]] std::string ReadEntireFile(const std::filesystem::path& path) {
     std::ifstream in(path);
     if (!in) {
@@ -36,6 +45,7 @@ void BootstrapTradeDatabaseSchema(const std::filesystem::path& database_path,
         SQLite::Database db(database_path.string(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
         db.exec("PRAGMA foreign_keys = ON;");
         db.exec(sql);
+        ApplySchemaPatches(db);
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"BootstrapTradeDatabaseSchema: "} + e.what());
     }

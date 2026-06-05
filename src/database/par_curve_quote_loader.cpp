@@ -13,6 +13,9 @@ quant::CurvePillarKind ParCurveInstrumentToKind(const std::string& instrument_ty
     if (key == "deposit") {
         return quant::CurvePillarKind::kDeposit;
     }
+    if (key == "futures") {
+        return quant::CurvePillarKind::kFutures;
+    }
     if (key == "swap") {
         return quant::CurvePillarKind::kSwap;
     }
