@@ -457,6 +457,9 @@ CREATE INDEX IF NOT EXISTS idx_option_daily_price_eod_as_of ON option_daily_pric
 --
 -- `quoted_rate` — market par/simple quote, annualized decimal (0.0525 = 5.25%), from FRED % / 100.
 --     **Not** a bootstrapped zero rate; see `numeraire::quant::BootstrapDiscountCurve`.
+--     Bootstrap and pricing use this column only.
+-- `quoted_price` — optional raw market quote for display/audit (e.g. futures price 99.91 when
+--     `quote_style` = futures_price and quoted_rate = (100 - quoted_price) / 100). NULL for FRED DGS*.
 -- `tenor` — pillar label (1M, 3M, …); `tenor_days` optional calendar-day hint for bootstrap.
 -- `instrument_type` — curve pillar product: deposit | fra | futures | swap | other (FRED DGS* → deposit/swap).
 --
@@ -484,6 +487,7 @@ CREATE TABLE IF NOT EXISTS par_curve_point_eod (
     ),
     fred_series_id TEXT NOT NULL,
     quoted_rate REAL NOT NULL CHECK (quoted_rate >= 0.0),
+    quoted_price REAL,
     quote_style TEXT NOT NULL DEFAULT 'annualized_decimal',
     PRIMARY KEY (curve_id, as_of, tenor),
     FOREIGN KEY (curve_id, as_of) REFERENCES par_curve_eod (curve_id, as_of) ON DELETE CASCADE
