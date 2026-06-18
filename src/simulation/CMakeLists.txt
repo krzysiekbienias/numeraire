@@ -3,6 +3,7 @@
 # Dependencies (quant, schedule, market_data, ...) are added as each step ships.
 add_library(numeraire_simulation STATIC
         simulation_module.cpp
+        scenario_buffer.cpp
 )
 
 target_include_directories(numeraire_simulation
