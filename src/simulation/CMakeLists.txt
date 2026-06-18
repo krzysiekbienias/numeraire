@@ -4,6 +4,8 @@
 add_library(numeraire_simulation STATIC
         simulation_module.cpp
         scenario_buffer.cpp
+        random_engine.cpp
+        normal_random.cpp
 )
 
 target_include_directories(numeraire_simulation

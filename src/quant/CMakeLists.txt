@@ -1,5 +1,6 @@
 add_library(numeraire_quant STATIC
         black_scholes_vanilla.cpp
+        cholesky.cpp
         discount_curve_bootstrap.cpp
         fixed_income_pricing.cpp
         implied_vol_european.cpp
