@@ -25,7 +25,7 @@ include(NumeraireDependencies)
 # ---------------------------------------------------------------------------
 # Modular libraries (gated; activated as each module ships its CMakeLists.txt)
 # ---------------------------------------------------------------------------
-foreach(_module enums utils schedule core quant database products market_data pricers)
+foreach(_module enums utils schedule core quant database products market_data pricers simulation)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/${_module}/CMakeLists.txt)
         add_subdirectory(src/${_module})
     endif()

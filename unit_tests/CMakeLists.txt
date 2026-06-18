@@ -35,6 +35,7 @@ target_link_libraries(test_environment
         numeraire_products
         numeraire_quant
         numeraire_schedule
+        numeraire_simulation
         numeraire_utils
         SQLiteCpp
         GTest::gtest_main
