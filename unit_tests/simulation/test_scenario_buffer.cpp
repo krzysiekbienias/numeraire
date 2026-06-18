@@ -3,7 +3,9 @@
 #include <numeraire/simulation/scenario_buffer.hpp>
 #include <numeraire/utils/exception.hpp>
 
+#include <bit>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 
 namespace {
@@ -15,16 +17,32 @@ TEST(ScenarioBufferTest, DimensionsAndSize) {
     EXPECT_EQ(buf.NumFactors(), 2U);
     EXPECT_EQ(buf.NumSteps(), 3U);
     EXPECT_EQ(buf.NumPaths(), 4U);
-    EXPECT_EQ(buf.Size(), 24U);
+    EXPECT_EQ(buf.Size(), 24U);  // logical F*K*N, independent of padding
 }
 
-TEST(ScenarioBufferTest, IndexMappingKnownOffsets) {
-    const ScenarioBuffer buf(2, 3, 4);  // F=2, K=3, N=4
+TEST(ScenarioBufferTest, StridePadsPathsToCacheLine) {
+    EXPECT_EQ(ScenarioBuffer::kPathAlignment, 8U);  // 64 bytes / sizeof(double)
+    EXPECT_EQ(ScenarioBuffer(1, 1, 1).Stride(), 8U);
+    EXPECT_EQ(ScenarioBuffer(1, 1, 5).Stride(), 8U);
+    EXPECT_EQ(ScenarioBuffer(1, 1, 8).Stride(), 8U);
+    EXPECT_EQ(ScenarioBuffer(1, 1, 9).Stride(), 16U);
+    EXPECT_EQ(ScenarioBuffer(1, 1, 16).Stride(), 16U);
+}
+
+TEST(ScenarioBufferTest, AllocatedElemsIncludePadding) {
+    const ScenarioBuffer buf(2, 3, 4);  // stride padded 4 -> 8
+    EXPECT_EQ(buf.Stride(), 8U);
+    EXPECT_EQ(buf.AllocatedElems(), 2U * 3U * 8U);
+}
+
+TEST(ScenarioBufferTest, IndexMappingUsesStride) {
+    const ScenarioBuffer buf(2, 3, 4);  // F=2, K=3, N=4, stride=8
+    ASSERT_EQ(buf.Stride(), 8U);
     EXPECT_EQ(buf.Index(0, 0, 0), 0U);
     EXPECT_EQ(buf.Index(0, 0, 3), 3U);
-    EXPECT_EQ(buf.Index(0, 1, 0), 4U);
-    EXPECT_EQ(buf.Index(1, 0, 0), 12U);
-    EXPECT_EQ(buf.Index(1, 2, 3), 23U);
+    EXPECT_EQ(buf.Index(0, 1, 0), 8U);   // next row starts at one stride
+    EXPECT_EQ(buf.Index(1, 0, 0), 24U);  // ((1*3)+0)*8
+    EXPECT_EQ(buf.Index(1, 2, 3), 43U);  // ((1*3)+2)*8 + 3
 }
 
 TEST(ScenarioBufferTest, InitializedToZero) {
@@ -49,6 +67,16 @@ TEST(ScenarioBufferTest, SlabHasPathLengthAndStartsAtIndex) {
     }
 }
 
+TEST(ScenarioBufferTest, EverySlabIsCacheLineAligned) {
+    ScenarioBuffer buf(3, 4, 5);  // N=5 -> stride 8, padding exercised
+    for (std::size_t f = 0; f < buf.NumFactors(); ++f) {
+        for (std::size_t k = 0; k < buf.NumSteps(); ++k) {
+            const auto address = std::bit_cast<std::uintptr_t>(buf.Slab(f, k).data());
+            EXPECT_EQ(address % ScenarioBuffer::kCacheLineBytes, 0U);
+        }
+    }
+}
+
 TEST(ScenarioBufferTest, AtAliasesSlab) {
     ScenarioBuffer buf(2, 2, 3);
     buf.Slab(1, 1)[2] = 42.0;
@@ -57,7 +85,7 @@ TEST(ScenarioBufferTest, AtAliasesSlab) {
     EXPECT_DOUBLE_EQ(buf.Slab(0, 1)[0], 7.0);
 }
 
-TEST(ScenarioBufferTest, SlabsAreContiguousAndNonOverlapping) {
+TEST(ScenarioBufferTest, SlabsAreContiguousWithinRow) {
     ScenarioBuffer buf(2, 3, 4);
     for (std::size_t f = 0; f < buf.NumFactors(); ++f) {
         for (std::size_t k = 0; k < buf.NumSteps(); ++k) {
