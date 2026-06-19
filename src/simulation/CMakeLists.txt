@@ -8,6 +8,8 @@ add_library(numeraire_simulation STATIC
         normal_random.cpp
         exposure_grid_config.cpp
         exposure_time_grid.cpp
+        gbm_evolution.cpp
+        scenario_dump.cpp
 )
 
 target_include_directories(numeraire_simulation

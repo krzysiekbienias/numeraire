@@ -5,6 +5,7 @@
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/gbm_evolution.hpp>
 #include <numeraire/simulation/random_engine.hpp>
+#include <numeraire/simulation/scenario_dump.hpp>
 #include <numeraire/utils/exception.hpp>
 
 namespace {
@@ -15,6 +16,7 @@ using numeraire::simulation::EvolveSingleFactorGbm;
 using numeraire::simulation::ExposureGridConfig;
 using numeraire::simulation::ExposureTimeGrid;
 using numeraire::simulation::MersenneTwisterEngine;
+using numeraire::simulation::DumpScenarioPathsIfEnvSet;
 using numeraire::simulation::ScenarioBuffer;
 using numeraire::simulation::SingleFactorGbmSpec;
 
@@ -55,6 +57,7 @@ TEST(GbmEvolutionTest, ReproducibleForFixedSeed) {
     MersenneTwisterEngine engine_b(999);
     EvolveSingleFactorGbm(a, grid, spec, engine_a);
     EvolveSingleFactorGbm(b, grid, spec, engine_b);
+    (void)DumpScenarioPathsIfEnvSet(a, grid);
     for (std::size_t step = 0; step < grid.NumSteps(); ++step) {
         const auto slab_a = a.Slab(0, step);
         const auto slab_b = b.Slab(0, step);
