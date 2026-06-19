@@ -20,4 +20,18 @@ void EvolveSingleFactorGbm(ScenarioBuffer& buffer,
                            const SingleFactorGbmSpec& spec,
                            IRandomEngine& engine);
 
+/// Evolve `F` correlated risk factors along `time_grid` with exact GBM steps.
+///
+/// At each step draws independent `Z ~ N(0, I)`, forms correlated shocks
+/// `eps = L * Z` via `spec.cholesky`, then for each factor `f`:
+///
+/// `S_f(t_{k+1}) = S_f(t_k) * exp((r_f - q_f - 0.5*sigma_f^2)*dt + sigma_f*sqrt(dt)*eps_f)`.
+///
+/// Writes per-factor spots to step `0`, then fills steps `1..K-1`.
+/// Requires `buffer.NumFactors() == spec.NumFactors() == spec.cholesky.n`.
+void EvolveMultiFactorGbm(ScenarioBuffer& buffer,
+                          const ExposureTimeGrid& time_grid,
+                          const MultiFactorGbmSpec& spec,
+                          IRandomEngine& engine);
+
 }  // namespace numeraire::simulation
