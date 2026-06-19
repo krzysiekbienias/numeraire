@@ -6,9 +6,18 @@ add_library(numeraire_simulation STATIC
         scenario_buffer.cpp
         random_engine.cpp
         normal_random.cpp
+        exposure_grid_config.cpp
+        exposure_time_grid.cpp
 )
 
 target_include_directories(numeraire_simulation
         PUBLIC
         ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(numeraire_simulation
+        PUBLIC
+        numeraire_schedule
+        PRIVATE
+        numeraire_utils
 )

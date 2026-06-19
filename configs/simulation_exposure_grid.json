@@ -1,0 +1,26 @@
+{
+    "schema_version": "1.0.0",
+    "name": "default_ccr_exposure_grid",
+    "_comment": "Exposure pattern only: nodes are valuation_date + target_dte_days. Calendar dates and Act/365 year fractions are built at run time via schedule.",
+    "conventions": {
+        "day_count": "Actual365Fixed",
+        "include_valuation_date": true,
+        "clip_to_book_max_expiry": true,
+        "min_horizon_days": 365
+    },
+    "exposure_pillars": [
+        { "id": "W1", "target_dte_days": 7, "tier": "core" },
+        { "id": "W2", "target_dte_days": 14, "tier": "core" },
+        { "id": "W3", "target_dte_days": 21, "tier": "core" },
+        { "id": "M1", "target_dte_days": 30, "tier": "core" },
+        { "id": "M1p5", "target_dte_days": 45, "tier": "core" },
+        { "id": "M2", "target_dte_days": 60, "tier": "core" },
+        { "id": "M3", "target_dte_days": 90, "tier": "core" },
+        { "id": "M4", "target_dte_days": 120, "tier": "core" },
+        { "id": "M6", "target_dte_days": 180, "tier": "core" },
+        { "id": "M9", "target_dte_days": 270, "tier": "core" },
+        { "id": "Y1", "target_dte_days": 365, "tier": "core" },
+        { "id": "Y1p5", "target_dte_days": 545, "tier": "wing" },
+        { "id": "Y2", "target_dte_days": 730, "tier": "wing" }
+    ]
+}
