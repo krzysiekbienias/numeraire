@@ -10,6 +10,7 @@ add_library(numeraire_simulation STATIC
         exposure_time_grid.cpp
         gbm_evolution.cpp
         scenario_dump.cpp
+        historical_calibrator.cpp
 )
 
 target_include_directories(numeraire_simulation
@@ -20,6 +21,8 @@ target_include_directories(numeraire_simulation
 target_link_libraries(numeraire_simulation
         PUBLIC
         numeraire_schedule
+        numeraire_quant
         PRIVATE
         numeraire_utils
+        numeraire_database
 )

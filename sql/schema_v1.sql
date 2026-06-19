@@ -584,3 +584,64 @@ CREATE TABLE IF NOT EXISTS vol_surface_point_eod (
 );
 CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_id ON vol_surface_point_eod (surface_id);
 CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_expiry ON vol_surface_point_eod (surface_id, expiration_date);
+-- ---------------------------------------------------------------------------
+-- Historical GBM calibration snapshots (vol + correlation + Cholesky for MC).
+--
+-- One official row per (scope, scope_key, as_of, method). Re-run on the same key replaces
+-- the header; child rows cascade. MC loads the latest snapshot with `as_of <= valuation_date`.
+--
+-- v1 scope: whole book as one bucket (`calibration_scope='book'`, `scope_key='ALL'`).
+CREATE TABLE IF NOT EXISTS historical_calibration (
+    calibration_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    calibration_method TEXT NOT NULL DEFAULT 'historical_eod_gbm',
+    calibration_scope TEXT NOT NULL DEFAULT 'book',
+    scope_key TEXT NOT NULL DEFAULT 'ALL',
+    as_of TEXT NOT NULL,
+    history_start TEXT NOT NULL,
+    history_end TEXT NOT NULL,
+    lookback_calendar_days INTEGER NOT NULL,
+    min_return_observations INTEGER NOT NULL,
+    vol_annualization_days INTEGER NOT NULL DEFAULT 252,
+    eod_adjusted INTEGER NOT NULL DEFAULT 1 CHECK (eod_adjusted IN (0, 1)),
+    num_factors INTEGER NOT NULL,
+    num_return_observations INTEGER NOT NULL,
+    batch_run_id TEXT,
+    calculated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    source TEXT NOT NULL DEFAULT 'dev_main',
+    remarks TEXT NOT NULL DEFAULT '',
+    UNIQUE (calibration_scope, scope_key, as_of, calibration_method)
+);
+CREATE INDEX IF NOT EXISTS idx_historical_calibration_scope_asof ON historical_calibration (
+    calibration_scope,
+    scope_key,
+    as_of DESC
+);
+CREATE TABLE IF NOT EXISTS historical_calibration_factor (
+    calibration_id INTEGER NOT NULL,
+    factor_index INTEGER NOT NULL,
+    underlying_id TEXT NOT NULL,
+    spot_as_of REAL NOT NULL CHECK (spot_as_of > 0.0),
+    volatility REAL NOT NULL CHECK (volatility >= 0.0),
+    PRIMARY KEY (calibration_id, factor_index),
+    FOREIGN KEY (calibration_id) REFERENCES historical_calibration (calibration_id) ON DELETE CASCADE,
+    UNIQUE (calibration_id, underlying_id)
+);
+CREATE INDEX IF NOT EXISTS idx_historical_calibration_factor_underlying ON historical_calibration_factor (underlying_id);
+CREATE TABLE IF NOT EXISTS historical_calibration_correlation (
+    calibration_id INTEGER NOT NULL,
+    factor_i INTEGER NOT NULL,
+    factor_j INTEGER NOT NULL,
+    rho REAL NOT NULL CHECK (rho >= -1.0 AND rho <= 1.0),
+    PRIMARY KEY (calibration_id, factor_i, factor_j),
+    FOREIGN KEY (calibration_id) REFERENCES historical_calibration (calibration_id) ON DELETE CASCADE,
+    CHECK (factor_i <= factor_j)
+);
+CREATE TABLE IF NOT EXISTS historical_calibration_cholesky (
+    calibration_id INTEGER NOT NULL,
+    row_i INTEGER NOT NULL,
+    col_j INTEGER NOT NULL,
+    l_value REAL NOT NULL,
+    PRIMARY KEY (calibration_id, row_i, col_j),
+    FOREIGN KEY (calibration_id) REFERENCES historical_calibration (calibration_id) ON DELETE CASCADE,
+    CHECK (col_j <= row_i)
+);
