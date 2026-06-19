@@ -50,6 +50,7 @@ if(NUMERAIRE_BUILD_DEV_MAIN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app/dev_main.
     target_link_libraries(dev_main PRIVATE numeraire_market_data)
     target_link_libraries(dev_main PRIVATE numeraire_market_data_providers)
     target_link_libraries(dev_main PRIVATE numeraire_pricers)
+    target_link_libraries(dev_main PRIVATE numeraire_simulation)
     target_link_libraries(dev_main PRIVATE numeraire_utils)
     target_link_libraries(dev_main PRIVATE numeraire_schedule)
     target_compile_definitions(dev_main PRIVATE DEV_MAIN_BUILD=1)

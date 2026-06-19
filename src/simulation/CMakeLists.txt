@@ -9,8 +9,10 @@ add_library(numeraire_simulation STATIC
         exposure_grid_config.cpp
         exposure_time_grid.cpp
         gbm_evolution.cpp
+        gbm_spec.cpp
         scenario_dump.cpp
         historical_calibrator.cpp
+        historical_calibration_eod_builder.cpp
 )
 
 target_include_directories(numeraire_simulation

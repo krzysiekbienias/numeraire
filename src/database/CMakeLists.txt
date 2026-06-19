@@ -1,5 +1,6 @@
 add_library(numeraire_database STATIC
         equity_daily_eod_lookup.cpp
+        underlying_daily_closes.cpp
         index_daily_eod_lookup.cpp
         leg_mtm_pnl.cpp
         leg_pv.cpp
@@ -16,6 +17,7 @@ add_library(numeraire_database STATIC
         par_curve_quote_loader.cpp
         sqlite_discount_curve_repository.cpp
         sqlite_discount_curve_eod_read.cpp
+        sqlite_historical_calibration_repository.cpp
         vol_surface_eod_builder.cpp
         vol_surface_quote_loader.cpp
 )
