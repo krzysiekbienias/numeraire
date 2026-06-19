@@ -24,4 +24,7 @@ struct Date {
 /// negative when `end` precedes `start`.
 [[nodiscard]] double Act365FixedYearFraction(const Date& start, const Date& end);
 
+/// Calendar advance by whole days (QuantLib serial-date arithmetic; no holiday adjust).
+[[nodiscard]] Date AddCalendarDays(const Date& start, int days);
+
 }  // namespace numeraire::schedule

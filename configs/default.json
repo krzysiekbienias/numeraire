@@ -29,5 +29,9 @@
     "market_data": {
         "_comment_": "Wired up in Stage 3+ once Polygon provider ships.",
         "provider": "static"
+    },
+    "simulation": {
+        "_comment_": "Monte Carlo / CCR exposure grid pattern (offsets in days; dates built at run time).",
+        "exposure_grid_config": "configs/simulation_exposure_grid.json"
     }
 }

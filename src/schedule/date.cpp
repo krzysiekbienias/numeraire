@@ -20,6 +20,12 @@ double Act365FixedYearFraction(const Date& start, const Date& end) {
     return QuantLib::Actual365Fixed().yearFraction(ToQuantLibDate(start), ToQuantLibDate(end));
 }
 
+Date AddCalendarDays(const Date& start, const int days) {
+    QuantLib::Date ql = ToQuantLibDate(start);
+    ql += days;
+    return FromQuantLibDate(ql);
+}
+
 [[nodiscard]] numeraire::schedule::Date ParseIsoDate(const std::string& raw) {
     const std::string s = utils::TrimCopy(raw);
     if (s.size() != 10U || s[4] != '-' || s[7] != '-') {
