@@ -409,6 +409,62 @@ CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod_archive (
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_batch_run ON trade_leg_mtm_eod_archive (batch_run_id);
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_leg_asof_engine_batch ON trade_leg_mtm_eod_archive (leg_id, as_of, pricing_engine, batch_run_id);
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_trade_asof ON trade_leg_mtm_eod_archive (trade_id, as_of);
+-- ---------------------------------------------------------------------------
+-- Monte Carlo exposure metrics per leg and exposure-grid pillar (EE, PFE quantiles).
+-- Raw path-wise PV/exposure samples are not stored — export via NUMERAIRE_DUMP_LEG_EXPOSURE.
+CREATE TABLE IF NOT EXISTS trade_leg_exposure_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    as_of TEXT NOT NULL,
+    trade_id TEXT NOT NULL,
+    leg_id TEXT NOT NULL,
+    pillar_id TEXT NOT NULL,
+    grid_step INTEGER NOT NULL,
+    year_fraction REAL NOT NULL,
+    exposure_date TEXT NOT NULL,
+    ee REAL NOT NULL,
+    pfe_95 REAL NOT NULL,
+    pfe_97 REAL NOT NULL,
+    num_paths INTEGER NOT NULL,
+    mc_seed INTEGER NOT NULL,
+    calibration_id INTEGER,
+    scope_key TEXT NOT NULL,
+    batch_run_id TEXT,
+    pricing_engine TEXT NOT NULL,
+    calculated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    remarks TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
+    FOREIGN KEY (leg_id) REFERENCES trade_legs (leg_id) ON DELETE CASCADE,
+    UNIQUE (leg_id, as_of, pillar_id, pricing_engine)
+);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_exposure_eod_leg_asof ON trade_leg_exposure_eod (leg_id, as_of);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_exposure_eod_trade_asof ON trade_leg_exposure_eod (trade_id, as_of);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_exposure_eod_scope_asof ON trade_leg_exposure_eod (scope_key, as_of);
+CREATE INDEX IF NOT EXISTS idx_trade_leg_exposure_eod_asof ON trade_leg_exposure_eod (as_of);
+CREATE TABLE IF NOT EXISTS trade_leg_exposure_eod_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_run_id TEXT NOT NULL,
+    calculated_at TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    trade_id TEXT NOT NULL,
+    leg_id TEXT NOT NULL,
+    pillar_id TEXT NOT NULL,
+    grid_step INTEGER NOT NULL,
+    year_fraction REAL NOT NULL,
+    exposure_date TEXT NOT NULL,
+    ee REAL NOT NULL,
+    pfe_95 REAL NOT NULL,
+    pfe_97 REAL NOT NULL,
+    num_paths INTEGER NOT NULL,
+    mc_seed INTEGER NOT NULL,
+    calibration_id INTEGER,
+    scope_key TEXT NOT NULL,
+    pricing_engine TEXT NOT NULL,
+    remarks TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
+    FOREIGN KEY (leg_id) REFERENCES trade_legs (leg_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_exposure_archive_batch_run ON trade_leg_exposure_eod_archive (batch_run_id);
+CREATE INDEX IF NOT EXISTS idx_exposure_archive_leg_asof ON trade_leg_exposure_eod_archive (leg_id, as_of, pillar_id, batch_run_id);
 -- -------------------------------------------------------
 -- End-of-day OHLC for listed options (e.g. Polygon `v2/aggs` `1/day` on `O:NDXP…`).
 --
