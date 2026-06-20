@@ -1,8 +1,10 @@
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <numeraire/database/historical_calibration_types.hpp>
 #include <numeraire/database/sqlite_historical_calibration_repository.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
+#include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/format_iso_date.hpp>
 #include <numeraire/simulation/historical_calibration_eod_builder.hpp>
@@ -28,6 +30,27 @@ using numeraire::utils::ResolveDatabasePath;
 
 [[nodiscard]] bool LooksIsoDate(const std::string& s) {
     return s.size() == 10U && s[4] == '-' && s[7] == '-';
+}
+
+[[nodiscard]] int EnvInt(const char* key, const int default_value) {
+    const char* raw = std::getenv(key);
+    if (raw == nullptr || raw[0] == '\0') {
+        return default_value;
+    }
+    char* end = nullptr;
+    const long v = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return default_value;
+    }
+    return static_cast<int>(v);
+}
+
+[[nodiscard]] std::optional<std::string> EnvNonEmptyString(const char* key) {
+    const char* raw = std::getenv(key);
+    if (raw == nullptr || raw[0] == '\0') {
+        return std::nullopt;
+    }
+    return std::string{raw};
 }
 
 [[nodiscard]] std::vector<HistoricalCalibrationFactorWrite> ToFactorWrites(
@@ -92,6 +115,13 @@ HistoricalCalibrationBuildStats BuildHistoricalCalibrationEod(const HistoricalCa
     const std::optional<std::string_view> portfolio_id =
             params.scope_key == "ALL" ? std::nullopt : std::optional<std::string_view>{params.scope_key};
 
+    const auto lifecycle = database::ApplyTradeLifecycleAsOf(params.database_file_path, params.as_of, portfolio_id);
+    if (!lifecycle.expired_trade_ids.empty()) {
+        Logger::NumInfo("calibrate-historical-gbm: expired {} matured trade(s) before as_of={}.",
+                        lifecycle.expired_trade_ids.size(),
+                        params.as_of);
+    }
+
     const HistoricalCalibrationResult result =
             CalibrateBookFromDatabase(params.database_file_path, config, portfolio_id);
 
@@ -127,6 +157,9 @@ void PrintHistoricalCalibrationEodBuildUsageLines() {
             "[--book PORTFOLIO_ID] [--lookback-days N] [--min-return-obs N]\n"
             "    Historical EOD GBM calibration (vol + correlation + Cholesky) for LIVE book legs.\n"
             "    `--book` scopes factors to one `trades.portfolio_id`; omit for all portfolios (`scope_key=ALL`).\n"
+            "    Env defaults (CLI overrides): NUMERAIRE_CALIB_AS_OF, NUMERAIRE_CALIB_BOOK, "
+            "NUMERAIRE_CALIB_LOOKBACK_DAYS, NUMERAIRE_CALIB_MIN_RETURN_OBS, "
+            "NUMERAIRE_CALIB_VOL_ANNUALIZATION_DAYS, NUMERAIRE_CALIB_EOD_ADJUSTED.\n"
             "    Writes `historical_calibration` + factor / correlation / Cholesky child tables.");
 }
 
@@ -134,8 +167,13 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
     bool mode = false;
     std::string as_of;
     std::string book;
-    int lookback_days = 504;
-    int min_return_obs = 60;
+    int lookback_days = EnvInt("NUMERAIRE_CALIB_LOOKBACK_DAYS", 504);
+    int min_return_obs = EnvInt("NUMERAIRE_CALIB_MIN_RETURN_OBS", 60);
+    int vol_annualization_days = EnvInt("NUMERAIRE_CALIB_VOL_ANNUALIZATION_DAYS", 252);
+    int eod_adjusted = EnvInt("NUMERAIRE_CALIB_EOD_ADJUSTED", 1);
+    if (const std::optional<std::string> book_env = EnvNonEmptyString("NUMERAIRE_CALIB_BOOK")) {
+        book = *book_env;
+    }
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--calibrate-historical-gbm") == 0) {
@@ -172,7 +210,13 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
     }
 
     if (as_of.empty()) {
-        Logger::NumError("--calibrate-historical-gbm requires --as-of YYYY-MM-DD.");
+        if (const std::optional<std::string> as_of_env = EnvNonEmptyString("NUMERAIRE_CALIB_AS_OF")) {
+            as_of = *as_of_env;
+        }
+    }
+    if (as_of.empty()) {
+        Logger::NumError(
+                "--calibrate-historical-gbm requires --as-of YYYY-MM-DD or NUMERAIRE_CALIB_AS_OF.");
         PrintHistoricalCalibrationEodBuildUsageLines();
         return 1;
     }
@@ -188,6 +232,14 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
         Logger::NumError("--min-return-obs must be >= 2.");
         return 1;
     }
+    if (vol_annualization_days <= 0) {
+        Logger::NumError("NUMERAIRE_CALIB_VOL_ANNUALIZATION_DAYS must be > 0.");
+        return 1;
+    }
+    if (eod_adjusted != 0 && eod_adjusted != 1) {
+        Logger::NumError("NUMERAIRE_CALIB_EOD_ADJUSTED must be 0 or 1.");
+        return 1;
+    }
 
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     database::BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
@@ -199,6 +251,8 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
     params.batch_run_id = "historical-gbm-" + params.scope_key + "-" + as_of;
     params.lookback_calendar_days = lookback_days;
     params.min_return_observations = static_cast<std::size_t>(min_return_obs);
+    params.vol_annualization_days = vol_annualization_days;
+    params.adjusted = eod_adjusted;
 
     Logger::NumInfo("calibrate-historical-gbm → SQLite {} scope_key={} as_of={} lookback_days={}.",
                     db_path.string(),

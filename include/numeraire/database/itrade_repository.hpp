@@ -42,6 +42,10 @@ class ITradeRepository {
 
     /// All `trade_id` values in `trades`, sorted ascending (for batch / dev tooling).
     [[nodiscard]] virtual std::vector<std::string> ListAllTradeIds() const = 0;
+
+    /// LIVE trades for one `trades.portfolio_id`, sorted ascending by `trade_id`.
+    [[nodiscard]] virtual std::vector<std::string> ListLiveTradeIdsForPortfolio(
+            std::string_view portfolio_id) const = 0;
 };
 
 }  // namespace numeraire::database

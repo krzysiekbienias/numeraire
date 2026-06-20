@@ -114,6 +114,21 @@ TEST(SqliteTradeRepositoryTest, ListAllTradeIdsOrdered) {
     fs::remove(path);
 }
 
+TEST(SqliteTradeRepositoryTest, ListsLiveTradesForPortfolio) {
+    std::string const path = TempSqlitePath();
+    SeedFixtureDb(path);
+
+    numeraire::database::SqliteTradeRepository repo(path);
+    const auto ids = repo.ListLiveTradeIdsForPortfolio("BOOK_1");
+    ASSERT_EQ(ids.size(), 1U);
+    EXPECT_EQ(ids[0], "TRD_001");
+
+    const auto missing = repo.ListLiveTradeIdsForPortfolio("BOOK_EMPTY");
+    EXPECT_TRUE(missing.empty());
+
+    fs::remove(path);
+}
+
 TEST(SqliteTradeRepositoryTest, MissingTradeThrows) {
     std::string const path = TempSqlitePath();
     SeedFixtureDb(path);

@@ -21,7 +21,8 @@ constexpr const char* kSetBookingTimestampSql =
 constexpr const char* kSetBookingTimestampNowSql =
         "UPDATE trades SET booking_timestamp = datetime('now') WHERE trade_id = ?";
 
-constexpr const char* kSetTradeStatusSql = "UPDATE trades SET status = ? WHERE trade_id = ?";
+constexpr const char* kSetTradeStatusSql =
+        "UPDATE trades SET status = ?, updated_at = datetime('now') WHERE trade_id = ?";
 
 void RequireNonEmpty(std::string_view value, const char* label) {
     if (value.empty()) {

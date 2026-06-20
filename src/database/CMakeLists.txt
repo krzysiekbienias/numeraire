@@ -5,6 +5,7 @@ add_library(numeraire_database STATIC
         leg_mtm_pnl.cpp
         leg_pv.cpp
         trade_booking_rules.cpp
+        trade_lifecycle.cpp
         sqlite_schema.cpp
         sqlite_trade_leg_booking_repository.cpp
         sqlite_trade_leg_mtm_repository.cpp
@@ -18,6 +19,7 @@ add_library(numeraire_database STATIC
         sqlite_discount_curve_repository.cpp
         sqlite_discount_curve_eod_read.cpp
         sqlite_historical_calibration_repository.cpp
+        historical_calibration_eod_read.cpp
         vol_surface_eod_builder.cpp
         vol_surface_quote_loader.cpp
 )

@@ -296,6 +296,24 @@ std::vector<std::string> SqliteTradeRepository::ListAllTradeIds() const {
     }
 }
 
+std::vector<std::string> SqliteTradeRepository::ListLiveTradeIdsForPortfolio(
+        const std::string_view portfolio_id) const {
+    try {
+        SQLite::Statement st(*impl_->db,
+                             "SELECT trade_id FROM trades WHERE portfolio_id = ? AND status = 'LIVE' "
+                             "ORDER BY trade_id");
+        st.bind(1, std::string(portfolio_id));
+        std::vector<std::string> out;
+        while (st.executeStep()) {
+            out.push_back(st.getColumn(0).getString());
+        }
+        return out;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(std::string{"SqliteTradeRepository::ListLiveTradeIdsForPortfolio: "} +
+                              e.what());
+    }
+}
+
 TradeCatalogBundle SqliteTradeRepository::GetCatalogForTrade(const std::string_view trade_id) const {
     try {
         SQLite::Statement& st = *impl_->select_catalog;

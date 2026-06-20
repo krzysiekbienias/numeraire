@@ -11,8 +11,14 @@ add_library(numeraire_simulation STATIC
         gbm_evolution.cpp
         gbm_spec.cpp
         scenario_dump.cpp
+        scenario_slice_market_data.cpp
+        leg_path_pv_buffer.cpp
+        path_pricer.cpp
+        path_pricing_rules.cpp
         historical_calibrator.cpp
         historical_calibration_eod_builder.cpp
+        historical_calibration_loader.cpp
+        historical_gbm_simulate.cpp
 )
 
 target_include_directories(numeraire_simulation
@@ -24,7 +30,10 @@ target_link_libraries(numeraire_simulation
         PUBLIC
         numeraire_schedule
         numeraire_quant
+        numeraire_core
         PRIVATE
         numeraire_utils
         numeraire_database
+        numeraire_products
+        numeraire_pricers
 )

@@ -16,6 +16,7 @@
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
 #include <numeraire/database/trade_booking_rules.hpp>
+#include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/database/trade_leg_booking_update.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
 #include <numeraire/database/option_universe_eod_builder.hpp>
@@ -23,6 +24,8 @@
 #include <numeraire/database/vol_surface_eod_read.hpp>
 #include <numeraire/database/discount_curve_eod_builder.hpp>
 #include <numeraire/database/vol_surface_eod_builder.hpp>
+#include <numeraire/simulation/historical_calibration_eod_builder.hpp>
+#include <numeraire/simulation/historical_gbm_simulate.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
@@ -70,6 +73,10 @@ using numeraire::database::PrintVolSurfaceEodBuildUsageLines;
 using numeraire::database::TryRunDiscountCurveEodBuild;
 using numeraire::database::TryRunOptionUniverseEodBuild;
 using numeraire::database::TryRunVolSurfaceEodBuild;
+using numeraire::simulation::PrintHistoricalCalibrationEodBuildUsageLines;
+using numeraire::simulation::PrintHistoricalGbmSimulateUsageLines;
+using numeraire::simulation::TryRunHistoricalCalibrationEodBuild;
+using numeraire::simulation::TryRunHistoricalGbmSimulate;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -450,12 +457,17 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --build-discount-curve-eod ... Bootstrap discount factors from par_curve_* "
             "(see --help).\n"
+            "  dev_main --calibrate-historical-gbm ... Historical GBM vol/correlation/Cholesky for MC "
+            "(see --help).\n"
+            "  dev_main --simulate ... Multifactor GBM paths from persisted calibration (see --help).\n"
             "  dev_main --as-of YYYY-MM-DD <trade_id> | --all | --trades-json <path>   (MTM; flags in any order)\n"
             "  dev_main --price-booking <trade_id> | --all | --trades-json <path>   (book PENDING trades on "
             "trade_date)\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade, MTM mode).\n"
             "MTM requires --as-of or NUMERAIRE_DEV_AS_OF. Booking forbids --as-of; ValuationDate = trade_date.\n"
-            "Booking: status PENDING → LIVE when every leg execution_price > 0. MTM requires LIVE + booked legs.\n"
+            "Booking: status PENDING → LIVE when every leg execution_price > 0. "
+            "Matured LIVE trades become EXPIRED on the first as_of after max leg expiry (before MTM/sim). "
+            "MTM requires LIVE + booked legs.\n"
             "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
             "Implied vol: NUMERAIRE_DEV_VOL_SOURCE=env|db (`db` reads vol_surface_eod; needs --build-vol-surface-eod). "
             "Rate: NUMERAIRE_DEV_RATE_SOURCE=env|db (`db` reads discount_curve_eod; run daily_market_prep first). "
@@ -469,6 +481,8 @@ void PrintUsage() {
     PrintOptionDailyPriceEodFetchUsageLines();
     PrintDiscountCurveEodBuildUsageLines();
     PrintVolSurfaceEodBuildUsageLines();
+    PrintHistoricalCalibrationEodBuildUsageLines();
+    PrintHistoricalGbmSimulateUsageLines();
 }
 
 [[nodiscard]] std::vector<std::string> LoadTradeIdsFromJsonFile(const std::filesystem::path& path) {
@@ -705,6 +719,30 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
                                   DevMainMarketQuotesConfig mq) {
     if (trade_ids.empty()) {
         Logger::NumError("No trades to price (empty list).");
+        return 1;
+    }
+
+    const auto lifecycle = numeraire::database::ApplyTradeLifecycleAsOf(db_path.string(), mq.as_of_iso);
+    if (!lifecycle.expired_trade_ids.empty()) {
+        Logger::NumInfo("MTM: expired {} matured trade(s) before as_of={}.",
+                        lifecycle.expired_trade_ids.size(),
+                        mq.as_of_iso);
+    }
+
+    std::vector<std::string> active_trade_ids;
+    active_trade_ids.reserve(trade_ids.size());
+    for (const std::string& tid : trade_ids) {
+        const TradeCatalogBundle header_only = repo.GetCatalogForTrade(tid);
+        if (numeraire::database::TradeStatusEquals(header_only.trade.status,
+                                                 numeraire::database::kTradeStatusLive)) {
+            active_trade_ids.push_back(tid);
+        } else {
+            Logger::NumInfo("MTM: skip trade {} (status={}).", tid, header_only.trade.status);
+        }
+    }
+    trade_ids = std::move(active_trade_ids);
+    if (trade_ids.empty()) {
+        Logger::NumError("No LIVE trades to price for as_of={}.", mq.as_of_iso);
         return 1;
     }
 
@@ -1003,6 +1041,14 @@ int main(const int argc, char** argv) {
         const int vol_surface_rc = TryRunVolSurfaceEodBuild(argc, argv, cfg);
         if (vol_surface_rc >= 0) {
             return vol_surface_rc;
+        }
+        const int historical_calibration_rc = TryRunHistoricalCalibrationEodBuild(argc, argv, cfg);
+        if (historical_calibration_rc >= 0) {
+            return historical_calibration_rc;
+        }
+        const int simulate_rc = TryRunHistoricalGbmSimulate(argc, argv, cfg);
+        if (simulate_rc >= 0) {
+            return simulate_rc;
         }
 
         const std::filesystem::path db_path = ResolveDatabasePath(cfg);

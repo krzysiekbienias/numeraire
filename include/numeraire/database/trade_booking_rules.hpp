@@ -10,6 +10,7 @@ namespace numeraire::database {
 
 inline constexpr std::string_view kTradeStatusPending = "PENDING";
 inline constexpr std::string_view kTradeStatusLive = "LIVE";
+inline constexpr std::string_view kTradeStatusExpired = "EXPIRED";
 
 [[nodiscard]] bool TradeStatusEquals(std::string_view actual, std::string_view expected) noexcept;
 
