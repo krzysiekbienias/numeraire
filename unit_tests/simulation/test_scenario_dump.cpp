@@ -16,6 +16,8 @@ namespace {
 
 using numeraire::schedule::ParseIsoDate;
 using numeraire::simulation::BuildExposureTimeGrid;
+using numeraire::simulation::DumpMultiFactorScenarioPathsCsv;
+using numeraire::simulation::DumpMultiFactorScenarioPathsOptions;
 using numeraire::simulation::DumpScenarioPathsCsv;
 using numeraire::simulation::DumpScenarioPathsOptions;
 using numeraire::simulation::ExposureGridConfig;
@@ -65,6 +67,41 @@ TEST(ScenarioDumpTest, WritesCsvWithPathCap) {
     EXPECT_NE(text.find("0,0,0,"), std::string::npos);
     EXPECT_NE(text.find("2,"), std::string::npos);
     EXPECT_EQ(text.find("3,"), std::string::npos);
+
+    fs::remove(out);
+}
+
+TEST(ScenarioDumpTest, WritesMultiFactorCsvWithPathCap) {
+    const auto grid = SimpleGrid();
+    ScenarioBuffer buffer(2, grid.NumSteps(), 6);
+    for (std::size_t factor = 0; factor < buffer.NumFactors(); ++factor) {
+        for (std::size_t step = 0; step < grid.NumSteps(); ++step) {
+            for (std::size_t path = 0; path < buffer.NumPaths(); ++path) {
+                buffer.At(factor, step, path) =
+                        static_cast<double>((factor * 1000U) + (step * 10U) + path);
+            }
+        }
+    }
+
+    const std::vector<std::string> underlyings{"AAPL", "MSFT"};
+    const fs::path out = fs::temp_directory_path() / "numeraire_scenario_dump_multi_test.csv";
+    DumpMultiFactorScenarioPathsOptions options{.max_paths = 2};
+    DumpMultiFactorScenarioPathsCsv(out, buffer, grid, underlyings, options);
+
+    const std::string text = ReadFile(out);
+    EXPECT_TRUE(text.starts_with("path,factor,underlying_id,step,year_fraction,value\n"));
+    EXPECT_NE(text.find("0,0,AAPL,0,"), std::string::npos);
+    EXPECT_NE(text.find("0,1,MSFT,0,"), std::string::npos);
+    EXPECT_NE(text.find("1,0,AAPL,"), std::string::npos);
+    EXPECT_EQ(text.find("2,0,AAPL,"), std::string::npos);
+
+    std::size_t line_count = 0;
+    for (char ch : text) {
+        if (ch == '\n') {
+            ++line_count;
+        }
+    }
+    EXPECT_EQ(line_count, 1U + (2U * buffer.NumFactors() * grid.NumSteps()));
 
     fs::remove(out);
 }
