@@ -17,6 +17,23 @@ from numeraire_viz.vol_surface import (
     plot_vol_surface_3d,
     plot_vol_surface_3d_mesh,
 )
+from numeraire_viz.historical_calibration import (
+    correlation_matrix_from_sparse,
+    list_calibration_dates,
+    load_historical_calibration,
+    plot_calibration_overview,
+    plot_correlation_heatmap,
+    plot_factor_volatility_bars,
+)
+from numeraire_viz.scenario_paths import (
+    default_exports_dir,
+    list_scenario_exports,
+    load_scenario_paths,
+    plot_scenario_paths,
+    plot_scenario_paths_grid,
+    plot_terminal_distribution,
+    resolve_scenario_export,
+)
 
 __all__ = [
     "default_db_path",
@@ -33,4 +50,17 @@ __all__ = [
     "plot_vol_surface_3d",
     "plot_vol_surface_3d_mesh",
     "plot_term_structure_atm",
+    "list_calibration_dates",
+    "load_historical_calibration",
+    "correlation_matrix_from_sparse",
+    "plot_correlation_heatmap",
+    "plot_factor_volatility_bars",
+    "plot_calibration_overview",
+    "default_exports_dir",
+    "list_scenario_exports",
+    "resolve_scenario_export",
+    "load_scenario_paths",
+    "plot_scenario_paths",
+    "plot_scenario_paths_grid",
+    "plot_terminal_distribution",
 ]
