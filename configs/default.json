@@ -18,7 +18,7 @@
     "pricing": {
         "default_currency": "USD",
         "monte_carlo": {
-            "default_paths": 100000,
+            "default_paths": 1000,
             "default_seed": 42
         }
     },

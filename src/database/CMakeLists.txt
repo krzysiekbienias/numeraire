@@ -9,6 +9,7 @@ add_library(numeraire_database STATIC
         sqlite_schema.cpp
         sqlite_trade_leg_booking_repository.cpp
         sqlite_trade_leg_mtm_repository.cpp
+        sqlite_trade_leg_exposure_repository.cpp
         sqlite_trade_repository.cpp
         sqlite_vol_surface_repository.cpp
         sqlite_vol_surface_eod_read.cpp

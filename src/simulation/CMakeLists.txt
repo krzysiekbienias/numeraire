@@ -12,6 +12,9 @@ add_library(numeraire_simulation STATIC
         gbm_spec.cpp
         scenario_dump.cpp
         scenario_slice_market_data.cpp
+        path_pricing_market_config.cpp
+        exposure_metrics.cpp
+        leg_exposure_dump.cpp
         leg_path_pv_buffer.cpp
         path_pricer.cpp
         path_pricing_rules.cpp
@@ -34,6 +37,7 @@ target_link_libraries(numeraire_simulation
         PRIVATE
         numeraire_utils
         numeraire_database
+        numeraire_market_data
         numeraire_products
         numeraire_pricers
 )
