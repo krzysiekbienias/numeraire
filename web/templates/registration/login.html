@@ -1,0 +1,102 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Numeraire Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="{% static 'css/journal.css' %}" rel="stylesheet">
+</head>
+<body>
+  <div class="nj-login">
+    <section class="nj-login-form">
+      <div class="nj-login-form-main">
+        <div class="nj-brand">
+          <span class="nj-brand-mark">N</span>
+          <span class="nj-brand-text">
+            <strong>Numeraire</strong>
+            <span>Journal</span>
+          </span>
+        </div>
+
+        <h1>Sign in</h1>
+        <p class="lede">Review MTM, exposure, and market data produced by the C++ batches.</p>
+
+        {% if form.errors %}
+          <div class="alert alert-danger py-2" role="alert">
+            Invalid username or password.
+          </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'login' %}">
+          {% csrf_token %}
+          {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label" for="id_username">Username</label>
+            <input class="form-control form-control-lg" type="text" name="username"
+                   id="id_username" autocomplete="username" autofocus required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label" for="id_password">Password</label>
+            <input class="form-control form-control-lg" type="password" name="password"
+                   id="id_password" autocomplete="current-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Continue</button>
+        </form>
+      </div>
+
+      <footer class="nj-login-powered">
+        <span class="nj-login-powered-label">Powered by</span>
+        <ul class="nj-login-tech">
+          <li title="C++">
+            <img src="https://cdn.simpleicons.org/cplusplus/7dd3fc" width="16" height="16" alt="">
+            <span>C++</span>
+          </li>
+          <li title="Python">
+            <img src="https://cdn.simpleicons.org/python/7dd3fc" width="16" height="16" alt="">
+            <span>Python</span>
+          </li>
+          <li title="Django">
+            <img src="https://cdn.simpleicons.org/django/34d399" width="16" height="16" alt="">
+            <span>Django</span>
+          </li>
+          <li title="SQLite">
+            <img src="https://cdn.simpleicons.org/sqlite/7dd3fc" width="16" height="16" alt="">
+            <span>SQLite</span>
+          </li>
+          <li title="Bootstrap">
+            <img src="https://cdn.simpleicons.org/bootstrap/a78bfa" width="16" height="16" alt="">
+            <span>Bootstrap</span>
+          </li>
+          <li title="Apache ECharts">
+            <img src="https://cdn.simpleicons.org/apacheecharts/fbbf24" width="16" height="16" alt="">
+            <span>ECharts</span>
+          </li>
+        </ul>
+      </footer>
+    </section>
+
+    <aside class="nj-login-art" aria-hidden="true">
+      <div class="nj-login-art-base"></div>
+      <figure class="nj-login-art-photo">
+        <img src="{% static 'img/isaac-smith-6EnTPvPPL6I-unsplash.jpg' %}"
+             alt="" width="1200" height="800" decoding="async">
+      </figure>
+      <div class="nj-login-art-scrim"></div>
+      <div class="nj-login-art-caption">
+        <strong>Your book, at a glance</strong>
+        <span>Official marks and CCR profiles from SQLite — no recalculation in the browser.</span>
+      </div>
+      <p class="nj-login-photo-credit">Photo · Isaac Smith / Unsplash</p>
+    </aside>
+  </div>
+</body>
+</html>

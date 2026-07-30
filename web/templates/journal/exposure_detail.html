@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Exposure{% endblock %}
+{% block page_title %}Exposure{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    {% if portfolio_id and as_of %}
+      Portfolio <strong>{{ portfolio_id }}</strong>
+      · exposure as_of <strong>{{ as_of|date:"Y-m-d" }}</strong>
+      {% if lag_days != None and lag_days > 0 %}
+        · <span class="text-warning">{{ lag_days }}d behind latest MTM{% if latest_mtm_as_of %} ({{ latest_mtm_as_of|date:"Y-m-d" }}){% endif %}</span>
+      {% endif %}
+    {% else %}
+      Monte Carlo EE / PFE — only on days the exposure batch was run
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if portfolios %}
+    <form method="get" action="{% url 'journal:exposure' %}" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_portfolio_id">portfolio</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_portfolio_id" name="portfolio_id"
+              onchange="this.form.submit()">
+        {% for p in portfolios %}
+          <option value="{{ p }}" {% if portfolio_id == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      {% if available_as_of %}
+        <label class="nj-asof-label" for="id_as_of">as_of</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+                onchange="this.form.submit()">
+          {% for d in available_as_of %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% elif not profile %}
+    <div class="nj-empty">No portfolio exposure rows in the database yet.</div>
+  {% else %}
+
+  <div class="alert alert-secondary py-2 small mb-3" role="status">
+    <strong>Exposure date:</strong> {{ as_of|date:"Y-m-d" }}
+    · {{ profile.meta.trades }} trade{{ profile.meta.trades|pluralize }}
+    · {{ profile.meta.legs }} leg{{ profile.meta.legs|pluralize }}
+    · {{ profile.meta.paths }} paths
+    {% if profile.engines %} · {{ profile.engines|join:", " }}{% endif %}
+    {% if profile.scopes %} · scope {{ profile.scopes|join:", " }}{% endif %}
+    <br>
+    EE is summed across legs (additive).
+    PFE columns are <em>sum of leg PFEs</em> — a conservative upper bound, not joint portfolio PFE.
+    {% if first_exposure_as_of and latest_exposure_as_of %}
+      <br>
+      Coverage:
+      <strong>{{ first_exposure_as_of|date:"Y-m-d" }}</strong>
+      → <strong>{{ latest_exposure_as_of|date:"Y-m-d" }}</strong>
+      ({{ available_as_of|length }} day{{ available_as_of|length|pluralize }})
+      — not the full MTM history; CCR batch landed later / runs sparsely.
+    {% endif %}
+    {% if lag_days != None and lag_days > 0 %}
+      <br>
+      <span class="text-warning">
+        Latest book MTM is {{ latest_mtm_as_of|date:"Y-m-d" }};
+        this profile is <strong>{{ lag_days }} day{{ lag_days|pluralize }} older</strong>.
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-head">
+      <h2>Exposure profile</h2>
+      <span class="small text-secondary">EE + PFE · portfolio sum @ {{ as_of|date:"Y-m-d" }}</span>
+    </div>
+    <div class="nj-panel-body">
+      {{ exposure_chart|json_script:"exposure-chart-data" }}
+      <div class="nj-chart-block">
+        <div id="exposure-profile-chart" class="nj-chart nj-chart-md"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-2">
+    <div class="col-lg-6">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Pillar profile</h2>
+          <span class="small text-secondary">grid @ {{ as_of|date:"Y-m-d" }}</span>
+        </div>
+        <div class="nj-panel-body tight">
+          <div class="nj-scroll-table nj-scroll-table-lg">
+            <table class="table table-sm mb-0 nj-compact-table">
+              <thead>
+                <tr>
+                  <th>Pillar</th>
+                  <th class="nj-num">τ</th>
+                  <th>Date</th>
+                  <th class="nj-num">EE</th>
+                  <th class="nj-num">PFE 95</th>
+                  <th class="nj-num">PFE 97</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in profile.pillars %}
+                  <tr>
+                    <td>{{ p.pillar_id }}</td>
+                    <td class="nj-num">{{ p.year_fraction|floatformat:4 }}</td>
+                    <td class="small">{% if p.exposure_date %}{{ p.exposure_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+                    <td class="nj-num">{{ p.ee|floatformat:2 }}</td>
+                    <td class="nj-num">{{ p.pfe_95|floatformat:2 }}</td>
+                    <td class="nj-num">{{ p.pfe_97|floatformat:2 }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>By trade</h2>
+          <span class="small text-secondary">sum over pillars · click to open</span>
+        </div>
+        <div class="nj-panel-body tight">
+          <div class="nj-scroll-table nj-scroll-table-lg">
+            <table class="table table-sm mb-0 nj-compact-table nj-clickable">
+              <thead>
+                <tr>
+                  <th>Trade</th>
+                  <th class="nj-num">Σ EE</th>
+                  <th class="nj-num">Σ PFE 95</th>
+                  <th class="nj-num">Σ PFE 97</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in profile.by_trade %}
+                  <tr onclick="window.location='{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}'">
+                    <td><a href="{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}">{{ row.trade_id }}</a></td>
+                    <td class="nj-num">{{ row.ee|floatformat:2 }}</td>
+                    <td class="nj-num">{{ row.pfe_95|floatformat:2 }}</td>
+                    <td class="nj-num">{{ row.pfe_97|floatformat:2 }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if exposure_chart %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+        const raw = document.getElementById('exposure-chart-data');
+        const el = document.getElementById('exposure-profile-chart');
+        if (!raw || !el) return;
+        const series = JSON.parse(raw.textContent);
+        const labels = series.map((p) => p.pillar);
+        const chart = echarts.init(el, null, { renderer: 'canvas' });
+        chart.setOption({
+          animationDuration: 250,
+          backgroundColor: 'transparent',
+          grid: { left: 56, right: 16, top: 28, bottom: 36 },
+          tooltip: {
+            trigger: 'axis',
+            valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(2)),
+          },
+          legend: {
+            top: 0,
+            right: 0,
+            textStyle: { color: '#94a3b8', fontSize: 10 },
+          },
+          xAxis: {
+            type: 'category',
+            data: labels,
+            axisLabel: { color: '#94a3b8', fontSize: 10 },
+            axisLine: { lineStyle: { color: '#334155' } },
+            axisTick: { show: false },
+          },
+          yAxis: {
+            type: 'value',
+            scale: true,
+            splitLine: { lineStyle: { color: '#1e293b' } },
+            axisLabel: {
+              color: '#94a3b8',
+              fontSize: 10,
+              formatter: (v) => {
+                const n = Number(v);
+                if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+                if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(0) + 'k';
+                return n.toFixed(0);
+              },
+            },
+          },
+          series: [
+            {
+              name: 'EE',
+              type: 'line',
+              data: series.map((p) => p.ee),
+              showSymbol: true,
+              symbolSize: 6,
+              lineStyle: { width: 2, color: '#2dd4bf' },
+              itemStyle: { color: '#2dd4bf' },
+            },
+            {
+              name: 'PFE 95',
+              type: 'line',
+              data: series.map((p) => p.pfe_95),
+              showSymbol: true,
+              symbolSize: 6,
+              lineStyle: { width: 2, color: '#60a5fa' },
+              itemStyle: { color: '#60a5fa' },
+            },
+            {
+              name: 'PFE 97.5',
+              type: 'line',
+              data: series.map((p) => p.pfe_97),
+              showSymbol: true,
+              symbolSize: 6,
+              lineStyle: { width: 2, color: '#fbbf24' },
+              itemStyle: { color: '#fbbf24' },
+            },
+          ],
+        });
+        window.addEventListener('resize', () => chart.resize());
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Curves{% endblock %}
+{% block page_title %}Curves{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    {% if as_of and curve_id %}
+      Discount / yield for <strong>{{ curve_id }}</strong>
+      · curve day <strong>{{ as_of|date:"Y-m-d" }}</strong>
+      {% if lag_days != None and lag_days > 0 %}
+        · <span class="text-warning">{{ lag_days }}d behind latest MTM{% if latest_mtm_as_of %} ({{ latest_mtm_as_of|date:"Y-m-d" }}){% endif %}</span>
+      {% elif latest_mtm_as_of and as_of == latest_mtm_as_of %}
+        · in sync with latest MTM
+      {% endif %}
+    {% else %}
+      Bootstrapped discount curves — coverage starts when curve batch was released
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if curve_ids %}
+    <form method="get" action="{% url 'journal:curves' %}" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_curve_id">curve</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_curve_id" name="curve_id"
+              onchange="this.form.submit()" style="min-width:14rem">
+        {% for cid in curve_ids %}
+          <option value="{{ cid }}" {% if curve_id == cid %}selected{% endif %}>{{ cid }}</option>
+        {% endfor %}
+      </select>
+      {% if available_as_of %}
+        <label class="nj-asof-label" for="id_as_of">curve as_of</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+                onchange="this.form.submit()">
+          {% for d in available_as_of %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% elif not snapshot %}
+    <div class="nj-empty">No discount curves in the database yet.</div>
+  {% else %}
+
+  <div class="alert alert-secondary py-2 small mb-3" role="status">
+    <strong>Curve date:</strong> {{ as_of|date:"Y-m-d" }}
+    · source par <code>{{ snapshot.header.source_par_curve_id }}</code>
+    @ <strong>{{ snapshot.header.source_par_as_of|date:"Y-m-d" }}</strong>
+    · {{ snapshot.header.bootstrap_engine }} / {{ snapshot.header.interpolation_method }}
+    {% if first_curve_as_of and latest_curve_as_of %}
+      <br>
+      Coverage for this curve id:
+      <strong>{{ first_curve_as_of|date:"Y-m-d" }}</strong>
+      → <strong>{{ latest_curve_as_of|date:"Y-m-d" }}</strong>
+      ({{ available_as_of|length }} day{{ available_as_of|length|pluralize }})
+      — not the full MTM history; rates landed later in the pipeline.
+    {% endif %}
+    {% if lag_days != None and lag_days > 0 %}
+      <br>
+      <span class="text-warning">
+        Latest book MTM is {{ latest_mtm_as_of|date:"Y-m-d" }};
+        marks on that day reuse this curve with a <strong>{{ lag_days }}-day lag</strong>
+        (curve not yet published for the MTM as_of).
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-head">
+      <h2>Yield &amp; discount</h2>
+      <span class="small text-secondary">pillars @ curve as_of {{ as_of|date:"Y-m-d" }}</span>
+    </div>
+    <div class="nj-panel-body">
+      {{ curve_chart|json_script:"curve-chart-data" }}
+      <div class="nj-trade-charts nj-curve-charts">
+        <div class="nj-chart-block">
+          <div class="nj-chart-label">
+            <span>Zero rate</span>
+            <span class="text-secondary">continuous · vs τ</span>
+          </div>
+          <div id="curve-zero-chart" class="nj-chart nj-chart-md"></div>
+        </div>
+        <div class="nj-chart-block">
+          <div class="nj-chart-label">
+            <span>Discount factor</span>
+            <span class="text-secondary">DF(τ) · vs τ</span>
+          </div>
+          <div id="curve-df-chart" class="nj-chart nj-chart-md"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-2">
+    <div class="col-lg-6">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Par instruments</h2>
+          <span class="small text-secondary">
+            {% if snapshot.par_header %}
+              {{ snapshot.par_header.source }} · quotes @ {{ snapshot.header.source_par_as_of|date:"Y-m-d" }}
+            {% else %}
+              bootstrap inputs
+            {% endif %}
+          </span>
+        </div>
+        <div class="nj-panel-body tight">
+          {% if snapshot.instruments %}
+            <div class="nj-scroll-table nj-scroll-table-lg">
+              <table class="table table-sm mb-0 nj-compact-table">
+                <thead>
+                  <tr>
+                    <th>Tenor</th>
+                    <th>Type</th>
+                    <th>Series</th>
+                    <th class="nj-num">Quoted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in snapshot.instruments %}
+                    <tr>
+                      <td>{{ row.tenor }}</td>
+                      <td class="small">{{ row.instrument_type }}</td>
+                      <td class="small"><code>{{ row.fred_series_id }}</code></td>
+                      <td class="nj-num">{{ row.quoted_rate|floatformat:6 }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="nj-empty">No par instruments for this curve day.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Bootstrapped pillars</h2>
+          <span class="small text-secondary">zeros + DF @ {{ as_of|date:"Y-m-d" }}</span>
+        </div>
+        <div class="nj-panel-body tight">
+          {% if snapshot.pillars %}
+            <div class="nj-scroll-table nj-scroll-table-lg">
+              <table class="table table-sm mb-0 nj-compact-table">
+                <thead>
+                  <tr>
+                    <th>Tenor</th>
+                    <th class="nj-num">τ</th>
+                    <th class="nj-num">Zero</th>
+                    <th class="nj-num">DF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for p in snapshot.pillars %}
+                    <tr>
+                      <td>{{ p.tenor }}</td>
+                      <td class="nj-num">{{ p.time_years|floatformat:6 }}</td>
+                      <td class="nj-num">{{ p.zero_rate|floatformat:6 }}</td>
+                      <td class="nj-num">{{ p.discount_factor|floatformat:6 }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="nj-empty">No pillars.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if curve_chart %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+        const raw = document.getElementById('curve-chart-data');
+        if (!raw) return;
+        const series = JSON.parse(raw.textContent);
+        const labels = series.map((p) => p.tenor);
+        const zeros = series.map((p) => p.zero);
+        const dfs = series.map((p) => p.df);
+
+        function pillarChart(el, values, color, fillTop, valueDigits) {
+          const chart = echarts.init(el, null, { renderer: 'canvas' });
+          chart.setOption({
+            animationDuration: 250,
+            backgroundColor: 'transparent',
+            grid: { left: 52, right: 16, top: 16, bottom: 36 },
+            tooltip: {
+              trigger: 'axis',
+              valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(valueDigits)),
+            },
+            xAxis: {
+              type: 'category',
+              data: labels,
+              axisLabel: { color: '#94a3b8', fontSize: 10 },
+              axisLine: { lineStyle: { color: '#334155' } },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value',
+              scale: true,
+              splitLine: { lineStyle: { color: '#1e293b' } },
+              axisLabel: {
+                color: '#94a3b8',
+                fontSize: 10,
+                formatter: (v) => Number(v).toFixed(valueDigits > 3 ? 3 : valueDigits),
+              },
+            },
+            series: [{
+              type: 'line',
+              data: values,
+              showSymbol: true,
+              symbolSize: 7,
+              lineStyle: { width: 2, color: color },
+              itemStyle: { color: color },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: fillTop },
+                  { offset: 1, color: 'rgba(0,0,0,0)' },
+                ]),
+              },
+            }],
+          });
+          window.addEventListener('resize', () => chart.resize());
+        }
+
+        const zEl = document.getElementById('curve-zero-chart');
+        const dEl = document.getElementById('curve-df-chart');
+        if (zEl) pillarChart(zEl, zeros, '#2dd4bf', 'rgba(45, 212, 191, 0.22)', 6);
+        if (dEl) pillarChart(dEl, dfs, '#60a5fa', 'rgba(96, 165, 250, 0.22)', 6);
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

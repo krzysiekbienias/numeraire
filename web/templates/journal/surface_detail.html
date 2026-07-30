@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Vol surface{% endblock %}
+{% block page_title %}Vol surface{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    {% if underlying_id and as_of %}
+      <strong>{{ underlying_id }}</strong>
+      · surface as_of <strong>{{ as_of|date:"Y-m-d" }}</strong>
+      · {{ contract_type }}
+      {% if snapshot %}· spot {{ snapshot.header.spot_used|floatformat:2 }} · {{ vol_chart|length }} pts{% endif %}
+    {% else %}
+      Implied BS EOD surface — sparse market points in 3D
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if underlyings %}
+    <form method="get" action="{% url 'journal:surfaces' %}" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_underlying_id">und</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_underlying_id" name="underlying_id"
+              onchange="this.form.submit()">
+        {% for u in underlyings %}
+          <option value="{{ u }}" {% if underlying_id == u %}selected{% endif %}>{{ u }}</option>
+        {% endfor %}
+      </select>
+      {% if available_as_of %}
+        <label class="nj-asof-label" for="id_as_of">as_of</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+                onchange="this.form.submit()">
+          {% for d in available_as_of %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      <label class="nj-asof-label" for="id_contract_type">type</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_contract_type" name="contract_type"
+              onchange="this.form.submit()">
+        <option value="call" {% if contract_type == 'call' %}selected{% endif %}>call</option>
+        <option value="put" {% if contract_type == 'put' %}selected{% endif %}>put</option>
+        <option value="all" {% if contract_type == 'all' %}selected{% endif %}>all</option>
+      </select>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% elif not snapshot %}
+    <div class="nj-empty">No vol surface rows for this selection.</div>
+  {% else %}
+
+  <div class="alert alert-secondary py-2 small mb-3" role="status">
+    <strong>Surface date:</strong> {{ as_of|date:"Y-m-d" }}
+    · {{ snapshot.header.surface_kind }} / {{ snapshot.header.model }}
+    · spot <strong>{{ snapshot.header.spot_used|floatformat:4 }}</strong>
+    · r {{ snapshot.header.risk_free_rate|floatformat:6 }}
+    · q {{ snapshot.header.dividend_yield|floatformat:6 }}
+    · {{ vol_chart|length }} plotted point{{ vol_chart|length|pluralize }}
+    ({{ contract_type }}; axes: ln(K/S), τ, IV)
+    {% if first_surface_as_of and latest_surface_as_of %}
+      <br>
+      Coverage for {{ underlying_id }}:
+      <strong>{{ first_surface_as_of|date:"Y-m-d" }}</strong>
+      → <strong>{{ latest_surface_as_of|date:"Y-m-d" }}</strong>
+      ({{ available_as_of|length }} day{{ available_as_of|length|pluralize }}).
+    {% endif %}
+    Drag to rotate · scroll to zoom.
+  </div>
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-head">
+      <h2>3D implied vol</h2>
+      <span class="small text-secondary">scatter · colour = IV</span>
+    </div>
+    <div class="nj-panel-body">
+      {% if vol_chart %}
+        {{ vol_chart|json_script:"vol-surface-chart" }}
+        <div id="vol-surface-3d" class="nj-chart nj-chart-3d"
+             data-x-label="{{ snapshot.x_label }}"></div>
+      {% else %}
+        <div class="nj-empty">No points with valid moneyness for this filter.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="nj-panel">
+    <div class="nj-panel-head">
+      <h2>Points</h2>
+      <span class="small text-secondary">{{ snapshot.points|length }} row{{ snapshot.points|length|pluralize }}</span>
+    </div>
+    <div class="nj-panel-body tight">
+      <div class="nj-scroll-table nj-scroll-table-lg">
+        <table class="table table-sm mb-0 nj-compact-table">
+          <thead>
+            <tr>
+              <th>Expiry</th>
+              <th class="nj-num">τ</th>
+              <th class="nj-num">Strike</th>
+              <th class="nj-num">ln(K/S)</th>
+              <th>Type</th>
+              <th class="nj-num">IV</th>
+              <th>Quality</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in snapshot.points %}
+              <tr>
+                <td class="small">{{ p.expiry|default:"—" }}</td>
+                <td class="nj-num">{{ p.t|floatformat:4 }}</td>
+                <td class="nj-num">{{ p.strike|floatformat:2 }}</td>
+                <td class="nj-num">{% if p.log_m != None %}{{ p.log_m|floatformat:4 }}{% else %}—{% endif %}</td>
+                <td class="small">{{ p.type }}</td>
+                <td class="nj-num">{{ p.iv|floatformat:4 }}</td>
+                <td class="small text-secondary">{{ p.quality }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if vol_chart %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+        const raw = document.getElementById('vol-surface-chart');
+        const el = document.getElementById('vol-surface-3d');
+        if (!raw || !el) return;
+        const series = JSON.parse(raw.textContent);
+        const data = series.map((p) => [p.x, p.y, p.z]);
+        const ivs = series.map((p) => p.z);
+        const vmin = Math.min.apply(null, ivs);
+        const vmax = Math.max.apply(null, ivs);
+        const chart = echarts.init(el, null, { renderer: 'canvas' });
+        chart.setOption({
+          tooltip: {},
+          visualMap: {
+            show: true,
+            min: vmin,
+            max: vmax,
+            dimension: 2,
+            inRange: {
+              color: ['#0f766e', '#2dd4bf', '#fbbf24', '#f87171'],
+            },
+            textStyle: { color: '#94a3b8' },
+            right: 12,
+            top: 'center',
+            calculable: true,
+          },
+          xAxis3D: {
+            type: 'value',
+            name: el.dataset.xLabel || 'ln(K/S)',
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+          },
+          yAxis3D: {
+            type: 'value',
+            name: 'τ (years)',
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+          },
+          zAxis3D: {
+            type: 'value',
+            name: 'IV',
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+          },
+          grid3D: {
+            boxWidth: 120,
+            boxDepth: 80,
+            boxHeight: 70,
+            viewControl: {
+              projection: 'perspective',
+              autoRotate: false,
+              distance: 180,
+              alpha: 25,
+              beta: 40,
+            },
+            light: {
+              main: { intensity: 1.1, shadow: false },
+              ambient: { intensity: 0.45 },
+            },
+            environment: 'none',
+          },
+          series: [{
+            type: 'scatter3D',
+            data: data,
+            symbolSize: 7,
+            itemStyle: { opacity: 0.92 },
+            emphasis: { itemStyle: { color: '#fff' } },
+          }],
+        });
+        window.addEventListener('resize', () => chart.resize());
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

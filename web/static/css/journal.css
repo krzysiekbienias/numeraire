@@ -1,0 +1,735 @@
+/* Numeraire Journal — thin skin over Bootstrap 5.3 dark theme.
+   Numbers, density, and accent — not a redesign of every component. */
+
+:root,
+[data-bs-theme="dark"] {
+  --nj-accent: #2dd4bf;
+  --nj-accent-dim: rgba(45, 212, 191, 0.15);
+  --nj-sidebar-width: 15.5rem;
+  --nj-pnl-pos: #34d399;
+  --nj-pnl-neg: #f87171;
+  --bs-body-font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --bs-link-color: var(--nj-accent);
+  --bs-link-hover-color: #5eead4;
+  --bs-primary: #2dd4bf;
+  --bs-primary-rgb: 45, 212, 191;
+}
+
+.btn-primary {
+  --bs-btn-bg: #0d9488;
+  --bs-btn-border-color: #0d9488;
+  --bs-btn-hover-bg: #14b8a6;
+  --bs-btn-hover-border-color: #14b8a6;
+  --bs-btn-active-bg: #0f766e;
+  --bs-btn-active-border-color: #0f766e;
+  --bs-btn-color: #042f2e;
+  --bs-btn-hover-color: #042f2e;
+  --bs-btn-active-color: #042f2e;
+}
+
+body {
+  min-height: 100vh;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- App shell ----------------------------------------------------------- */
+
+.nj-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.nj-sidebar {
+  width: var(--nj-sidebar-width);
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--bs-body-bg) 70%, #000);
+  border-right: 1px solid var(--bs-border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 0.85rem;
+}
+
+.nj-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.65rem 1.25rem;
+  text-decoration: none;
+  color: var(--bs-body-color);
+  border-bottom: 1px solid var(--bs-border-color);
+  margin-bottom: 1rem;
+}
+
+.nj-brand-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4rem;
+  background: linear-gradient(135deg, var(--nj-accent), #0f766e);
+  display: inline-grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #042f2e;
+}
+
+.nj-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.nj-brand-text strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.nj-brand-text span {
+  font-size: 0.7rem;
+  color: var(--bs-secondary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nj-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+
+.nj-nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.45rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.nj-nav a:hover {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+}
+
+.nj-nav a.active {
+  background: var(--nj-accent-dim);
+  color: var(--nj-accent);
+}
+
+.nj-nav a i {
+  font-size: 1.05rem;
+  width: 1.15rem;
+  text-align: center;
+}
+
+.nj-nav-label {
+  margin: 1rem 0.75rem 0.35rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--bs-secondary-color);
+}
+
+.nj-sidebar-foot {
+  border-top: 1px solid var(--bs-border-color);
+  padding-top: 0.85rem;
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nj-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  background: color-mix(in srgb, var(--bs-body-bg) 85%, transparent);
+}
+
+.nj-topbar h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.nj-topbar .muted {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-content {
+  padding: 1.35rem 1.5rem 2rem;
+  flex: 1;
+}
+
+/* --- Cards / metrics ----------------------------------------------------- */
+
+.nj-metric {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.65rem;
+  padding: 1rem 1.1rem;
+  height: 100%;
+}
+
+.nj-metric .label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.35rem;
+}
+
+.nj-metric .value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.nj-metric .hint {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-panel {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.65rem;
+  overflow: hidden;
+  height: 100%;
+}
+
+.nj-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.nj-panel-head h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.nj-panel-body {
+  padding: 0.85rem 1.1rem 1.1rem;
+}
+
+.nj-panel-body.tight {
+  padding: 0;
+}
+
+.nj-panel table {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.nj-panel table th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bs-secondary-color);
+  font-weight: 500;
+  border-bottom-color: var(--bs-border-color);
+}
+
+.nj-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.nj-pnl-pos {
+  color: var(--nj-pnl-pos);
+}
+
+.nj-pnl-neg {
+  color: var(--nj-pnl-neg);
+}
+
+.nj-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+  font-size: 0.9rem;
+}
+
+.nj-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.nj-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  font-size: 0.8rem;
+  background: transparent;
+}
+
+.nj-chip:hover {
+  color: var(--bs-body-color);
+  border-color: var(--nj-accent);
+}
+
+.nj-chip.active {
+  background: var(--nj-accent-dim);
+  border-color: var(--nj-accent);
+  color: var(--nj-accent);
+}
+
+.nj-clickable tbody tr {
+  cursor: pointer;
+}
+
+.nj-clickable tbody tr:hover {
+  --bs-table-bg: color-mix(in srgb, var(--nj-accent) 8%, transparent);
+}
+
+.nj-asof-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nj-asof-label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+}
+
+.nj-asof-select {
+  width: auto;
+  min-width: 9.5rem;
+}
+
+.nj-pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.nj-chart {
+  width: 100%;
+  height: 22rem;
+}
+
+.nj-chart-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.nj-panel-head .nj-chip {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  background: transparent;
+}
+
+.nj-metric-compact .value {
+  font-size: 1.15rem;
+}
+
+.nj-trade-page .nj-panel-head {
+  padding: 0.55rem 0.85rem;
+}
+
+.nj-trade-page .nj-panel-body {
+  padding: 0.75rem 0.85rem;
+}
+
+.nj-trade-page .nj-panel-body.tight {
+  padding: 0;
+}
+
+.nj-inline-vals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-inline-vals strong {
+  color: var(--bs-body-color);
+  font-weight: 600;
+}
+
+.nj-compact-table {
+  font-size: 0.82rem;
+}
+
+.nj-compact-table > :not(caption) > * > * {
+  padding: 0.35rem 0.65rem;
+}
+
+.nj-market-split {
+  display: grid;
+  grid-template-columns: minmax(11.5rem, 13.5rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.nj-kv {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nj-kv > div {
+  display: grid;
+  grid-template-columns: 3.25rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color) 70%, transparent);
+}
+
+.nj-kv > div:last-child {
+  border-bottom: 0;
+}
+
+.nj-kv dt {
+  margin: 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bs-secondary-color);
+}
+
+.nj-kv dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-size: 0.92rem;
+}
+
+.nj-kv-note dd {
+  font-weight: 400;
+  text-align: right;
+  line-height: 1.25;
+}
+
+.nj-trade-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.nj-chart-block {
+  min-width: 0;
+}
+
+.nj-chart-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  margin-bottom: 0.25rem;
+  color: var(--bs-body-color);
+}
+
+.nj-chart-sm {
+  height: 11.5rem;
+}
+
+.nj-chart-md {
+  height: 14.5rem;
+}
+
+.nj-chart-3d {
+  height: min(32rem, 62vh);
+  width: 100%;
+}
+
+.nj-chart-3d-sm {
+  height: 18rem;
+}
+
+.nj-curve-charts {
+  grid-template-columns: 1fr 1fr;
+}
+
+.nj-scroll-table {
+  max-height: 12rem;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.45rem;
+}
+
+.nj-scroll-table-lg {
+  max-height: min(22rem, 42vh);
+}
+
+.nj-scroll-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bs-tertiary-bg);
+}
+
+@media (max-width: 1100px) {
+  .nj-trade-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 800px) {
+  .nj-market-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nj-market-leg-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.nj-market-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.nj-market-df-note code {
+  color: var(--nj-accent);
+}
+
+/* --- Login --------------------------------------------------------------- */
+
+.nj-login {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(20rem, 26rem) 1fr;
+}
+
+.nj-login-form {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100vh;
+  padding: 2.5rem 2.5rem 1.5rem;
+  background: var(--bs-body-bg);
+  border-right: 1px solid var(--bs-border-color);
+}
+
+.nj-login-form-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 22rem;
+}
+
+.nj-login-form .nj-brand {
+  border: 0;
+  margin: 0 0 2rem;
+  padding: 0;
+}
+
+.nj-login-form h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.nj-login-form .lede {
+  color: var(--bs-secondary-color);
+  margin-bottom: 1.75rem;
+  font-size: 0.95rem;
+}
+
+.nj-login-powered {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.nj-login-powered-label {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.55rem;
+}
+
+.nj-login-tech {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.nj-login-tech li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--bs-body-color) 82%, var(--bs-secondary-color));
+  padding: 0.28rem 0.6rem 0.28rem 0.45rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 80%, transparent);
+}
+
+.nj-login-tech img {
+  display: block;
+  width: 0.95rem;
+  height: 0.95rem;
+  opacity: 0.92;
+}
+
+.nj-login-art {
+  position: relative;
+  overflow: hidden;
+  background: #020617;
+}
+
+.nj-login-art-base {
+  position: absolute;
+  inset: 0;
+  background:
+    url("../img/login-bg.png") center / cover no-repeat;
+  transform: scale(1.02);
+}
+
+.nj-login-art-photo {
+  position: absolute;
+  right: 7%;
+  top: 50%;
+  width: min(48%, 28rem);
+  margin: 0;
+  transform: translateY(-52%) rotate(2.5deg);
+  border-radius: 0.55rem;
+  overflow: hidden;
+  box-shadow:
+    0 1.5rem 3.5rem rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  z-index: 1;
+}
+
+.nj-login-art-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+.nj-login-art-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(105deg, rgba(2, 6, 23, 0.72) 0%, rgba(2, 6, 23, 0.28) 42%, rgba(2, 6, 23, 0.15) 70%, rgba(2, 6, 23, 0.45) 100%),
+    linear-gradient(0deg, rgba(2, 6, 23, 0.55) 0%, transparent 38%);
+}
+
+.nj-login-art-caption {
+  position: absolute;
+  left: 2rem;
+  bottom: 3.25rem;
+  right: 2rem;
+  z-index: 3;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 22rem;
+}
+
+.nj-login-art-caption strong {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.01em;
+}
+
+.nj-login-art-caption span {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.nj-login-photo-credit {
+  position: absolute;
+  left: 2rem;
+  bottom: 1.15rem;
+  z-index: 3;
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+@media (max-width: 1100px) {
+  .nj-login-art-photo {
+    width: min(52%, 22rem);
+    right: 4%;
+  }
+}
+
+@media (max-width: 900px) {
+  .nj-login {
+    grid-template-columns: 1fr;
+  }
+
+  .nj-login-art {
+    display: none;
+  }
+
+  .nj-login-form {
+    min-height: 100vh;
+  }
+
+  .nj-shell {
+    flex-direction: column;
+  }
+
+  .nj-sidebar {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+
+  .nj-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Overview{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    {% if as_of %}
+      Official MTM as of <strong>{{ as_of|date:"Y-m-d" }}</strong>
+    {% else %}
+      No MTM rows in the book yet
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if available_as_of %}
+    <form method="get" action="{% url 'journal:dashboard' %}" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_as_of">as_of</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+              onchange="this.form.submit()">
+        {% for d in available_as_of %}
+          <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+            {{ d|date:"Y-m-d" }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% else %}
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+      <div class="nj-metric">
+        <div class="label">PV total</div>
+        <div class="value {% if mtm.pv_total and mtm.pv_total < 0 %}nj-pnl-neg{% elif mtm.pv_total and mtm.pv_total > 0 %}nj-pnl-pos{% endif %}">
+          {% if mtm.pv_total != None %}{{ mtm.pv_total|floatformat:2 }}{% else %}—{% endif %}
+        </div>
+        <div class="hint">{% if mtm.legs %}{{ mtm.legs }} marked legs{% else %}no marks{% endif %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="nj-metric">
+        <div class="label">Daily P&amp;L</div>
+        <div class="value {% if mtm.pnl_daily and mtm.pnl_daily < 0 %}nj-pnl-neg{% elif mtm.pnl_daily and mtm.pnl_daily > 0 %}nj-pnl-pos{% endif %}">
+          {% if mtm.pnl_daily != None %}{{ mtm.pnl_daily|floatformat:2 }}{% else %}—{% endif %}
+        </div>
+        <div class="hint">sum of pnl_daily @ as_of</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="nj-metric">
+        <div class="label">Delta total</div>
+        <div class="value">{% if mtm.delta_total != None %}{{ mtm.delta_total|floatformat:2 }}{% else %}—{% endif %}</div>
+        <div class="hint">position-scaled</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="nj-metric">
+        <div class="label">Vega total</div>
+        <div class="value">{% if mtm.vega_total != None %}{{ mtm.vega_total|floatformat:2 }}{% else %}—{% endif %}</div>
+        <div class="hint">position-scaled</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Book status</h2>
+          <a class="small" href="{% url 'journal:trade_list' %}">all trades</a>
+        </div>
+        <div class="nj-panel-body tight">
+          {% if trade_status %}
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th class="nj-num">Trades</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in trade_status %}
+                  <tr>
+                    <td>
+                      <a href="{% url 'journal:trade_list' %}?status={{ row.status }}">
+                        <span class="badge text-bg-secondary">{{ row.status }}</span>
+                      </a>
+                    </td>
+                    <td class="nj-num">
+                      <a href="{% url 'journal:trade_list' %}?status={{ row.status }}">{{ row.count }}</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="nj-empty">No trades in the catalog.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Exposure batch</h2>
+          <a class="small" href="{% url 'journal:exposure' %}">open</a>
+        </div>
+        <div class="nj-panel-body">
+          {% if exposure.as_of %}
+            <dl class="row mb-0 small">
+              <dt class="col-5 text-secondary">as_of</dt>
+              <dd class="col-7">{{ exposure.as_of|date:"Y-m-d" }}</dd>
+              <dt class="col-5 text-secondary">rows</dt>
+              <dd class="col-7 nj-num">{{ exposure.rows }}</dd>
+              <dt class="col-5 text-secondary">MC paths</dt>
+              <dd class="col-7 nj-num">{{ exposure.paths|default:"—" }}</dd>
+            </dl>
+          {% else %}
+            <div class="nj-empty">No exposure rows for this as_of.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Pricing engines</h2>
+        </div>
+        <div class="nj-panel-body">
+          {% if engines %}
+            <div class="d-flex flex-wrap gap-2">
+              {% for engine in engines %}
+                <span class="badge rounded-pill text-bg-dark border">{{ engine }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="nj-empty">No engines on this as_of.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Vol surfaces @ as_of</h2>
+          <a class="small" href="{% url 'admin:journal_volsurfaceeod_changelist' %}">open in admin</a>
+        </div>
+        <div class="nj-panel-body tight">
+          {% if surfaces %}
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>as_of</th>
+                  <th>Underlying</th>
+                  <th class="nj-num">Spot</th>
+                  <th class="nj-num">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in surfaces %}
+                  <tr>
+                    <td>{{ s.as_of|date:"Y-m-d" }}</td>
+                    <td>{{ s.underlying_id }}</td>
+                    <td class="nj-num">{{ s.spot_used|floatformat:2 }}</td>
+                    <td class="nj-num">{{ s.point_count|default:"—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="nj-empty">No surfaces for this as_of.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Discount curves @ as_of</h2>
+        </div>
+        <div class="nj-panel-body tight">
+          {% if curves %}
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>as_of</th>
+                  <th>Curve</th>
+                  <th>CCY</th>
+                  <th>Engine</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in curves %}
+                  <tr>
+                    <td>{{ c.as_of|date:"Y-m-d" }}</td>
+                    <td>{{ c.curve_id }}</td>
+                    <td>{{ c.currency }}</td>
+                    <td class="small text-secondary">{{ c.bootstrap_engine }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="nj-empty">No curves for this as_of.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+{% endblock %}

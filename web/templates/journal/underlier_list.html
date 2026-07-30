@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Underliers{% endblock %}
+{% block page_title %}Underliers{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    Daily closes from <code>equity_daily_eod</code> / <code>index_daily_eod</code>
+    · {{ equity_count }} equity · {{ index_count }} index
+  </p>
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% elif underliers %}
+    <div class="nj-panel">
+      <div class="nj-panel-head">
+        <h2>Available series</h2>
+        <span class="small text-secondary">adjusted 1d bars</span>
+      </div>
+      <div class="nj-panel-body tight">
+        <table class="table table-sm mb-0 nj-clickable">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Kind</th>
+              <th>Book</th>
+              <th class="nj-num">Bars</th>
+              <th>From</th>
+              <th>To</th>
+              <th class="nj-num">Last close</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in underliers %}
+              <tr onclick="window.location='{% url 'journal:underlier_detail' row.ticker %}'">
+                <td><a href="{% url 'journal:underlier_detail' row.ticker %}">{{ row.ticker }}</a></td>
+                <td><span class="badge text-bg-dark">{{ row.kind }}</span></td>
+                <td>
+                  {% if row.in_book %}
+                    <span class="badge text-bg-success">in book</span>
+                  {% else %}
+                    <span class="text-secondary">—</span>
+                  {% endif %}
+                </td>
+                <td class="nj-num">{{ row.bars }}</td>
+                <td>{{ row.first_as_of|date:"Y-m-d" }}</td>
+                <td>{{ row.last_as_of|date:"Y-m-d" }}</td>
+                <td class="nj-num">
+                  {% if row.last_close != None %}{{ row.last_close|floatformat:4 }}{% else %}—{% endif %}
+                  {% if row.currency %}<span class="text-secondary small"> {{ row.currency }}</span>{% endif %}
+                </td>
+                <td class="small text-secondary">{{ row.source|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="nj-empty">No underlier daily bars in the database yet.</div>
+  {% endif %}
+{% endblock %}

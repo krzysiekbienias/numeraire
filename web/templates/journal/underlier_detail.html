@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ ticker }}{% endblock %}
+{% block page_title %}{{ ticker }}{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    {{ kind }} · adjusted 1d · {{ bar_count }} bar{{ bar_count|pluralize }}
+    {% if requested_ticker and requested_ticker != ticker %}
+      · resolved from {{ requested_ticker }}
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'journal:underlier_list' %}">
+    <i class="bi bi-arrow-left"></i> All underliers
+  </a>
+{% endblock %}
+
+{% block content %}
+  {% if latest %}
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="nj-metric">
+          <div class="label">Last close</div>
+          <div class="value">{{ latest.close|floatformat:4 }}</div>
+          <div class="hint">{{ latest.as_of|date:"Y-m-d" }} · {{ latest.currency }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="nj-metric">
+          <div class="label">Open</div>
+          <div class="value" style="font-size:1.15rem">{{ latest.open|floatformat:4 }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="nj-metric">
+          <div class="label">High / Low</div>
+          <div class="value" style="font-size:1.15rem">
+            {{ latest.high|floatformat:4 }}
+            <span class="text-secondary">/</span>
+            {{ latest.low|floatformat:4 }}
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="nj-metric">
+          <div class="label">Volume</div>
+          <div class="value" style="font-size:1.15rem">
+            {% if latest.volume != None %}{{ latest.volume|floatformat:0 }}{% else %}—{% endif %}
+          </div>
+          <div class="hint">{{ latest.source }}</div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if chart_series %}
+    {{ chart_series|json_script:"underlier-chart-data" }}
+    <div class="nj-panel mb-3">
+      <div class="nj-panel-head">
+        <h2>Close</h2>
+        <div class="nj-chart-ranges" role="group" aria-label="Chart range">
+          <button type="button" class="nj-chip" data-range="1M">1M</button>
+          <button type="button" class="nj-chip" data-range="3M">3M</button>
+          <button type="button" class="nj-chip" data-range="6M">6M</button>
+          <button type="button" class="nj-chip active" data-range="1Y">1Y</button>
+          <button type="button" class="nj-chip" data-range="ALL">All</button>
+        </div>
+      </div>
+      <div class="nj-panel-body">
+        <div id="underlier-close-chart" class="nj-chart"
+             data-default-start="{{ chart_default_start|default:'' }}"
+             data-ticker="{{ ticker }}"></div>
+        <p class="small text-secondary mb-0 mt-2">
+          Default window is ~1Y · drag the slider or use the chips · scroll/pinch to zoom
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="nj-panel">
+    <div class="nj-panel-head">
+      <h2>Daily OHLC</h2>
+      <span class="small text-secondary">newest first</span>
+    </div>
+    <div class="nj-panel-body tight">
+      {% if bars %}
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>as_of</th>
+              <th class="nj-num">Open</th>
+              <th class="nj-num">High</th>
+              <th class="nj-num">Low</th>
+              <th class="nj-num">Close</th>
+              <th class="nj-num">Volume</th>
+              <th class="nj-num">VWAP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for bar in bars %}
+              <tr>
+                <td>{{ bar.as_of|date:"Y-m-d" }}</td>
+                <td class="nj-num">{{ bar.open|floatformat:4 }}</td>
+                <td class="nj-num">{{ bar.high|floatformat:4 }}</td>
+                <td class="nj-num">{{ bar.low|floatformat:4 }}</td>
+                <td class="nj-num">{{ bar.close|floatformat:4 }}</td>
+                <td class="nj-num">{% if bar.volume != None %}{{ bar.volume|floatformat:0 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{% if bar.vwap != None %}{{ bar.vwap|floatformat:4 }}{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="nj-empty">No bars for this ticker.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if is_paginated %}
+    <nav class="nj-pagination mt-3" aria-label="OHLC pages">
+      {% if page_obj.has_previous %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="?page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      <span class="small text-secondary">
+        page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="?page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if chart_series %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script>
+      (function () {
+        const el = document.getElementById('underlier-close-chart');
+        const dataEl = document.getElementById('underlier-chart-data');
+        if (!el || !dataEl || typeof echarts === 'undefined') return;
+
+        const series = JSON.parse(dataEl.textContent);
+        const dates = series.map((p) => p.date);
+        const closes = series.map((p) => p.close);
+        const defaultStart = el.dataset.defaultStart || (dates[0] || '');
+        const endDate = dates[dates.length - 1] || '';
+        const ticker = el.dataset.ticker || 'Close';
+
+        const chart = echarts.init(el, null, { renderer: 'canvas' });
+
+        function rangeStart(key) {
+          if (!endDate || key === 'ALL') return dates[0] || '';
+          const end = new Date(endDate + 'T00:00:00');
+          const days = { '1M': 31, '3M': 92, '6M': 183, '1Y': 365 }[key];
+          if (!days) return dates[0] || '';
+          const cutoff = new Date(end);
+          cutoff.setDate(cutoff.getDate() - days);
+          const iso = cutoff.toISOString().slice(0, 10);
+          for (let i = 0; i < dates.length; i++) {
+            if (dates[i] >= iso) return dates[i];
+          }
+          return dates[0] || '';
+        }
+
+        function applyRange(start) {
+          chart.setOption({
+            dataZoom: [
+              { startValue: start || dates[0], endValue: endDate },
+              { startValue: start || dates[0], endValue: endDate },
+            ],
+          });
+        }
+
+        chart.setOption({
+          animationDuration: 350,
+          backgroundColor: 'transparent',
+          textStyle: { fontFamily: 'Inter, system-ui, sans-serif' },
+          tooltip: {
+            trigger: 'axis',
+            valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(4)),
+          },
+          grid: { left: 56, right: 20, top: 24, bottom: 72 },
+          xAxis: {
+            type: 'category',
+            data: dates,
+            boundaryGap: false,
+            axisLine: { lineStyle: { color: '#334155' } },
+            axisLabel: { color: '#94a3b8' },
+            axisTick: { show: false },
+          },
+          yAxis: {
+            type: 'value',
+            scale: true,
+            splitLine: { lineStyle: { color: '#1e293b' } },
+            axisLabel: {
+              color: '#94a3b8',
+              formatter: (v) => Number(v).toFixed(v >= 1000 ? 0 : 2),
+            },
+          },
+          dataZoom: [
+            {
+              type: 'inside',
+              startValue: defaultStart || dates[0],
+              endValue: endDate,
+            },
+            {
+              type: 'slider',
+              height: 22,
+              bottom: 12,
+              borderColor: '#334155',
+              backgroundColor: 'rgba(15, 23, 42, 0.6)',
+              fillerColor: 'rgba(45, 212, 191, 0.18)',
+              handleStyle: { color: '#2dd4bf' },
+              textStyle: { color: '#94a3b8' },
+              startValue: defaultStart || dates[0],
+              endValue: endDate,
+            },
+          ],
+          series: [
+            {
+              name: ticker,
+              type: 'line',
+              data: closes,
+              showSymbol: false,
+              sampling: 'lttb',
+              lineStyle: { width: 2, color: '#2dd4bf' },
+              itemStyle: { color: '#2dd4bf' },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: 'rgba(45, 212, 191, 0.28)' },
+                  { offset: 1, color: 'rgba(45, 212, 191, 0.02)' },
+                ]),
+              },
+            },
+          ],
+        });
+
+        document.querySelectorAll('.nj-chart-ranges [data-range]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.nj-chart-ranges [data-range]').forEach((b) => {
+              b.classList.toggle('active', b === btn);
+            });
+            applyRange(rangeStart(btn.dataset.range));
+          });
+        });
+
+        window.addEventListener('resize', () => chart.resize());
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

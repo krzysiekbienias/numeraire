@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+
+{% block title %}{{ trade.trade_id }}{% endblock %}
+{% block page_title %}{{ trade.trade_id }}{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    <span class="badge {% if trade.status == 'LIVE' %}text-bg-success{% elif trade.status == 'EXPIRED' %}text-bg-secondary{% else %}text-bg-dark{% endif %}">{{ trade.status }}</span>
+    {{ trade.portfolio_id }} · {{ trade.strategy_type }}
+    · {{ leg_rows|length }} leg{{ leg_rows|length|pluralize }}
+    · trade {% if trade.trade_date %}{{ trade.trade_date|date:"Y-m-d" }}{% else %}—{% endif %}
+    {% if as_of %} · <strong>{{ as_of|date:"Y-m-d" }}</strong>{% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if available_as_of %}
+    <form method="get" action="" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_as_of">as_of</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+              onchange="this.form.submit()">
+        {% for d in available_as_of %}
+          <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+            {{ d|date:"Y-m-d" }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
+  {% endif %}
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'journal:trade_list' %}">
+    <i class="bi bi-arrow-left"></i> Trades
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="nj-trade-page">
+
+  {# Definition + valuation in one tight table #}
+  <div class="nj-panel">
+    <div class="nj-panel-head">
+      <h2>Definition &amp; mark</h2>
+      {% if valuation %}
+        <div class="nj-inline-vals small">
+          <span>PV <strong class="{% if valuation.pv_total != None and valuation.pv_total < 0 %}nj-pnl-neg{% elif valuation.pv_total != None and valuation.pv_total > 0 %}nj-pnl-pos{% endif %}">{% if valuation.pv_total != None %}{{ valuation.pv_total|floatformat:2 }}{% else %}—{% endif %}</strong></span>
+          <span>PnL day <strong class="{% if valuation.pnl_daily != None and valuation.pnl_daily < 0 %}nj-pnl-neg{% elif valuation.pnl_daily != None and valuation.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if valuation.pnl_daily != None %}{{ valuation.pnl_daily|floatformat:2 }}{% else %}—{% endif %}</strong></span>
+          <span>Δ {% if valuation.delta_total != None %}{{ valuation.delta_total|floatformat:2 }}{% else %}—{% endif %}</span>
+          <span>ν {% if valuation.vega_total != None %}{{ valuation.vega_total|floatformat:2 }}{% else %}—{% endif %}</span>
+          <span>Θ {% if valuation.theta_total != None %}{{ valuation.theta_total|floatformat:2 }}{% else %}—{% endif %}</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="nj-panel-body tight">
+      {% if leg_rows %}
+        <table class="table table-sm mb-0 nj-compact-table">
+          <thead>
+            <tr>
+              <th>Leg</th>
+              <th>Dir</th>
+              <th>Und</th>
+              <th>Type</th>
+              <th class="nj-num">K</th>
+              <th>Exp</th>
+              <th class="nj-num">Qty</th>
+              <th class="nj-num">Exec</th>
+              <th class="nj-num">PV</th>
+              <th class="nj-num">PnL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in leg_rows %}
+              <tr>
+                <td class="small">{{ row.leg.leg_id }}</td>
+                <td>{{ row.leg.direction }}</td>
+                <td><a href="{% url 'journal:underlier_detail' row.underlier %}">{{ row.underlier }}</a></td>
+                <td class="small">
+                  {% if row.equity %}
+                    {{ row.equity.instrument_type }}{% if row.equity.option_type %}/{{ row.equity.option_type|slice:":1"|upper }}{% endif %}
+                  {% else %}—{% endif %}
+                </td>
+                <td class="nj-num">{% if row.equity and row.equity.strike != None %}{{ row.equity.strike|floatformat:2 }}{% else %}—{% endif %}</td>
+                <td class="small">{% if row.leg.product.expiry_date %}{{ row.leg.product.expiry_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{{ row.leg.quantity|floatformat:0 }}</td>
+                <td class="nj-num">{{ row.leg.execution_price|floatformat:2 }}</td>
+                {% if row.mtm %}
+                  <td class="nj-num {% if row.mtm.pv_total < 0 %}nj-pnl-neg{% elif row.mtm.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.mtm.pv_total|floatformat:2 }}</td>
+                  <td class="nj-num {% if row.mtm.pnl_daily != None and row.mtm.pnl_daily < 0 %}nj-pnl-neg{% elif row.mtm.pnl_daily != None and row.mtm.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.mtm.pnl_daily != None %}{{ row.mtm.pnl_daily|floatformat:2 }}{% else %}—{% endif %}</td>
+                {% else %}
+                  <td class="nj-num text-secondary">—</td>
+                  <td class="nj-num text-secondary">—</td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="nj-empty">No legs.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Market (vertical) + charts #}
+  <div class="nj-panel mt-2">
+    <div class="nj-panel-head">
+      <h2>Market</h2>
+      <span class="small text-secondary">
+        {% if primary_market and primary_market.mtm %}
+          {{ primary_market.underlier }}
+          · {{ primary_market.mtm.pricing_engine }}
+          {% if primary_market.remark_flags %}
+            · {% for f in primary_market.remark_flags %}{{ f }}{% if not forloop.last %} · {% endif %}{% endfor %}
+          {% endif %}
+        {% elif as_of %}
+          @ {{ as_of|date:"Y-m-d" }}
+        {% else %}
+          no mark
+        {% endif %}
+      </span>
+    </div>
+    <div class="nj-panel-body">
+      {% if primary_market and primary_market.mtm %}
+        <div class="nj-market-split">
+          <dl class="nj-kv">
+            <div>
+              <dt>Spot</dt>
+              <dd>{{ primary_market.mtm.underlying_spot|floatformat:4 }}</dd>
+            </div>
+            <div>
+              <dt>IV</dt>
+              <dd>{{ primary_market.mtm.implied_vol_used|floatformat:4 }}</dd>
+            </div>
+            <div>
+              <dt>r</dt>
+              <dd>{{ primary_market.mtm.risk_free_rate|floatformat:6 }}</dd>
+            </div>
+            <div>
+              <dt>q</dt>
+              <dd>{{ primary_market.mtm.dividend_yield|floatformat:6 }}</dd>
+            </div>
+            <div>
+              <dt>τ</dt>
+              <dd>{{ primary_market.mtm.years_to_maturity|floatformat:6 }}</dd>
+            </div>
+            <div>
+              <dt>DF(τ)</dt>
+              <dd>
+                {% if primary_market.curve_df %}
+                  {{ primary_market.curve_df.discount_factor|floatformat:6 }}
+                {% elif primary_market.flat_df != None %}
+                  {{ primary_market.flat_df|floatformat:6 }}
+                {% else %}—{% endif %}
+              </dd>
+            </div>
+            {% if primary_market.curve_df %}
+              <div class="nj-kv-note">
+                <dt>Curve</dt>
+                <dd class="small">
+                  {{ primary_market.curve_df.curve_id }}
+                  @ {{ primary_market.curve_df.curve_as_of|date:"Y-m-d" }}
+                  {% if primary_market.curve_df.stale %}<span class="text-warning"> lag</span>{% endif %}
+                </dd>
+              </div>
+            {% endif %}
+          </dl>
+
+          <div class="nj-trade-charts">
+            {% if underlier_chart %}
+              {{ underlier_chart|json_script:"trade-underlier-chart" }}
+              <div class="nj-chart-block">
+                <div class="nj-chart-label">
+                  <span>{{ underlier_chart_ticker }} close</span>
+                  <span class="text-secondary">1Y · mark day dashed</span>
+                </div>
+                <div id="trade-underlier-chart-el" class="nj-chart nj-chart-sm"
+                     data-as-of="{{ as_of|date:'Y-m-d' }}"></div>
+              </div>
+            {% endif %}
+            {% if pv_chart %}
+              {{ pv_chart|json_script:"trade-pv-chart" }}
+              <div class="nj-chart-block">
+                <div class="nj-chart-label">
+                  <span>Trade PV</span>
+                  <span class="text-secondary">history</span>
+                </div>
+                <div id="trade-pv-chart-el" class="nj-chart nj-chart-sm"
+                     data-as-of="{{ as_of|date:'Y-m-d' }}"></div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if curve_chart %}
+          {{ curve_chart|json_script:"trade-curve-chart" }}
+          <div class="nj-trade-curve-block mt-3">
+            <div class="nj-chart-label mb-1">
+              <span>
+                Yield &amp; discount
+                {% if curve_meta %}
+                  · <a href="{% url 'journal:curves' %}?curve_id={{ curve_meta.curve_id }}&amp;as_of={{ curve_meta.curve_as_of|date:'Y-m-d' }}">{{ curve_meta.curve_id }}</a>
+                {% endif %}
+              </span>
+              <span class="text-secondary">
+                {% if curve_meta %}
+                  curve as_of <strong>{{ curve_meta.curve_as_of|date:"Y-m-d" }}</strong>
+                  {% if curve_meta.stale %}
+                    · <span class="text-warning">{{ curve_meta.lag_days }}d lag vs mark</span>
+                  {% endif %}
+                {% endif %}
+              </span>
+            </div>
+            <div class="nj-trade-charts nj-curve-charts">
+              <div class="nj-chart-block">
+                <div class="nj-chart-label">
+                  <span>Zero rate</span>
+                  <span class="text-secondary">vs tenor</span>
+                </div>
+                <div id="trade-curve-zero-el" class="nj-chart nj-chart-sm"></div>
+              </div>
+              <div class="nj-chart-block">
+                <div class="nj-chart-label">
+                  <span>Discount factor</span>
+                  <span class="text-secondary">DF(τ)</span>
+                </div>
+                <div id="trade-curve-df-el" class="nj-chart nj-chart-sm"></div>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
+        {% if exposure_chart %}
+          {{ exposure_chart|json_script:"trade-exposure-chart" }}
+          <div class="nj-trade-curve-block mt-3">
+            <div class="nj-chart-label mb-1">
+              <span>
+                Exposure
+                · <a href="{% url 'journal:exposure' %}?as_of={{ exposure_meta.as_of|date:'Y-m-d' }}">portfolio</a>
+              </span>
+              <span class="text-secondary">
+                as_of <strong>{{ exposure_meta.as_of|date:"Y-m-d" }}</strong>
+                {% if exposure_meta.stale %}
+                  · <span class="text-warning">{{ exposure_meta.lag_days }}d lag vs mark</span>
+                {% endif %}
+              </span>
+            </div>
+            <div id="trade-exposure-profile-el" class="nj-chart nj-chart-sm"></div>
+          </div>
+        {% endif %}
+
+        {% if vol_chart %}
+          {{ vol_chart|json_script:"trade-vol-chart" }}
+          <div class="nj-trade-curve-block mt-3">
+            <div class="nj-chart-label mb-1">
+              <span>
+                Vol surface 3D
+                · <a href="{% url 'journal:surfaces' %}?underlying_id={{ vol_meta.underlying_id }}&amp;as_of={{ vol_meta.as_of|date:'Y-m-d' }}">{{ vol_meta.underlying_id }}</a>
+              </span>
+              <span class="text-secondary">
+                as_of <strong>{{ vol_meta.as_of|date:"Y-m-d" }}</strong>
+                · {{ vol_meta.point_count }} call pts
+                {% if vol_meta.stale %}
+                  · <span class="text-warning">{{ vol_meta.lag_days }}d lag vs mark</span>
+                {% endif %}
+              </span>
+            </div>
+            <div id="trade-vol-3d-el" class="nj-chart nj-chart-3d nj-chart-3d-sm"
+                 data-x-label="{{ vol_meta.x_label }}"></div>
+          </div>
+        {% endif %}
+
+        {% if market_rows|length > 1 %}
+          <div class="nj-scroll-table mt-2">
+            <table class="table table-sm mb-0 nj-compact-table">
+              <thead>
+                <tr>
+                  <th>Leg</th>
+                  <th class="nj-num">Spot</th>
+                  <th class="nj-num">IV</th>
+                  <th class="nj-num">r</th>
+                  <th class="nj-num">τ</th>
+                  <th class="nj-num">DF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in market_rows %}
+                  <tr>
+                    <td>{{ row.leg.leg_id }}</td>
+                    {% if row.mtm %}
+                      <td class="nj-num">{{ row.mtm.underlying_spot|floatformat:4 }}</td>
+                      <td class="nj-num">{{ row.mtm.implied_vol_used|floatformat:4 }}</td>
+                      <td class="nj-num">{{ row.mtm.risk_free_rate|floatformat:6 }}</td>
+                      <td class="nj-num">{{ row.mtm.years_to_maturity|floatformat:4 }}</td>
+                      <td class="nj-num">
+                        {% if row.curve_df %}{{ row.curve_df.discount_factor|floatformat:6 }}
+                        {% elif row.flat_df != None %}{{ row.flat_df|floatformat:6 }}
+                        {% else %}—{% endif %}
+                      </td>
+                    {% else %}
+                      <td colspan="5" class="text-secondary">—</td>
+                    {% endif %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="nj-empty">No market inputs for the selected as_of.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# History — scroll, not endless page #}
+  <div class="nj-panel mt-2">
+    <div class="nj-panel-head">
+      <h2>MTM history</h2>
+      <span class="small text-secondary">
+        {% if mtm_history %}{{ mtm_history|length }} dates · click row to change as_of{% else %}none{% endif %}
+      </span>
+    </div>
+    <div class="nj-panel-body tight">
+      {% if mtm_history %}
+        <div class="nj-scroll-table nj-scroll-table-lg">
+          <table class="table table-sm mb-0 nj-compact-table nj-clickable">
+            <thead>
+              <tr>
+                <th>as_of</th>
+                <th class="nj-num">PV</th>
+                <th class="nj-num">PnL day</th>
+                <th class="nj-num">PnL ince.</th>
+                <th class="nj-num">Δ</th>
+                <th class="nj-num">ν</th>
+                <th class="nj-num">Θ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in mtm_history %}
+                <tr {% if as_of and row.as_of == as_of %}class="table-active"{% endif %}
+                    onclick="window.location='?as_of={{ row.as_of|date:'Y-m-d' }}'">
+                  <td>{{ row.as_of|date:"Y-m-d" }}</td>
+                  <td class="nj-num {% if row.pv_total < 0 %}nj-pnl-neg{% elif row.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.pv_total|floatformat:2 }}</td>
+                  <td class="nj-num {% if row.pnl_daily != None and row.pnl_daily < 0 %}nj-pnl-neg{% elif row.pnl_daily != None and row.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.pnl_daily != None %}{{ row.pnl_daily|floatformat:2 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{% if row.pnl_inception != None %}{{ row.pnl_inception|floatformat:2 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{{ row.delta_total|floatformat:2 }}</td>
+                  <td class="nj-num">{{ row.vega_total|floatformat:2 }}</td>
+                  <td class="nj-num">{{ row.theta_total|floatformat:2 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="nj-empty">No MTM history.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {% if underlier_chart or pv_chart or curve_chart or exposure_chart or vol_chart %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    {% if vol_chart %}
+      <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
+    {% endif %}
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+
+        function lineChart(el, dates, values, asOf, color, fillTop) {
+          const chart = echarts.init(el, null, { renderer: 'canvas' });
+          const end = dates[dates.length - 1] || '';
+          let start = dates[0] || '';
+          if (end) {
+            const cutoff = new Date(end + 'T00:00:00');
+            cutoff.setDate(cutoff.getDate() - 365);
+            const iso = cutoff.toISOString().slice(0, 10);
+            for (let i = 0; i < dates.length; i++) {
+              if (dates[i] >= iso) { start = dates[i]; break; }
+            }
+          }
+          const markLine = asOf ? {
+            symbol: 'none',
+            label: { show: false },
+            lineStyle: { type: 'dashed', color: '#94a3b8', width: 1 },
+            data: [{ xAxis: asOf }],
+          } : undefined;
+
+          chart.setOption({
+            animationDuration: 250,
+            backgroundColor: 'transparent',
+            grid: { left: 48, right: 12, top: 12, bottom: 28 },
+            tooltip: {
+              trigger: 'axis',
+              valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(4)),
+            },
+            xAxis: {
+              type: 'category',
+              data: dates,
+              boundaryGap: false,
+              axisLabel: { color: '#94a3b8', fontSize: 10 },
+              axisLine: { lineStyle: { color: '#334155' } },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value',
+              scale: true,
+              splitLine: { lineStyle: { color: '#1e293b' } },
+              axisLabel: {
+                color: '#94a3b8',
+                fontSize: 10,
+                formatter: (v) => Number(v).toFixed(Math.abs(v) >= 1000 ? 0 : 2),
+              },
+            },
+            dataZoom: [
+              { type: 'inside', startValue: start, endValue: end },
+            ],
+            series: [{
+              type: 'line',
+              data: values,
+              showSymbol: false,
+              sampling: 'lttb',
+              lineStyle: { width: 1.75, color: color },
+              itemStyle: { color: color },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: fillTop },
+                  { offset: 1, color: 'rgba(0,0,0,0)' },
+                ]),
+              },
+              markLine: markLine,
+            }],
+          });
+          window.addEventListener('resize', () => chart.resize());
+        }
+
+        function pillarChart(el, labels, values, color, fillTop) {
+          const chart = echarts.init(el, null, { renderer: 'canvas' });
+          chart.setOption({
+            animationDuration: 250,
+            backgroundColor: 'transparent',
+            grid: { left: 48, right: 12, top: 12, bottom: 28 },
+            tooltip: {
+              trigger: 'axis',
+              valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(6)),
+            },
+            xAxis: {
+              type: 'category',
+              data: labels,
+              axisLabel: { color: '#94a3b8', fontSize: 10 },
+              axisLine: { lineStyle: { color: '#334155' } },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value',
+              scale: true,
+              splitLine: { lineStyle: { color: '#1e293b' } },
+              axisLabel: {
+                color: '#94a3b8',
+                fontSize: 10,
+                formatter: (v) => Number(v).toFixed(3),
+              },
+            },
+            series: [{
+              type: 'line',
+              data: values,
+              showSymbol: true,
+              symbolSize: 6,
+              lineStyle: { width: 1.75, color: color },
+              itemStyle: { color: color },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: fillTop },
+                  { offset: 1, color: 'rgba(0,0,0,0)' },
+                ]),
+              },
+            }],
+          });
+          window.addEventListener('resize', () => chart.resize());
+        }
+
+        function exposureChart(el, series) {
+          const labels = series.map((p) => p.pillar);
+          const fmt = (v) => {
+            const n = Number(v);
+            if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+            if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+            return n.toFixed(2);
+          };
+          const chart = echarts.init(el, null, { renderer: 'canvas' });
+          chart.setOption({
+            animationDuration: 250,
+            backgroundColor: 'transparent',
+            grid: { left: 48, right: 12, top: 22, bottom: 28 },
+            tooltip: { trigger: 'axis', valueFormatter: (v) => (v == null ? '—' : fmt(v)) },
+            legend: { top: 0, right: 0, textStyle: { color: '#94a3b8', fontSize: 10 } },
+            xAxis: {
+              type: 'category', data: labels,
+              axisLabel: { color: '#94a3b8', fontSize: 10 },
+              axisLine: { lineStyle: { color: '#334155' } },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value', scale: true,
+              splitLine: { lineStyle: { color: '#1e293b' } },
+              axisLabel: { color: '#94a3b8', fontSize: 10, formatter: fmt },
+            },
+            series: [
+              {
+                name: 'EE', type: 'line', data: series.map((p) => p.ee),
+                showSymbol: true, symbolSize: 5,
+                lineStyle: { width: 1.75, color: '#2dd4bf' }, itemStyle: { color: '#2dd4bf' },
+              },
+              {
+                name: 'PFE 95', type: 'line', data: series.map((p) => p.pfe_95),
+                showSymbol: true, symbolSize: 5,
+                lineStyle: { width: 1.75, color: '#60a5fa' }, itemStyle: { color: '#60a5fa' },
+              },
+              {
+                name: 'PFE 97.5', type: 'line', data: series.map((p) => p.pfe_97),
+                showSymbol: true, symbolSize: 5,
+                lineStyle: { width: 1.75, color: '#fbbf24' }, itemStyle: { color: '#fbbf24' },
+              },
+            ],
+          });
+          window.addEventListener('resize', () => chart.resize());
+        }
+
+        function volSurface3D(el, series) {
+          const data = series.map((p) => [p.x, p.y, p.z]);
+          const ivs = series.map((p) => p.z);
+          const vmin = Math.min.apply(null, ivs);
+          const vmax = Math.max.apply(null, ivs);
+          const chart = echarts.init(el, null, { renderer: 'canvas' });
+          chart.setOption({
+            tooltip: {},
+            visualMap: {
+              show: true,
+              min: vmin,
+              max: vmax,
+              dimension: 2,
+              inRange: { color: ['#0f766e', '#2dd4bf', '#fbbf24', '#f87171'] },
+              textStyle: { color: '#94a3b8' },
+              right: 4,
+              top: 'center',
+              calculable: true,
+              itemHeight: 80,
+            },
+            xAxis3D: {
+              type: 'value',
+              name: el.dataset.xLabel || 'ln(K/S)',
+              nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+              axisLabel: { color: '#94a3b8' },
+            },
+            yAxis3D: {
+              type: 'value',
+              name: 'τ',
+              nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+              axisLabel: { color: '#94a3b8' },
+            },
+            zAxis3D: {
+              type: 'value',
+              name: 'IV',
+              nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+              axisLabel: { color: '#94a3b8' },
+            },
+            grid3D: {
+              boxWidth: 100,
+              boxDepth: 70,
+              boxHeight: 55,
+              viewControl: { projection: 'perspective', distance: 170, alpha: 22, beta: 38 },
+              light: { main: { intensity: 1.05 }, ambient: { intensity: 0.45 } },
+              environment: 'none',
+            },
+            series: [{
+              type: 'scatter3D',
+              data: data,
+              symbolSize: 6,
+              itemStyle: { opacity: 0.92 },
+            }],
+          });
+          window.addEventListener('resize', () => chart.resize());
+        }
+
+        const asOfSpot = document.getElementById('trade-underlier-chart-el');
+        const spotData = document.getElementById('trade-underlier-chart');
+        if (asOfSpot && spotData) {
+          const series = JSON.parse(spotData.textContent);
+          lineChart(
+            asOfSpot,
+            series.map((p) => p.date),
+            series.map((p) => p.close),
+            asOfSpot.dataset.asOf,
+            '#2dd4bf',
+            'rgba(45, 212, 191, 0.22)'
+          );
+        }
+
+        const pvEl = document.getElementById('trade-pv-chart-el');
+        const pvData = document.getElementById('trade-pv-chart');
+        if (pvEl && pvData) {
+          const series = JSON.parse(pvData.textContent);
+          lineChart(
+            pvEl,
+            series.map((p) => p.date),
+            series.map((p) => p.pv),
+            pvEl.dataset.asOf,
+            '#60a5fa',
+            'rgba(96, 165, 250, 0.22)'
+          );
+        }
+
+        const curveData = document.getElementById('trade-curve-chart');
+        if (curveData) {
+          const series = JSON.parse(curveData.textContent);
+          const labels = series.map((p) => p.tenor);
+          const zEl = document.getElementById('trade-curve-zero-el');
+          const dEl = document.getElementById('trade-curve-df-el');
+          if (zEl) {
+            pillarChart(zEl, labels, series.map((p) => p.zero), '#2dd4bf', 'rgba(45, 212, 191, 0.22)');
+          }
+          if (dEl) {
+            pillarChart(dEl, labels, series.map((p) => p.df), '#60a5fa', 'rgba(96, 165, 250, 0.22)');
+          }
+        }
+
+        const expData = document.getElementById('trade-exposure-chart');
+        const expEl = document.getElementById('trade-exposure-profile-el');
+        if (expData && expEl) {
+          exposureChart(expEl, JSON.parse(expData.textContent));
+        }
+
+        const volData = document.getElementById('trade-vol-chart');
+        const volEl = document.getElementById('trade-vol-3d-el');
+        if (volData && volEl) {
+          volSurface3D(volEl, JSON.parse(volData.textContent));
+        }
+      })();
+    </script>
+  {% endif %}
+{% endblock %}
