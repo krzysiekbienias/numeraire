@@ -74,6 +74,10 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            # Explicit so runserver reloads pick up custom filters without a cold start.
+            'libraries': {
+                'journal_fmt': 'journal.templatetags.journal_fmt',
+            },
         },
     },
 ]

@@ -271,6 +271,124 @@ body {
   font-size: 0.9rem;
 }
 
+/* --- About / invite blurb ------------------------------------------------ */
+
+.nj-about {
+  padding: 1.1rem 1.25rem 1.15rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--nj-accent) 28%, var(--bs-border-color));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--nj-accent) 12%, transparent),
+      transparent 55%
+    ),
+    color-mix(in srgb, var(--bs-body-bg) 85%, #0f172a);
+}
+
+.nj-about-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--nj-accent);
+}
+
+.nj-about-lede {
+  margin: 0;
+  max-width: 42rem;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--bs-body-color);
+}
+
+.nj-about-sub {
+  margin: 0.55rem 0 0;
+  max-width: 40rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--bs-secondary-color);
+}
+
+/* --- What-if sandbox ----------------------------------------------------- */
+
+.nj-whatif {
+  border-color: color-mix(in srgb, var(--nj-accent) 35%, var(--bs-border-color));
+}
+
+.nj-whatif-form {
+  margin-bottom: 1rem;
+}
+
+.nj-whatif-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.nj-whatif-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-whatif-grid label span.hint {
+  font-size: 0.68rem;
+  color: var(--bs-secondary-color);
+  opacity: 0.85;
+}
+
+.nj-whatif-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  padding-bottom: 0.1rem;
+}
+
+.nj-whatif-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.nj-whatif-metrics .value .nj-rel-err,
+.nj-whatif td .nj-rel-err {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.72em;
+  font-weight: 500;
+  color: var(--bs-secondary-color);
+  vertical-align: baseline;
+}
+
+.nj-whatif-metrics-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.nj-whatif-metrics-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .nj-whatif-metrics-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .nj-whatif-metrics,
+  .nj-whatif-metrics-5 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .nj-filters {
   display: flex;
   flex-wrap: wrap;
@@ -383,7 +501,7 @@ body {
   font-size: 0.82rem;
 }
 
-.nj-compact-table > :not(caption) > * > * {
+.nj-compact-table> :not(caption)>*>* {
   padding: 0.35rem 0.65rem;
 }
 
@@ -401,7 +519,7 @@ body {
   gap: 0.35rem;
 }
 
-.nj-kv > div {
+.nj-kv>div {
   display: grid;
   grid-template-columns: 3.25rem 1fr;
   gap: 0.5rem;
@@ -410,7 +528,7 @@ body {
   border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color) 70%, transparent);
 }
 
-.nj-kv > div:last-child {
+.nj-kv>div:last-child {
   border-bottom: 0;
 }
 
@@ -670,21 +788,39 @@ body {
   right: 2rem;
   z-index: 3;
   color: rgba(255, 255, 255, 0.92);
-  max-width: 22rem;
+  max-width: 26rem;
+}
+
+.nj-login-art-kicker {
+  margin: 0 0 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--nj-accent);
 }
 
 .nj-login-art-caption strong {
   display: block;
-  font-size: 1.15rem;
+  font-size: 1.45rem;
   font-weight: 600;
-  margin-bottom: 0.4rem;
-  letter-spacing: -0.01em;
+  margin-bottom: 0.65rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
-.nj-login-art-caption span {
-  font-size: 0.88rem;
+.nj-login-art-caption p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.nj-login-art-caption .nj-login-art-note {
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.68);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .nj-login-photo-credit {

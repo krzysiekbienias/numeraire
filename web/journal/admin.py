@@ -130,3 +130,13 @@ class IndexDailyEodAdmin(ReadOnlyAdmin):
 # is composite (curve_id, as_of[, tenor]) and admin rejects such models outright
 # ("cannot be registered with admin"). They are read through the ORM in the curve views,
 # where a yield-curve chart is the useful presentation anyway.
+
+
+@admin.register(models.CatalogInstrumentType)
+class CatalogInstrumentTypeAdmin(ReadOnlyAdmin):
+    list_display = (
+        'code', 'family', 'maps_to_instrument_type', 'sort_order', 'is_active',
+        'example_product_id',
+    )
+    list_filter = ('family', 'is_active')
+    search_fields = ('code', 'maps_to_instrument_type', 'description_en')

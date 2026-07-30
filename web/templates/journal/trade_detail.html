@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load journal_fmt %}
 
 {% block title %}{{ trade.trade_id }}{% endblock %}
 {% block page_title %}{{ trade.trade_id }}{% endblock %}
@@ -40,11 +41,13 @@
       <h2>Definition &amp; mark</h2>
       {% if valuation %}
         <div class="nj-inline-vals small">
-          <span>PV <strong class="{% if valuation.pv_total != None and valuation.pv_total < 0 %}nj-pnl-neg{% elif valuation.pv_total != None and valuation.pv_total > 0 %}nj-pnl-pos{% endif %}">{% if valuation.pv_total != None %}{{ valuation.pv_total|floatformat:2 }}{% else %}—{% endif %}</strong></span>
-          <span>PnL day <strong class="{% if valuation.pnl_daily != None and valuation.pnl_daily < 0 %}nj-pnl-neg{% elif valuation.pnl_daily != None and valuation.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if valuation.pnl_daily != None %}{{ valuation.pnl_daily|floatformat:2 }}{% else %}—{% endif %}</strong></span>
-          <span>Δ {% if valuation.delta_total != None %}{{ valuation.delta_total|floatformat:2 }}{% else %}—{% endif %}</span>
-          <span>ν {% if valuation.vega_total != None %}{{ valuation.vega_total|floatformat:2 }}{% else %}—{% endif %}</span>
-          <span>Θ {% if valuation.theta_total != None %}{{ valuation.theta_total|floatformat:2 }}{% else %}—{% endif %}</span>
+          <span>PV <strong class="{% if valuation.pv_total != None and valuation.pv_total < 0 %}nj-pnl-neg{% elif valuation.pv_total != None and valuation.pv_total > 0 %}nj-pnl-pos{% endif %}">{% if valuation.pv_total != None %}{{ valuation.pv_total|nj_num:2 }}{% else %}—{% endif %}</strong></span>
+          <span>PnL day <strong class="{% if valuation.pnl_daily != None and valuation.pnl_daily < 0 %}nj-pnl-neg{% elif valuation.pnl_daily != None and valuation.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if valuation.pnl_daily != None %}{{ valuation.pnl_daily|nj_num:2 }}{% else %}—{% endif %}</strong></span>
+          <span>Δ {% if valuation.delta_total != None %}{{ valuation.delta_total|nj_num:2 }}{% else %}—{% endif %}</span>
+          <span>ν {% if valuation.vega_total != None %}{{ valuation.vega_total|nj_num:2 }}{% else %}—{% endif %}</span>
+          <span title="Model stores θ per calendar year; UI shows θ/365 for desk readability. Year figure: {% if valuation.theta_total != None %}{{ valuation.theta_total|nj_num:2 }}{% else %}—{% endif %}">
+            Θ/day {% if valuation.theta_total != None %}{{ valuation.theta_total|nj_theta_day:2 }}{% else %}—{% endif %}
+          </span>
         </div>
       {% endif %}
     </div>
@@ -60,7 +63,9 @@
               <th class="nj-num">K</th>
               <th>Exp</th>
               <th class="nj-num">Qty</th>
+              <th class="nj-num">Mult</th>
               <th class="nj-num">Exec</th>
+              <th class="nj-num">PV unit</th>
               <th class="nj-num">PV</th>
               <th class="nj-num">PnL</th>
             </tr>
@@ -76,14 +81,17 @@
                     {{ row.equity.instrument_type }}{% if row.equity.option_type %}/{{ row.equity.option_type|slice:":1"|upper }}{% endif %}
                   {% else %}—{% endif %}
                 </td>
-                <td class="nj-num">{% if row.equity and row.equity.strike != None %}{{ row.equity.strike|floatformat:2 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{% if row.equity and row.equity.strike != None %}{{ row.equity.strike|nj_num:2 }}{% else %}—{% endif %}</td>
                 <td class="small">{% if row.leg.product.expiry_date %}{{ row.leg.product.expiry_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
                 <td class="nj-num">{{ row.leg.quantity|floatformat:0 }}</td>
-                <td class="nj-num">{{ row.leg.execution_price|floatformat:2 }}</td>
+                <td class="nj-num">{{ row.leg.product.contract_size|floatformat:0 }}</td>
+                <td class="nj-num">{{ row.leg.execution_price|nj_num:2 }}</td>
                 {% if row.mtm %}
-                  <td class="nj-num {% if row.mtm.pv_total < 0 %}nj-pnl-neg{% elif row.mtm.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.mtm.pv_total|floatformat:2 }}</td>
-                  <td class="nj-num {% if row.mtm.pnl_daily != None and row.mtm.pnl_daily < 0 %}nj-pnl-neg{% elif row.mtm.pnl_daily != None and row.mtm.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.mtm.pnl_daily != None %}{{ row.mtm.pnl_daily|floatformat:2 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{{ row.mtm.pv_unit|nj_num:2 }}</td>
+                  <td class="nj-num {% if row.mtm.pv_total < 0 %}nj-pnl-neg{% elif row.mtm.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.mtm.pv_total|nj_num:2 }}</td>
+                  <td class="nj-num {% if row.mtm.pnl_daily != None and row.mtm.pnl_daily < 0 %}nj-pnl-neg{% elif row.mtm.pnl_daily != None and row.mtm.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.mtm.pnl_daily != None %}{{ row.mtm.pnl_daily|nj_num:2 }}{% else %}—{% endif %}</td>
                 {% else %}
+                  <td class="nj-num text-secondary">—</td>
                   <td class="nj-num text-secondary">—</td>
                   <td class="nj-num text-secondary">—</td>
                 {% endif %}
@@ -121,7 +129,7 @@
           <dl class="nj-kv">
             <div>
               <dt>Spot</dt>
-              <dd>{{ primary_market.mtm.underlying_spot|floatformat:4 }}</dd>
+              <dd>{{ primary_market.mtm.underlying_spot|nj_num:4 }}</dd>
             </div>
             <div>
               <dt>IV</dt>
@@ -283,7 +291,7 @@
                   <tr>
                     <td>{{ row.leg.leg_id }}</td>
                     {% if row.mtm %}
-                      <td class="nj-num">{{ row.mtm.underlying_spot|floatformat:4 }}</td>
+                      <td class="nj-num">{{ row.mtm.underlying_spot|nj_num:4 }}</td>
                       <td class="nj-num">{{ row.mtm.implied_vol_used|floatformat:4 }}</td>
                       <td class="nj-num">{{ row.mtm.risk_free_rate|floatformat:6 }}</td>
                       <td class="nj-num">{{ row.mtm.years_to_maturity|floatformat:4 }}</td>
@@ -307,12 +315,217 @@
     </div>
   </div>
 
+  {% if whatif %}
+    <div class="nj-panel mt-2 nj-whatif" id="nj-whatif">
+      <div class="nj-panel-head">
+        <h2>What-if</h2>
+        <span class="small text-secondary">
+          sandbox · {{ whatif.caps.label }}
+          · {{ whatif.caps.analytic_name }}
+          {% if whatif.caps.uses_mc %} · + GBM MC{% endif %}
+          · not written to SQLite
+          {% if whatif.replay_gap != None %}
+            · replay gap {{ whatif.replay_gap|nj_num:2 }}
+          {% endif %}
+        </span>
+      </div>
+      <div class="nj-panel-body">
+        {% if whatif.caps.kind == 'unsupported' %}
+          <div class="nj-empty">
+            No what-if engine for the instrument types on this trade yet.
+          </div>
+        {% else %}
+        <form method="get" class="nj-whatif-form" action="{{ request.path }}#nj-whatif"
+              data-preserve-scroll="1">
+          {% if as_of %}
+            <input type="hidden" name="as_of" value="{{ as_of|date:'Y-m-d' }}">
+          {% endif %}
+          <div class="nj-whatif-grid">
+            <label>
+              <span>Spot</span>
+              <input class="form-control form-control-sm" type="number" step="any" name="wf_spot"
+                     value="{{ whatif.inputs.spot }}">
+              <span class="hint">base {{ whatif.baseline.spot|nj_num:4 }}</span>
+            </label>
+            {% if whatif.caps.uses_vol %}
+              <label>
+                <span>IV (σ)</span>
+                <input class="form-control form-control-sm" type="number" step="any" name="wf_vol"
+                       value="{{ whatif.inputs.vol }}">
+                <span class="hint">base {{ whatif.baseline.vol|floatformat:4 }}</span>
+              </label>
+            {% endif %}
+            <label>
+              <span>r</span>
+              <input class="form-control form-control-sm" type="number" step="any" name="wf_rate"
+                     value="{{ whatif.inputs.rate }}">
+              <span class="hint">base {{ whatif.baseline.rate|floatformat:6 }}</span>
+            </label>
+            <label>
+              <span>q</span>
+              <input class="form-control form-control-sm" type="number" step="any" name="wf_div"
+                     value="{{ whatif.inputs.div }}">
+              <span class="hint">base {{ whatif.baseline.div|floatformat:6 }}</span>
+            </label>
+            <label>
+              <span>τ (years)</span>
+              <input class="form-control form-control-sm" type="number" step="any" name="wf_tau"
+                     value="{{ whatif.inputs.tau }}">
+              <span class="hint">base {{ whatif.baseline.tau|floatformat:6 }}</span>
+            </label>
+            {% if whatif.caps.uses_mc %}
+              <label>
+                <span>MC paths</span>
+                <input class="form-control form-control-sm" type="number" step="1000" min="100" max="100000"
+                       name="wf_mc_paths" value="{{ whatif.inputs.mc_paths }}">
+                <span class="hint">antithetic GBM · max 100k</span>
+              </label>
+              <label>
+                <span>MC seed</span>
+                <input class="form-control form-control-sm" type="number" step="1" min="0"
+                       name="wf_mc_seed" value="{{ whatif.inputs.mc_seed }}">
+                <span class="hint">reproducible</span>
+              </label>
+            {% endif %}
+            <div class="nj-whatif-actions">
+              <button type="submit" class="btn btn-sm btn-primary">Reprice</button>
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="?{% if as_of %}as_of={{ as_of|date:'Y-m-d' }}{% endif %}">Reset</a>
+            </div>
+          </div>
+        </form>
+
+        {% if whatif.result.supported_count %}
+          <div class="nj-whatif-metrics {% if whatif.caps.uses_mc %}nj-whatif-metrics-5{% else %}nj-whatif-metrics-3{% endif %}">
+            <div class="nj-metric">
+              <div class="label">Official PV</div>
+              <div class="value">{{ whatif.result.baseline_pv_total|nj_num:2 }}</div>
+              <div class="hint">C++ MTM</div>
+            </div>
+            <div class="nj-metric">
+              <div class="label">Analytic PV</div>
+              <div class="value">{{ whatif.result.whatif_pv_total|nj_num:2 }}</div>
+              <div class="hint">{{ whatif.caps.analytic_name }}</div>
+            </div>
+            <div class="nj-metric">
+              <div class="label">Δ vs official</div>
+              <div class="value {% if whatif.result.delta_pv < 0 %}nj-pnl-neg{% elif whatif.result.delta_pv > 0 %}nj-pnl-pos{% endif %}">
+                {{ whatif.result.delta_pv|nj_num:2 }}
+              </div>
+              <div class="hint">{% if whatif.active %}shocked inputs{% else %}replay{% endif %}</div>
+            </div>
+            {% if whatif.caps.uses_mc %}
+              <div class="nj-metric">
+                <div class="label">MC PV</div>
+                <div class="value">
+                  {% if whatif.result.mc_pv_total != None %}{{ whatif.result.mc_pv_total|nj_num:2 }}{% else %}—{% endif %}
+                </div>
+                <div class="hint">
+                  {% if whatif.result.mc_paths %}{{ whatif.result.mc_paths|nj_num:0 }} paths{% else %}off{% endif %}
+                  {% if whatif.result.mc_stderr_total != None %}
+                    · ±{{ whatif.result.mc_stderr_total|nj_num:2 }}
+                  {% endif %}
+                </div>
+              </div>
+              <div class="nj-metric">
+                <div class="label">MC − analytic</div>
+                <div class="value {% if whatif.result.mc_minus_analytic != None and whatif.result.mc_minus_analytic < 0 %}nj-pnl-neg{% elif whatif.result.mc_minus_analytic != None and whatif.result.mc_minus_analytic > 0 %}nj-pnl-pos{% endif %}">
+                  {% if whatif.result.mc_minus_analytic != None %}
+                    {{ whatif.result.mc_minus_analytic|nj_num:2 }}
+                    {% if whatif.result.mc_rel_error != None %}
+                      <span class="nj-rel-err">({{ whatif.result.mc_rel_error|nj_pct:3 }})</span>
+                    {% endif %}
+                  {% else %}—{% endif %}
+                </div>
+                <div class="hint">abs · (rel vs analytic)</div>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="nj-scroll-table mt-2">
+            <table class="table table-sm mb-0 nj-compact-table">
+              <thead>
+                <tr>
+                  <th>Leg</th>
+                  <th>Shape</th>
+                  <th>OK?</th>
+                  <th class="nj-num">Official</th>
+                  <th class="nj-num">Analytic</th>
+                  {% if whatif.caps.uses_mc %}
+                    <th class="nj-num">MC</th>
+                    <th class="nj-num">MC−BS</th>
+                  {% endif %}
+                  <th class="nj-num">Δ vs off.</th>
+                  <th class="nj-num">Δ pos</th>
+                  {% if whatif.caps.uses_option_greeks %}
+                    <th class="nj-num">ν pos</th>
+                  {% endif %}
+                  <th class="nj-num">Θ/day</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for leg in whatif.result.legs %}
+                  <tr>
+                    <td class="small">{{ leg.leg_id }}</td>
+                    <td class="small text-secondary">{{ leg.caps.kind }}</td>
+                    <td>
+                      {% if leg.supported %}
+                        <span class="badge text-bg-success">yes</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary" title="{{ leg.reason }}">no</span>
+                      {% endif %}
+                    </td>
+                    <td class="nj-num">{% if leg.baseline_pv_total != None %}{{ leg.baseline_pv_total|nj_num:2 }}{% else %}—{% endif %}</td>
+                    <td class="nj-num">{% if leg.whatif_pv_total != None %}{{ leg.whatif_pv_total|nj_num:2 }}{% else %}—{% endif %}</td>
+                    {% if whatif.caps.uses_mc %}
+                      <td class="nj-num" title="{% if leg.mc_stderr_total != None %}stderr {{ leg.mc_stderr_total|nj_num:2 }}{% endif %}">
+                        {% if leg.mc_pv_total != None %}{{ leg.mc_pv_total|nj_num:2 }}{% else %}—{% endif %}
+                      </td>
+                      <td class="nj-num {% if leg.mc_minus_analytic != None and leg.mc_minus_analytic < 0 %}nj-pnl-neg{% elif leg.mc_minus_analytic != None and leg.mc_minus_analytic > 0 %}nj-pnl-pos{% endif %}">
+                        {% if leg.mc_minus_analytic != None %}
+                          {{ leg.mc_minus_analytic|nj_num:2 }}
+                          {% if leg.mc_rel_error != None %}
+                            <span class="nj-rel-err">({{ leg.mc_rel_error|nj_pct:3 }})</span>
+                          {% endif %}
+                        {% else %}—{% endif %}
+                      </td>
+                    {% endif %}
+                    <td class="nj-num {% if leg.delta_pv != None and leg.delta_pv < 0 %}nj-pnl-neg{% elif leg.delta_pv != None and leg.delta_pv > 0 %}nj-pnl-pos{% endif %}">
+                      {% if leg.delta_pv != None %}{{ leg.delta_pv|nj_num:2 }}{% else %}—{% endif %}
+                    </td>
+                    <td class="nj-num">{% if leg.whatif_delta_total != None %}{{ leg.whatif_delta_total|nj_num:2 }}{% else %}—{% endif %}</td>
+                    {% if whatif.caps.uses_option_greeks %}
+                      <td class="nj-num">{% if leg.whatif_vega_total != None %}{{ leg.whatif_vega_total|nj_num:2 }}{% else %}—{% endif %}</td>
+                    {% endif %}
+                    <td class="nj-num">{% if leg.whatif_theta_day != None %}{{ leg.whatif_theta_day|nj_num:2 }}{% else %}—{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="nj-empty">No supported legs to reprice on this trade.</div>
+        {% endif %}
+        <p class="small text-secondary mb-0 mt-2">
+          {% if whatif.caps.kind == 'linear' %}
+            Linear product: PV = S e<sup>−qτ</sup> − K e<sup>−rτ</sup>. Vol and MC are hidden — they do not enter the mark.
+          {% else %}
+            Non-linear: analytic Black–Scholes{% if whatif.caps.uses_mc %}; MC is one-step GBM with antithetic normals (sandbox, not C++ CCR){% endif %}.
+          {% endif %}
+          Nothing is written to SQLite.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
   {# History — scroll, not endless page #}
   <div class="nj-panel mt-2">
     <div class="nj-panel-head">
       <h2>MTM history</h2>
       <span class="small text-secondary">
         {% if mtm_history %}{{ mtm_history|length }} dates · click row to change as_of{% else %}none{% endif %}
+        · Θ shown as /day (model stores /yr)
       </span>
     </div>
     <div class="nj-panel-body tight">
@@ -327,7 +540,7 @@
                 <th class="nj-num">PnL ince.</th>
                 <th class="nj-num">Δ</th>
                 <th class="nj-num">ν</th>
-                <th class="nj-num">Θ</th>
+                <th class="nj-num" title="θ_total / 365 · model is per calendar year">Θ/day</th>
               </tr>
             </thead>
             <tbody>
@@ -335,12 +548,12 @@
                 <tr {% if as_of and row.as_of == as_of %}class="table-active"{% endif %}
                     onclick="window.location='?as_of={{ row.as_of|date:'Y-m-d' }}'">
                   <td>{{ row.as_of|date:"Y-m-d" }}</td>
-                  <td class="nj-num {% if row.pv_total < 0 %}nj-pnl-neg{% elif row.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.pv_total|floatformat:2 }}</td>
-                  <td class="nj-num {% if row.pnl_daily != None and row.pnl_daily < 0 %}nj-pnl-neg{% elif row.pnl_daily != None and row.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.pnl_daily != None %}{{ row.pnl_daily|floatformat:2 }}{% else %}—{% endif %}</td>
-                  <td class="nj-num">{% if row.pnl_inception != None %}{{ row.pnl_inception|floatformat:2 }}{% else %}—{% endif %}</td>
-                  <td class="nj-num">{{ row.delta_total|floatformat:2 }}</td>
-                  <td class="nj-num">{{ row.vega_total|floatformat:2 }}</td>
-                  <td class="nj-num">{{ row.theta_total|floatformat:2 }}</td>
+                  <td class="nj-num {% if row.pv_total < 0 %}nj-pnl-neg{% elif row.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.pv_total|nj_num:2 }}</td>
+                  <td class="nj-num {% if row.pnl_daily != None and row.pnl_daily < 0 %}nj-pnl-neg{% elif row.pnl_daily != None and row.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.pnl_daily != None %}{{ row.pnl_daily|nj_num:2 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{% if row.pnl_inception != None %}{{ row.pnl_inception|nj_num:2 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{{ row.delta_total|nj_num:2 }}</td>
+                  <td class="nj-num">{{ row.vega_total|nj_num:2 }}</td>
+                  <td class="nj-num" title="{% if row.theta_total != None %}{{ row.theta_total|nj_num:2 }} /yr{% endif %}">{{ row.theta_total|nj_theta_day:2 }}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -356,6 +569,33 @@
 {% endblock %}
 
 {% block extra_js %}
+  {% if whatif %}
+    <script>
+      (function () {
+        const KEY = 'nj-whatif-scroll';
+        const form = document.querySelector('form.nj-whatif-form[data-preserve-scroll]');
+        if (form) {
+          form.addEventListener('submit', function () {
+            try { sessionStorage.setItem(KEY, String(window.scrollY)); } catch (e) {}
+          });
+        }
+        try {
+          const raw = sessionStorage.getItem(KEY);
+          if (raw != null) {
+            sessionStorage.removeItem(KEY);
+            const y = Number(raw);
+            if (!Number.isNaN(y)) {
+              // After layout / charts: restore exact pre-Reprice scroll.
+              const restore = () => window.scrollTo(0, y);
+              restore();
+              requestAnimationFrame(restore);
+              window.addEventListener('load', restore, { once: true });
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+  {% endif %}
   {% if underlier_chart or pv_chart or curve_chart or exposure_chart or vol_chart %}
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     {% if vol_chart %}
@@ -367,6 +607,13 @@
 
         function lineChart(el, dates, values, asOf, color, fillTop) {
           const chart = echarts.init(el, null, { renderer: 'canvas' });
+          const money = (v, d) => {
+            if (v == null || Number.isNaN(Number(v))) return '—';
+            return Number(v).toLocaleString('en-US', {
+              minimumFractionDigits: d,
+              maximumFractionDigits: d,
+            });
+          };
           const end = dates[dates.length - 1] || '';
           let start = dates[0] || '';
           if (end) {
@@ -390,7 +637,7 @@
             grid: { left: 48, right: 12, top: 12, bottom: 28 },
             tooltip: {
               trigger: 'axis',
-              valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(4)),
+              valueFormatter: (v) => money(v, Math.abs(Number(v)) >= 1000 ? 2 : 4),
             },
             xAxis: {
               type: 'category',
@@ -407,7 +654,7 @@
               axisLabel: {
                 color: '#94a3b8',
                 fontSize: 10,
-                formatter: (v) => Number(v).toFixed(Math.abs(v) >= 1000 ? 0 : 2),
+                formatter: (v) => money(v, Math.abs(v) >= 1000 ? 0 : 2),
               },
             },
             dataZoom: [
@@ -479,7 +726,14 @@
 
         function exposureChart(el, series) {
           const labels = series.map((p) => p.pillar);
-          const fmt = (v) => {
+          const money = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return '—';
+            return Number(v).toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            });
+          };
+          const axisFmt = (v) => {
             const n = Number(v);
             if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
             if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'k';
@@ -490,7 +744,7 @@
             animationDuration: 250,
             backgroundColor: 'transparent',
             grid: { left: 48, right: 12, top: 22, bottom: 28 },
-            tooltip: { trigger: 'axis', valueFormatter: (v) => (v == null ? '—' : fmt(v)) },
+            tooltip: { trigger: 'axis', valueFormatter: money },
             legend: { top: 0, right: 0, textStyle: { color: '#94a3b8', fontSize: 10 } },
             xAxis: {
               type: 'category', data: labels,
@@ -501,7 +755,7 @@
             yAxis: {
               type: 'value', scale: true,
               splitLine: { lineStyle: { color: '#1e293b' } },
-              axisLabel: { color: '#94a3b8', fontSize: 10, formatter: fmt },
+              axisLabel: { color: '#94a3b8', fontSize: 10, formatter: axisFmt },
             },
             series: [
               {

@@ -19,10 +19,13 @@ from journal.exposure import (
     portfolio_exposure_profile,
     trade_exposure_profile,
 )
+from journal.inventory import is_priceable, pricing_notes
 from journal.market import list_underliers, resolve_underlier
 from journal.models import (
+    CatalogInstrumentType,
     DiscountCurveEod,
     Product,
+    ProductEquity,
     Trade,
     TradeLeg,
     TradeLegExposureEod,
@@ -34,6 +37,14 @@ from journal.surfaces import (
     list_surface_underlyings,
     load_surface_snapshot,
     nearest_surface_as_of,
+)
+from journal.whatif import (
+    baseline_inputs_from_mtm,
+    capabilities_for_equity,
+    inputs_are_shocked,
+    merge_trade_capabilities,
+    parse_whatif_inputs,
+    run_trade_whatif,
 )
 
 
@@ -327,6 +338,34 @@ class TradeDetailView(DetailView):
                         'x_label': snap['x_label'],
                     }
 
+        # Sandbox what-if: Python engines from MTM inputs — never writes to SQLite.
+        whatif_ctx = None
+        if primary is not None and primary.get('mtm') is not None:
+            baseline = baseline_inputs_from_mtm(primary['mtm'])
+            if baseline is not None:
+                trade_caps = merge_trade_capabilities(
+                    [capabilities_for_equity(row['equity']) for row in market_rows]
+                )
+                shocked = parse_whatif_inputs(
+                    self.request.GET, baseline, caps=trade_caps
+                )
+                result = run_trade_whatif(market_rows, shocked, caps=trade_caps)
+                replay = run_trade_whatif(market_rows, baseline, caps=trade_caps)
+                replay_gap = None
+                if (
+                    replay.get('whatif_pv_total') is not None
+                    and replay.get('baseline_pv_total') is not None
+                ):
+                    replay_gap = replay['whatif_pv_total'] - replay['baseline_pv_total']
+                whatif_ctx = {
+                    'baseline': baseline,
+                    'inputs': shocked,
+                    'result': result,
+                    'caps': trade_caps,
+                    'replay_gap': replay_gap,
+                    'active': inputs_are_shocked(baseline, shocked, trade_caps),
+                }
+
         context.update(
             {
                 'as_of': as_of,
@@ -346,6 +385,7 @@ class TradeDetailView(DetailView):
                 'exposure_meta': exposure_meta,
                 'vol_chart': vol_chart,
                 'vol_meta': vol_meta,
+                'whatif': whatif_ctx,
             }
         )
         return context
@@ -635,4 +675,42 @@ class SurfaceView(TemplateView):
                     'latest_surface_as_of': None,
                 }
             )
+        return context
+
+
+class InventoryView(TemplateView):
+    """Catalog of instrument types vs what the C++ ProductFactory can price."""
+
+    template_name = 'journal/inventory.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            book_counts = {
+                row['instrument_type']: row['n']
+                for row in ProductEquity.objects.order_by()
+                .values('instrument_type')
+                .annotate(n=Count('product_id'))
+            }
+            rows = []
+            for cat in CatalogInstrumentType.objects.all():
+                maps = cat.maps_to_instrument_type
+                rows.append(
+                    {
+                        'cat': cat,
+                        'priceable': is_priceable(maps),
+                        'notes': pricing_notes(maps),
+                        'book_count': book_counts.get(maps, 0),
+                    }
+                )
+            context['rows'] = rows
+            context['priceable_count'] = sum(1 for r in rows if r['priceable'])
+            context['catalog_count'] = len(rows)
+            context['book_product_count'] = sum(book_counts.values())
+        except OperationalError as exc:
+            context['db_error'] = str(exc)
+            context['rows'] = []
+            context['priceable_count'] = 0
+            context['catalog_count'] = 0
+            context['book_product_count'] = 0
         return context

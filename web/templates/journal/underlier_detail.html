@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static journal_fmt %}
 
 {% block title %}{{ ticker }}{% endblock %}
 {% block page_title %}{{ ticker }}{% endblock %}
@@ -24,23 +24,23 @@
       <div class="col-6 col-md-3">
         <div class="nj-metric">
           <div class="label">Last close</div>
-          <div class="value">{{ latest.close|floatformat:4 }}</div>
+          <div class="value">{{ latest.close|nj_num:4 }}</div>
           <div class="hint">{{ latest.as_of|date:"Y-m-d" }} · {{ latest.currency }}</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
         <div class="nj-metric">
           <div class="label">Open</div>
-          <div class="value" style="font-size:1.15rem">{{ latest.open|floatformat:4 }}</div>
+          <div class="value" style="font-size:1.15rem">{{ latest.open|nj_num:4 }}</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
         <div class="nj-metric">
           <div class="label">High / Low</div>
           <div class="value" style="font-size:1.15rem">
-            {{ latest.high|floatformat:4 }}
+            {{ latest.high|nj_num:4 }}
             <span class="text-secondary">/</span>
-            {{ latest.low|floatformat:4 }}
+            {{ latest.low|nj_num:4 }}
           </div>
         </div>
       </div>
@@ -48,7 +48,7 @@
         <div class="nj-metric">
           <div class="label">Volume</div>
           <div class="value" style="font-size:1.15rem">
-            {% if latest.volume != None %}{{ latest.volume|floatformat:0 }}{% else %}—{% endif %}
+            {% if latest.volume != None %}{{ latest.volume|nj_num:0 }}{% else %}—{% endif %}
           </div>
           <div class="hint">{{ latest.source }}</div>
         </div>
@@ -103,12 +103,12 @@
             {% for bar in bars %}
               <tr>
                 <td>{{ bar.as_of|date:"Y-m-d" }}</td>
-                <td class="nj-num">{{ bar.open|floatformat:4 }}</td>
-                <td class="nj-num">{{ bar.high|floatformat:4 }}</td>
-                <td class="nj-num">{{ bar.low|floatformat:4 }}</td>
-                <td class="nj-num">{{ bar.close|floatformat:4 }}</td>
-                <td class="nj-num">{% if bar.volume != None %}{{ bar.volume|floatformat:0 }}{% else %}—{% endif %}</td>
-                <td class="nj-num">{% if bar.vwap != None %}{{ bar.vwap|floatformat:4 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{{ bar.open|nj_num:4 }}</td>
+                <td class="nj-num">{{ bar.high|nj_num:4 }}</td>
+                <td class="nj-num">{{ bar.low|nj_num:4 }}</td>
+                <td class="nj-num">{{ bar.close|nj_num:4 }}</td>
+                <td class="nj-num">{% if bar.volume != None %}{{ bar.volume|nj_num:0 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{% if bar.vwap != None %}{{ bar.vwap|nj_num:4 }}{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>

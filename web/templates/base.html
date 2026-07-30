@@ -50,6 +50,10 @@
            class="{% if request.resolver_match.url_name == 'surfaces' %}active{% endif %}">
           <i class="bi bi-box"></i> Surfaces
         </a>
+        <a href="{% url 'journal:inventory' %}"
+           class="{% if request.resolver_match.url_name == 'inventory' %}active{% endif %}">
+          <i class="bi bi-collection"></i> Inventory
+        </a>
         <div class="nj-nav-label">Tools</div>
         <a href="{% url 'admin:index' %}">
           <i class="bi bi-table"></i> Admin tables

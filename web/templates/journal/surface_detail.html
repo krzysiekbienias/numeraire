@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load journal_fmt %}
 
 {% block title %}Vol surface{% endblock %}
 {% block page_title %}Vol surface{% endblock %}
@@ -8,7 +9,7 @@
       <strong>{{ underlying_id }}</strong>
       · surface as_of <strong>{{ as_of|date:"Y-m-d" }}</strong>
       · {{ contract_type }}
-      {% if snapshot %}· spot {{ snapshot.header.spot_used|floatformat:2 }} · {{ vol_chart|length }} pts{% endif %}
+      {% if snapshot %}· spot {{ snapshot.header.spot_used|nj_num:2 }} · {{ vol_chart|length }} pts{% endif %}
     {% else %}
       Implied BS EOD surface — sparse market points in 3D
     {% endif %}
@@ -59,7 +60,7 @@
   <div class="alert alert-secondary py-2 small mb-3" role="status">
     <strong>Surface date:</strong> {{ as_of|date:"Y-m-d" }}
     · {{ snapshot.header.surface_kind }} / {{ snapshot.header.model }}
-    · spot <strong>{{ snapshot.header.spot_used|floatformat:4 }}</strong>
+    · spot <strong>{{ snapshot.header.spot_used|nj_num:4 }}</strong>
     · r {{ snapshot.header.risk_free_rate|floatformat:6 }}
     · q {{ snapshot.header.dividend_yield|floatformat:6 }}
     · {{ vol_chart|length }} plotted point{{ vol_chart|length|pluralize }}
@@ -114,7 +115,7 @@
               <tr>
                 <td class="small">{{ p.expiry|default:"—" }}</td>
                 <td class="nj-num">{{ p.t|floatformat:4 }}</td>
-                <td class="nj-num">{{ p.strike|floatformat:2 }}</td>
+                <td class="nj-num">{{ p.strike|nj_num:2 }}</td>
                 <td class="nj-num">{% if p.log_m != None %}{{ p.log_m|floatformat:4 }}{% else %}—{% endif %}</td>
                 <td class="small">{{ p.type }}</td>
                 <td class="nj-num">{{ p.iv|floatformat:4 }}</td>

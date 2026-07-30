@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load journal_fmt %}
 
 {% block title %}Underliers{% endblock %}
 {% block page_title %}Underliers{% endblock %}
@@ -50,7 +51,7 @@
                 <td>{{ row.first_as_of|date:"Y-m-d" }}</td>
                 <td>{{ row.last_as_of|date:"Y-m-d" }}</td>
                 <td class="nj-num">
-                  {% if row.last_close != None %}{{ row.last_close|floatformat:4 }}{% else %}—{% endif %}
+                  {% if row.last_close != None %}{{ row.last_close|nj_num:4 }}{% else %}—{% endif %}
                   {% if row.currency %}<span class="text-secondary small"> {{ row.currency }}</span>{% endif %}
                 </td>
                 <td class="small text-secondary">{{ row.source|default:"—" }}</td>

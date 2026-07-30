@@ -25,7 +25,7 @@
         </div>
 
         <h1>Sign in</h1>
-        <p class="lede">Review MTM, exposure, and market data produced by the C++ batches.</p>
+        <p class="lede">Enter your credentials to open the book.</p>
 
         {% if form.errors %}
           <div class="alert alert-danger py-2" role="alert">
@@ -84,16 +84,25 @@
       </footer>
     </section>
 
-    <aside class="nj-login-art" aria-hidden="true">
-      <div class="nj-login-art-base"></div>
-      <figure class="nj-login-art-photo">
+    <aside class="nj-login-art">
+      <div class="nj-login-art-base" aria-hidden="true"></div>
+      <figure class="nj-login-art-photo" aria-hidden="true">
         <img src="{% static 'img/isaac-smith-6EnTPvPPL6I-unsplash.jpg' %}"
              alt="" width="1200" height="800" decoding="async">
       </figure>
-      <div class="nj-login-art-scrim"></div>
+      <div class="nj-login-art-scrim" aria-hidden="true"></div>
       <div class="nj-login-art-caption">
-        <strong>Your book, at a glance</strong>
-        <span>Official marks and CCR profiles from SQLite — no recalculation in the browser.</span>
+        <p class="nj-login-art-kicker">Numeraire Journal</p>
+        <strong>Your window onto the overnight book</strong>
+        <p>
+          Marks, greeks, curves, surfaces, and exposure — written by the C++
+          batches into SQLite. Browse what settled, challenge a number, and see
+          which instruments the library can already price.
+        </p>
+        <p class="nj-login-art-note">
+          Read-only by design: the engine owns the schema; Journal is here so
+          risk and trading can review it without opening a notebook.
+        </p>
       </div>
       <p class="nj-login-photo-credit">Photo · Isaac Smith / Unsplash</p>
     </aside>

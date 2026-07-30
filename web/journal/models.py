@@ -363,3 +363,25 @@ class ParCurvePointEod(models.Model):
 
     def __str__(self):
         return f'{self.curve_id} @ {self.as_of} / {self.tenor}'
+
+
+class CatalogInstrumentType(models.Model):
+    """Reference codes for equity instrument types (seed / UI inventory)."""
+
+    code = models.TextField(primary_key=True)
+    family = models.TextField()
+    maps_to_instrument_type = models.TextField()
+    description_en = models.TextField()
+    example_product_id = models.TextField()
+    sort_order = models.IntegerField()
+    is_active = models.IntegerField()
+    created_at = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = 'catalog_instrument_type'
+        ordering = ['sort_order', 'code']
+        verbose_name = 'Catalog instrument type'
+
+    def __str__(self):
+        return self.code
