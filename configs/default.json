@@ -20,6 +20,10 @@
         "monte_carlo": {
             "default_paths": 1000,
             "default_seed": 42
+        },
+        "binomial": {
+            "_comment_": "CRR tree (PricingEngineType::kBinomialTree). Read by BinomialBlackScholesEquityPricer (overridable via NUMERAIRE_BINOMIAL_STEPS). American early exercise is checked at every tree step (dt = T / default_steps); not a Bermudan calendar.",
+            "default_steps": 200
         }
     },
     "database": {
