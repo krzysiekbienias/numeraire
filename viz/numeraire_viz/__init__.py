@@ -34,6 +34,23 @@ from numeraire_viz.scenario_paths import (
     plot_terminal_distribution,
     resolve_scenario_export,
 )
+from numeraire_viz.exposure_paths import (
+    aggregate_trade_exposure_paths,
+    list_leg_exposure_exports,
+    load_leg_exposure_paths,
+    load_trade_leg_exposure_eod,
+    plot_exposure_profile,
+    plot_leg_exposure_paths,
+    resolve_leg_exposure_export,
+)
+from numeraire_viz.trade_exposure_review import (
+    aggregate_trade_exposure_eod_profile,
+    aggregate_trade_net_exposure_paths,
+    aggregate_trade_sum_leg_exposure_paths,
+    load_trade_underlyings,
+    plot_trade_scenario_and_exposure,
+    select_plot_paths,
+)
 
 __all__ = [
     "default_db_path",
@@ -63,4 +80,17 @@ __all__ = [
     "plot_scenario_paths",
     "plot_scenario_paths_grid",
     "plot_terminal_distribution",
+    "list_leg_exposure_exports",
+    "resolve_leg_exposure_export",
+    "load_leg_exposure_paths",
+    "load_trade_leg_exposure_eod",
+    "plot_leg_exposure_paths",
+    "plot_exposure_profile",
+    "aggregate_trade_exposure_paths",
+    "load_trade_underlyings",
+    "select_plot_paths",
+    "aggregate_trade_sum_leg_exposure_paths",
+    "aggregate_trade_net_exposure_paths",
+    "aggregate_trade_exposure_eod_profile",
+    "plot_trade_scenario_and_exposure",
 ]

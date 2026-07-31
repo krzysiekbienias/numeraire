@@ -87,7 +87,7 @@ def plot_scenario_paths(
     df: pd.DataFrame,
     *,
     underlying_id: str | None = None,
-    max_paths: int | None = None,
+    max_paths: int | None = 50,
     use_year_fraction: bool = True,
     title: str | None = None,
     figsize: tuple[float, float] = (10, 5.5),
@@ -139,7 +139,7 @@ def plot_scenario_paths(
 def plot_scenario_paths_grid(
     df: pd.DataFrame,
     *,
-    max_paths: int | None = None,
+    max_paths: int | None = 50,
     use_year_fraction: bool = True,
     ncol: int = 2,
     figsize_per_axis: tuple[float, float] = (5.5, 4.0),
