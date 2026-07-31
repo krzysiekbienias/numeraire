@@ -92,3 +92,15 @@ __pycache__/
 .venv-viz/
 .ipynb_checkpoints/
 viz/**/.ipynb_checkpoints/
+*.egg-info
+
+# --- uv-managed environments (uv.lock stays committed) ---
+web/.venv/
+viz/.venv/
+
+# --- django web (journal) ---
+web/web_app.sqlite3
+web/staticfiles/
+
+# ---- exports ---
+exports
