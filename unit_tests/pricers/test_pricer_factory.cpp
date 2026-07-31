@@ -25,11 +25,15 @@ TEST(PricerFactoryTest, AnalyticNonBlackScholesThrows) {
                  numeraire::ValidationError);
 }
 
+TEST(PricerFactoryTest, BinomialBlackScholesReturnsBinomialPricer) {
+    auto pricer = numeraire::pricers::PricerFactory::Make(numeraire::PricingEngineType::kBinomialTree,
+                                                          numeraire::ModelType::kBlackScholes);
+    ASSERT_NE(pricer, nullptr);
+    EXPECT_EQ(pricer->EngineKind(), numeraire::PricingEngineType::kBinomialTree);
+}
+
 TEST(PricerFactoryTest, NonAnalyticEngineThrows) {
     EXPECT_THROW(static_cast<void>(numeraire::pricers::PricerFactory::Make(numeraire::PricingEngineType::kMonteCarlo,
-                                                                           numeraire::ModelType::kBlackScholes)),
-                 numeraire::ValidationError);
-    EXPECT_THROW(static_cast<void>(numeraire::pricers::PricerFactory::Make(numeraire::PricingEngineType::kBinomialTree,
                                                                            numeraire::ModelType::kBlackScholes)),
                  numeraire::ValidationError);
     EXPECT_THROW(static_cast<void>(numeraire::pricers::PricerFactory::Make(

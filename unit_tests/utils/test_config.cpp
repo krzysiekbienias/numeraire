@@ -50,6 +50,8 @@ TEST(ConfigTest, LoadsDefaultCommittedConfig) {
     const nlohmann::json& rotation = cfg.RequireAt("logging.rotation");
     EXPECT_TRUE(rotation.is_object());
     EXPECT_EQ(rotation.at("max_files").get<int>(), 5);
+    EXPECT_EQ(cfg.RequireAt("pricing.binomial.default_steps").get<int>(), 200);
+    EXPECT_EQ(cfg.RequireAt("pricing.monte_carlo.default_paths").get<int>(), 1000);
 }
 
 TEST(ConfigTest, RequireAtMissingPathThrows) {
