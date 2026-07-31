@@ -12,8 +12,11 @@ struct VolSurfaceBuildParams {
     std::string underlying_id;
     std::string index_ticker;
     std::string as_of;
+    /// Flat fallback when no discount curve is available for `as_of`.
     double risk_free_rate{0.03};
     double dividend_yield{0.0};
+    /// Curve for per-expiry zero rates used in IV inversion (latest `as_of` ≤ mark).
+    std::string discount_curve_id{"USD_TREASURY_PAR_FRED"};
     int adjusted{1};
     std::string surface_kind{"implied_bs_eod"};
     std::string batch_run_id;

@@ -1,10 +1,12 @@
 #include <numeraire/database/vol_surface_eod_builder.hpp>
 
+#include <numeraire/database/discount_curve_eod_read.hpp>
 #include <numeraire/database/index_daily_eod_lookup.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_vol_surface_repository.hpp>
 #include <numeraire/database/vol_surface_quote_loader.hpp>
 #include <numeraire/enums/option_type.hpp>
+#include <numeraire/quant/discount_curve_bootstrap.hpp>
 #include <numeraire/quant/implied_vol_european.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/config.hpp>
@@ -98,6 +100,24 @@ using numeraire::utils::ResolveDatabasePath;
     return v;
 }
 
+[[nodiscard]] std::string EnvString(const char* key, const std::string& default_value) {
+    const char* raw = std::getenv(key);
+    if (raw == nullptr || raw[0] == '\0') {
+        return default_value;
+    }
+    return std::string{raw};
+}
+
+/// Continuous zero to option expiry; flat fallback when curve missing / τ≤0.
+[[nodiscard]] double ZeroRateForOptionTenor(const std::optional<DiscountCurveEodRead>& curve,
+                                            const double flat_fallback_rate,
+                                            const double time_to_expiry_years) noexcept {
+    if (!curve.has_value() || curve->pillars.empty() || time_to_expiry_years <= 0.0) {
+        return flat_fallback_rate;
+    }
+    return quant::InterpolateZeroRateAtTime(curve->pillars, time_to_expiry_years);
+}
+
 [[nodiscard]] VolSurfaceBuildStats BuildOneDay(const VolSurfaceBuildParams& params) {
     VolSurfaceBuildStats stats{};
 
@@ -105,6 +125,17 @@ using numeraire::utils::ResolveDatabasePath;
             LookupIndexDailyClose(params.database_file_path, params.index_ticker, params.as_of, params.adjusted);
     if (!spot.has_value()) {
         throw ValidationError("No index_daily_eod close for ticker=" + params.index_ticker + " as_of=" + params.as_of);
+    }
+
+    const std::optional<DiscountCurveEodRead> curve = TryLoadLatestDiscountCurveEod(
+            params.database_file_path, params.discount_curve_id, params.as_of);
+    if (!curve.has_value()) {
+        Logger::NumWarn(
+                "vol surface {}: no discount curve {} on/before {} — using flat r={}.",
+                params.underlying_id,
+                params.discount_curve_id,
+                params.as_of,
+                params.risk_free_rate);
     }
 
     const std::vector<VolSurfaceOptionQuoteInput> quotes =
@@ -128,8 +159,9 @@ using numeraire::utils::ResolveDatabasePath;
 
         const schedule::Date expiry = schedule::ParseIsoDate(q.expiration_date);
         const double tau = schedule::Act365FixedYearFraction(valuation, expiry);
+        const double rate = ZeroRateForOptionTenor(curve, params.risk_free_rate, tau);
         const quant::ImpliedVolResult iv = quant::ImpliedVolEuropeanVanilla(
-                q.option_type, q.close, *spot, q.strike, params.risk_free_rate, params.dividend_yield, tau);
+                q.option_type, q.close, *spot, q.strike, rate, params.dividend_yield, tau);
 
         if (iv.status == quant::ImpliedVolStatus::kOk) {
             const std::string contract_type = ContractTypeLabel(q.option_type);
@@ -167,12 +199,18 @@ using numeraire::utils::ResolveDatabasePath;
         }
     }
 
+    // Header stores a representative 1Y zero (metadata); IV points used r(τ) per expiry.
+    const double header_rate =
+            (curve.has_value() && !curve->pillars.empty())
+                    ? quant::InterpolateZeroRateAtTime(curve->pillars, 1.0)
+                    : params.risk_free_rate;
+
     VolSurfaceEodHeaderWrite header{};
     header.underlying_id = params.underlying_id;
     header.as_of = params.as_of;
     header.surface_kind = params.surface_kind;
     header.spot_used = *spot;
-    header.risk_free_rate = params.risk_free_rate;
+    header.risk_free_rate = header_rate;
     header.dividend_yield = params.dividend_yield;
     header.ingested_at = IsoUtcNow();
     header.batch_run_id = params.batch_run_id;
@@ -207,10 +245,11 @@ VolSurfaceBuildStats BuildVolSurfaceEod(const VolSurfaceBuildParams& params) {
 void PrintVolSurfaceEodBuildUsageLines() {
     Logger::NumError(
             "  dev_main --build-vol-surface-eod --as-of YYYY-MM-DD --underlying NDX "
-            "[--index-ticker I:NDX] [--from YYYY-MM-DD --to YYYY-MM-DD]\n"
+            "[--index-ticker I:NDX] [--curve-id USD_TREASURY_PAR_FRED] [--from YYYY-MM-DD --to YYYY-MM-DD]\n"
             "    Invert European BS implied vol from `option_daily_price_eod` + `index_daily_eod` close.\n"
-            "    Writes `vol_surface_eod` + `vol_surface_point_eod`. Rate/div: NUMERAIRE_DEV_RATE / "
-            "NUMERAIRE_DEV_DIV_YIELD (defaults 0.03 / 0). Adjusted flag: NUMERAIRE_DEV_SPOT_ADJUSTED (default 1).");
+            "    Per-expiry r(τ) from discount_curve_* (latest ≤ as_of); flat fallback NUMERAIRE_DEV_RATE (0.03).\n"
+            "    Div: NUMERAIRE_DEV_DIV_YIELD (default 0). Curve id: --curve-id or "
+            "NUMERAIRE_DEV_DISCOUNT_CURVE_ID. Spot adjusted: NUMERAIRE_DEV_SPOT_ADJUSTED (default 1).");
 }
 
 int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -220,6 +259,7 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
     std::string to_iso;
     std::string underlying;
     std::string index_ticker;
+    std::string curve_id;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--build-vol-surface-eod") == 0) {
@@ -254,6 +294,12 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
                 return 1;
             }
             index_ticker = argv[++i];
+        } else if (std::strcmp(argv[i], "--curve-id") == 0) {
+            if (i + 1 >= argc) {
+                Logger::NumError("--curve-id requires a curve id (e.g. USD_TREASURY_PAR_FRED).");
+                return 1;
+            }
+            curve_id = argv[++i];
         }
     }
 
@@ -308,6 +354,10 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
     const int adjusted = EnvDouble("NUMERAIRE_DEV_SPOT_ADJUSTED", 1.0) >= 0.5 ? 1 : 0;
     const double rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
     const double div = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
+    if (curve_id.empty()) {
+        curve_id = EnvString("NUMERAIRE_DEV_DISCOUNT_CURVE_ID",
+                             EnvString("NUMERAIRE_DISCOUNT_CURVE_ID", "USD_TREASURY_PAR_FRED"));
+    }
 
     VolSurfaceBuildParams params{};
     params.database_file_path = db_path.string();
@@ -315,15 +365,18 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
     params.index_ticker = index_ticker;
     params.risk_free_rate = rate;
     params.dividend_yield = div;
+    params.discount_curve_id = curve_id;
     params.adjusted = adjusted;
     params.batch_run_id = "vol-surface-" + from_iso + "-" + to_iso;
 
-    Logger::NumInfo("build-vol-surface-eod → SQLite {} underlying={} index={} range {}..{}.",
-                    db_path.string(),
-                    underlying,
-                    index_ticker,
-                    from_iso,
-                    to_iso);
+    Logger::NumInfo(
+            "build-vol-surface-eod → SQLite {} underlying={} index={} curve={} range {}..{}.",
+            db_path.string(),
+            underlying,
+            index_ticker,
+            curve_id,
+            from_iso,
+            to_iso);
 
     schedule::Date cursor = schedule::ParseIsoDate(from_iso);
     const schedule::Date end = schedule::ParseIsoDate(to_iso);
