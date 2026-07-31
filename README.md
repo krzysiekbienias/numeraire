@@ -25,7 +25,7 @@ Sprint history and what is actually shipped (including SQLite schema and Polygon
 | [`unit_tests/`](unit_tests/) | GoogleTest sources (`test_*.cpp`, including per-module dirs) |
 | [`integration_tests/`](integration_tests/) | Placeholder for I/O-heavy tests (DB, Polygon, cache) |
 | [`cmake/`](cmake/) | `NumeraireCompileOptions.cmake`, `NumeraireDependencies.cmake` |
-| [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, …, [`daily_market_prep.sh`](scripts/daily_market_prep.sh), [`daily_book_mtm.sh`](scripts/daily_book_mtm.sh) (Hetzner cron) |
+| [`scripts/`](scripts/) | `setup_macos.sh`, `build.sh`, `test.sh`, …, [`daily_market_prep.sh`](scripts/daily_market_prep.sh), [`daily_book_mtm.sh`](scripts/daily_book_mtm.sh) (+ exposure via [`daily_book_exposure.sh`](scripts/daily_book_exposure.sh); Hetzner cron) |
 | [`viz/`](viz/) | Python [`numeraire_viz`](viz/numeraire_viz/) + Jupyter notebooks (SQLite → plots; vol surface, …) |
 | [`trades/incoming/`](trades/incoming/) | Draft trade bundle JSON for import (only [`trade_bundle.sample.json`](trades/incoming/trade_bundle.sample.json) tracked; other `*.json` ignored) |
 | [`configs/`](configs/) | JSON defaults loaded by [`utils::Config`](include/numeraire/utils/config.hpp) |
@@ -186,7 +186,7 @@ Requires **`POLYGON_API_KEY`** in `.env`. Optional: **`POLYGON_BASE_URL`** (defa
 
 ```bash
 ./scripts/daily_market_prep.sh   # all Polygon ingest (scope + book equity catch-up)
-./scripts/daily_book_mtm.sh      # LIVE trades MTM only (booking is manual)
+./scripts/daily_book_mtm.sh      # LIVE MTM then CCR EE/PFE (booking is manual)
 ```
 
 See [`sql/README.md`](sql/README.md) and [`docs/development.md`](docs/development.md) § *Daily jobs*.
