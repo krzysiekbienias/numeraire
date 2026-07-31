@@ -112,7 +112,7 @@ def load_trade_leg_exposure_eod(
 
     sql = f"""
         SELECT leg_id, trade_id, pillar_id, grid_step, year_fraction, exposure_date,
-               ee, pfe_95, pfe_97, scope_key, batch_run_id, pricing_engine, remarks
+               ee, pfe_95, pfe_975, scope_key, batch_run_id, pricing_engine, remarks
         FROM trade_leg_exposure_eod
         WHERE {' AND '.join(clauses)}
         ORDER BY leg_id, grid_step
@@ -198,7 +198,7 @@ def plot_exposure_profile(
     fig, ax = plt.subplots(figsize=figsize)
     ax.plot(slab["year_fraction"], slab["ee"], label="EE (mean)", linewidth=2.0)
     ax.plot(slab["year_fraction"], slab["pfe_95"], label="PFE 95%", linewidth=1.5)
-    ax.plot(slab["year_fraction"], slab["pfe_97"], label="PFE 97%", linewidth=1.5)
+    ax.plot(slab["year_fraction"], slab["pfe_975"], label="PFE 97.5%", linewidth=1.5)
     ax.set_xlabel("Year fraction from valuation")
     ax.set_ylabel("Exposure")
     ax.set_title(title or f"Exposure profile — {uid}")

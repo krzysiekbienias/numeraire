@@ -119,7 +119,7 @@ def aggregate_trade_exposure_eod_profile(
         .agg(
             ee=("ee", "sum"),
             pfe_95=("pfe_95", "sum"),
-            pfe_97=("pfe_97", "sum"),
+            pfe_975=("pfe_975", "sum"),
         )
         .sort_values("year_fraction")
         .reset_index(drop=True)
@@ -177,11 +177,11 @@ def _overlay_db_exposure_profile(
     )
     ax.plot(
         profile["year_fraction"],
-        profile["pfe_97"],
+        profile["pfe_975"],
         color="darkorange",
         linewidth=1.8,
         linestyle="--",
-        label=f"{legend_prefix} — PFE 97%",
+        label=f"{legend_prefix} — PFE 97.5%",
         zorder=5,
     )
 
@@ -203,7 +203,7 @@ def plot_trade_scenario_and_exposure(
 
     - Top: GBM spot fans for each underlying in the trade (same ``path`` ids).
     - Middle: two exposure fans on the same paths — Σ leg exposure vs net trade exposure.
-    - Bottom: EE / PFE 95% / PFE 97% from ``trade_leg_exposure_eod`` (summed over legs).
+    - Bottom: EE / PFE 95% / PFE 97.5% from ``trade_leg_exposure_eod`` (summed over legs).
     """
     scenarios = load_scenario_paths(
         scope_key=scope_key,
@@ -322,7 +322,7 @@ def plot_trade_scenario_and_exposure(
     ax_prof = fig.add_subplot(gs[profile_row, :])
     ax_prof.plot(db_profile["year_fraction"], db_profile["ee"], label="EE (mean)", linewidth=2.2)
     ax_prof.plot(db_profile["year_fraction"], db_profile["pfe_95"], label="PFE 95%", linewidth=1.8)
-    ax_prof.plot(db_profile["year_fraction"], db_profile["pfe_97"], label="PFE 97%", linewidth=1.8)
+    ax_prof.plot(db_profile["year_fraction"], db_profile["pfe_975"], label="PFE 97.5%", linewidth=1.8)
     ax_prof.set_xlabel("Year fraction from valuation")
     ax_prof.set_ylabel("Exposure")
     ax_prof.set_title(
