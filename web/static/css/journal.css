@@ -582,6 +582,44 @@ body {
   height: 14.5rem;
 }
 
+.nj-greeks-delta-chart {
+  height: min(28rem, 58vh);
+  width: 100%;
+  min-height: 22rem;
+}
+
+.nj-vol-payoff-row > [class*="col-"] {
+  min-width: 0;
+}
+
+.nj-greeks-lab-body {
+  padding-top: 0.7rem;
+}
+
+.nj-greeks-inputs {
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color) 80%, transparent);
+}
+
+/* Hard 2×2: Bootstrap .row > .col-6; keep chart height below .nj-chart default. */
+.nj-greeks-grid.row {
+  --bs-gutter-x: 1.25rem;
+  --bs-gutter-y: 1.1rem;
+  margin-top: 0;
+}
+
+.nj-greeks-grid > [class*="col-"] {
+  min-width: 0;
+}
+
+.nj-greeks-grid .nj-chart.nj-greeks-panel-chart {
+  height: 15rem;
+  min-height: 15rem;
+  max-height: 15rem;
+  width: 100%;
+}
+
 .nj-chart-3d {
   height: min(32rem, 62vh);
   width: 100%;

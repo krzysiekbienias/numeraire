@@ -14,4 +14,5 @@ urlpatterns = [
     path('exposure/', views.ExposureView.as_view(), name='exposure'),
     path('surfaces/', views.SurfaceView.as_view(), name='surfaces'),
     path('inventory/', views.InventoryView.as_view(), name='inventory'),
+    path('greeks/', views.GreeksLabView.as_view(), name='greeks'),
 ]

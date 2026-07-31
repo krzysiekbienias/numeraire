@@ -47,7 +47,24 @@ def black_scholes(
 
     if t <= 0:
         intrinsic = max(s - k, 0.0) if is_call else max(k - s, 0.0)
-        return BsResult(pv_unit=intrinsic, delta=0.0, gamma=0.0, vega=0.0, theta=0.0, rho=0.0)
+        # Digital delta at expiry (ATM convention = 0.5 / −0.5).
+        if is_call:
+            if s > k:
+                dig = 1.0
+            elif s < k:
+                dig = 0.0
+            else:
+                dig = 0.5
+        else:
+            if s < k:
+                dig = -1.0
+            elif s > k:
+                dig = 0.0
+            else:
+                dig = -0.5
+        return BsResult(
+            pv_unit=intrinsic, delta=dig, gamma=0.0, vega=0.0, theta=0.0, rho=0.0
+        )
 
     if sig <= 0:
         # Discounted forward intrinsic (σ→0).

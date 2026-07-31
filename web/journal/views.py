@@ -19,8 +19,10 @@ from journal.exposure import (
     portfolio_exposure_profile,
     trade_exposure_profile,
 )
+from journal.greeks_lab import build_greeks_vs_time, params_from_get
 from journal.inventory import is_priceable, pricing_notes
 from journal.market import list_underliers, resolve_underlier
+from journal.payoff import build_trade_payoff_chart
 from journal.models import (
     CatalogInstrumentType,
     DiscountCurveEod,
@@ -338,6 +340,12 @@ class TradeDetailView(DetailView):
                         'x_label': snap['x_label'],
                     }
 
+        # Terminal payoff @ expiry (vanilla / binary) — educational, beside vol.
+        ref_spot = None
+        if primary is not None and primary.get('mtm') is not None:
+            ref_spot = float(primary['mtm'].underlying_spot)
+        payoff_chart = build_trade_payoff_chart(market_rows, ref_spot=ref_spot)
+
         # Sandbox what-if: Python engines from MTM inputs — never writes to SQLite.
         whatif_ctx = None
         if primary is not None and primary.get('mtm') is not None:
@@ -385,6 +393,7 @@ class TradeDetailView(DetailView):
                 'exposure_meta': exposure_meta,
                 'vol_chart': vol_chart,
                 'vol_meta': vol_meta,
+                'payoff_chart': payoff_chart,
                 'whatif': whatif_ctx,
             }
         )
@@ -713,4 +722,23 @@ class InventoryView(TemplateView):
             context['priceable_count'] = 0
             context['catalog_count'] = 0
             context['book_product_count'] = 0
+        return context
+
+
+class GreeksLabView(TemplateView):
+    """Educational greeks vs spot lab — Δ|Γ / ν|Θ, 5D/1M/2M (Python BS sandbox)."""
+
+    template_name = 'journal/greeks_lab.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        params = params_from_get(self.request.GET)
+        lab = build_greeks_vs_time(params)
+        context.update(
+            {
+                'lab': lab,
+                'params': params,
+                'greeks_chart': lab['chart'],
+            }
+        )
         return context

@@ -252,24 +252,47 @@
           </div>
         {% endif %}
 
-        {% if vol_chart %}
-          {{ vol_chart|json_script:"trade-vol-chart" }}
+        {% if vol_chart or payoff_chart %}
           <div class="nj-trade-curve-block mt-3">
-            <div class="nj-chart-label mb-1">
-              <span>
-                Vol surface 3D
-                · <a href="{% url 'journal:surfaces' %}?underlying_id={{ vol_meta.underlying_id }}&amp;as_of={{ vol_meta.as_of|date:'Y-m-d' }}">{{ vol_meta.underlying_id }}</a>
-              </span>
-              <span class="text-secondary">
-                as_of <strong>{{ vol_meta.as_of|date:"Y-m-d" }}</strong>
-                · {{ vol_meta.point_count }} call pts
-                {% if vol_meta.stale %}
-                  · <span class="text-warning">{{ vol_meta.lag_days }}d lag vs mark</span>
-                {% endif %}
-              </span>
+            <div class="row nj-vol-payoff-row g-3">
+              {% if vol_chart %}
+                <div class="{% if payoff_chart %}col-6{% else %}col-12{% endif %}">
+                  {{ vol_chart|json_script:"trade-vol-chart" }}
+                  <div class="nj-chart-label mb-1">
+                    <span>
+                      Vol surface 3D
+                      · <a href="{% url 'journal:surfaces' %}?underlying_id={{ vol_meta.underlying_id }}&amp;as_of={{ vol_meta.as_of|date:'Y-m-d' }}">{{ vol_meta.underlying_id }}</a>
+                    </span>
+                    <span class="text-secondary">
+                      as_of <strong>{{ vol_meta.as_of|date:"Y-m-d" }}</strong>
+                      · {{ vol_meta.point_count }} call pts
+                      {% if vol_meta.stale %}
+                        · <span class="text-warning">{{ vol_meta.lag_days }}d lag vs mark</span>
+                      {% endif %}
+                    </span>
+                  </div>
+                  <div id="trade-vol-3d-el" class="nj-chart nj-chart-3d nj-chart-3d-sm"
+                       data-x-label="{{ vol_meta.x_label }}"></div>
+                </div>
+              {% endif %}
+              {% if payoff_chart %}
+                <div class="{% if vol_chart %}col-6{% else %}col-12{% endif %}">
+                  {{ payoff_chart|json_script:"trade-payoff-chart" }}
+                  <div class="nj-chart-label mb-1">
+                    <span>
+                      Payoff @ expiry
+                      · {{ payoff_chart.label }}{% if payoff_chart.side %}/{{ payoff_chart.side|slice:":1"|upper }}{% endif %}
+                    </span>
+                    <span class="text-secondary">
+                      K={{ payoff_chart.strike|nj_num:2 }}
+                      · qty×Mult×sign
+                      · not PV
+                    </span>
+                  </div>
+                  <div id="trade-payoff-chart-el" class="nj-chart nj-chart-3d-sm"></div>
+                </div>
+              {% endif %}
             </div>
-            <div id="trade-vol-3d-el" class="nj-chart nj-chart-3d nj-chart-3d-sm"
-                 data-x-label="{{ vol_meta.x_label }}"></div>
           </div>
         {% endif %}
 
@@ -596,7 +619,7 @@
       })();
     </script>
   {% endif %}
-  {% if underlier_chart or pv_chart or curve_chart or exposure_chart or vol_chart %}
+  {% if underlier_chart or pv_chart or curve_chart or exposure_chart or vol_chart or payoff_chart %}
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     {% if vol_chart %}
       <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
@@ -886,6 +909,82 @@
         const volEl = document.getElementById('trade-vol-3d-el');
         if (volData && volEl) {
           volSurface3D(volEl, JSON.parse(volData.textContent));
+        }
+
+        const payoffData = document.getElementById('trade-payoff-chart');
+        const payoffEl = document.getElementById('trade-payoff-chart-el');
+        if (payoffData && payoffEl) {
+          const payload = JSON.parse(payoffData.textContent);
+          const colors = ['#fbbf24', '#60a5fa', '#2dd4bf', '#f472b6'];
+          const legs = payload.legs || [];
+          const marks = [];
+          if (Number.isFinite(Number(payload.strike))) {
+            marks.push({
+              xAxis: Number(payload.strike),
+              lineStyle: { color: '#94a3b8', type: 'dashed', width: 1.1 },
+              label: { formatter: 'K', color: '#94a3b8', fontSize: 10, position: 'insideEndTop' },
+            });
+          }
+          if (payload.ref_spot != null && Number.isFinite(Number(payload.ref_spot))) {
+            marks.push({
+              xAxis: Number(payload.ref_spot),
+              lineStyle: { color: '#e2e8f0', type: 'dotted', width: 1.1 },
+              label: { formatter: 'S', color: '#e2e8f0', fontSize: 10, position: 'insideEndTop' },
+            });
+          }
+          const series = (legs.length ? legs : [payload]).map((leg, i) => ({
+            name: leg.leg_id || leg.label || 'payoff',
+            type: 'line',
+            showSymbol: false,
+            step: leg.kind === 'cash_or_nothing' ? 'end' : false,
+            lineStyle: { width: 2.5, color: colors[i % colors.length] },
+            itemStyle: { color: colors[i % colors.length] },
+            areaStyle: legs.length > 1 ? undefined : {
+              color: 'rgba(251, 191, 36, 0.12)',
+            },
+            data: (leg.x || []).map((x, j) => [x, leg.y[j]]),
+            markLine: i === 0 ? { symbol: 'none', silent: true, data: marks } : undefined,
+          }));
+          const chart = echarts.init(payoffEl, null, { renderer: 'canvas' });
+          chart.setOption({
+            animationDuration: 280,
+            backgroundColor: 'transparent',
+            grid: { left: 52, right: 16, top: 28, bottom: 36 },
+            tooltip: {
+              trigger: 'axis',
+              valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(2)),
+            },
+            legend: {
+              show: legs.length > 1,
+              top: 0,
+              right: 4,
+              textStyle: { color: '#94a3b8', fontSize: 10 },
+            },
+            xAxis: {
+              type: 'value',
+              name: 'spot @ expiry',
+              nameLocation: 'middle',
+              nameGap: 22,
+              min: payload.x_min,
+              max: payload.x_max,
+              nameTextStyle: { color: '#64748b', fontSize: 10 },
+              axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (v) => Number(v).toFixed(0) },
+              axisLine: { lineStyle: { color: '#334155' } },
+              splitLine: { lineStyle: { color: '#1e293b' } },
+            },
+            yAxis: {
+              type: 'value',
+              name: 'payoff',
+              scale: true,
+              nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+              axisLabel: { color: '#94a3b8', fontSize: 10 },
+              splitLine: { lineStyle: { color: '#1e293b' } },
+              axisLine: { show: false },
+            },
+            series,
+          });
+          window.addEventListener('resize', () => chart.resize());
+          requestAnimationFrame(() => chart.resize());
         }
       })();
     </script>

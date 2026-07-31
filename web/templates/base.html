@@ -34,6 +34,10 @@
            class="{% if request.resolver_match.url_name == 'trade_list' or request.resolver_match.url_name == 'trade_detail' %}active{% endif %}">
           <i class="bi bi-journal-text"></i> Trades
         </a>
+        <a href="{% url 'journal:greeks' %}"
+           class="{% if request.resolver_match.url_name == 'greeks' %}active{% endif %}">
+          <i class="bi bi-lightning-charge"></i> Greeks
+        </a>
         <a href="{% url 'journal:underlier_list' %}"
            class="{% if request.resolver_match.url_name == 'underlier_list' or request.resolver_match.url_name == 'underlier_detail' %}active{% endif %}">
           <i class="bi bi-graph-up"></i> Underliers

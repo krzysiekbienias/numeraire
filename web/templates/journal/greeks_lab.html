@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% load journal_fmt %}
+
+{% block title %}Greeks lab{% endblock %}
+{% block page_title %}Greeks{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    Lab · <strong>greeks vs spot</strong>
+    · Δ Γ / ν Θ · tenors 5D / 1M / 2M
+    · analytic BS · sandbox
+  </p>
+{% endblock %}
+
+{% block content %}
+  {{ greeks_chart|json_script:"greeks-lab-data" }}
+
+  <div class="nj-panel mb-3">
+    <div class="nj-panel-head">
+      <h2>Greeks vs spot</h2>
+      <span class="small text-secondary">
+        x = spot · τ = 5D / 1M / 2M
+        · {% if params.is_call %}call{% else %}put{% endif %}
+        · K={{ params.strike|nj_num:2 }} · σ={{ params.vol|floatformat:2 }}
+      </span>
+    </div>
+    <div class="nj-panel-body nj-greeks-lab-body">
+      <form method="get" action="{% url 'journal:greeks' %}" class="nj-whatif-form nj-greeks-inputs">
+        <div class="nj-whatif-grid">
+          <label>
+            <span>Spot (ref)</span>
+            <input class="form-control form-control-sm" type="number" step="any" name="spot"
+                   value="{{ params.spot }}">
+          </label>
+          <label>
+            <span>Strike</span>
+            <input class="form-control form-control-sm" type="number" step="any" name="strike"
+                   value="{{ params.strike }}">
+          </label>
+          <label>
+            <span>IV (σ)</span>
+            <input class="form-control form-control-sm" type="number" step="any" name="vol"
+                   value="{{ params.vol }}">
+          </label>
+          <label>
+            <span>r</span>
+            <input class="form-control form-control-sm" type="number" step="any" name="rate"
+                   value="{{ params.rate }}">
+          </label>
+          <label>
+            <span>q</span>
+            <input class="form-control form-control-sm" type="number" step="any" name="div"
+                   value="{{ params.div }}">
+          </label>
+          <label>
+            <span>Side</span>
+            <select class="form-select form-select-sm" name="side">
+              <option value="call" {% if params.is_call %}selected{% endif %}>call</option>
+              <option value="put" {% if not params.is_call %}selected{% endif %}>put</option>
+            </select>
+          </label>
+          <div class="nj-whatif-actions">
+            <button type="submit" class="btn btn-sm btn-primary">Update</button>
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'journal:greeks' %}">Defaults</a>
+          </div>
+        </div>
+      </form>
+
+      <div id="greeks-chart-error" class="alert alert-warning py-2 small d-none" role="alert"></div>
+      <div class="row nj-greeks-grid" aria-label="Greeks 2 by 2 grid">
+        <div class="col-6">
+          <div class="nj-chart-label"><span>Delta</span><span class="text-secondary">5D · 1M · 2M</span></div>
+          <div id="greeks-chart-delta" class="nj-chart nj-greeks-panel-chart"></div>
+        </div>
+        <div class="col-6">
+          <div class="nj-chart-label"><span>Gamma</span></div>
+          <div id="greeks-chart-gamma" class="nj-chart nj-greeks-panel-chart"></div>
+        </div>
+        <div class="col-6">
+          <div class="nj-chart-label"><span>Vega</span></div>
+          <div id="greeks-chart-vega" class="nj-chart nj-greeks-panel-chart"></div>
+        </div>
+        <div class="col-6">
+          <div class="nj-chart-label"><span>Theta / day</span></div>
+          <div id="greeks-chart-theta" class="nj-chart nj-greeks-panel-chart"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nj-panel">
+    <div class="nj-panel-head">
+      <h2>At ref spot</h2>
+      <span class="small text-secondary">S = {{ params.spot|nj_num:2 }} · K = {{ params.strike|nj_num:2 }}</span>
+    </div>
+    <div class="nj-panel-body tight">
+      <table class="table table-sm mb-0 nj-compact-table">
+        <thead>
+          <tr>
+            <th>Tenor</th>
+            <th>DTE</th>
+            <th class="nj-num">Δ</th>
+            <th class="nj-num">Γ</th>
+            <th class="nj-num">ν</th>
+            <th class="nj-num">Θ/d</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in lab.table %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{{ row.dte }}d</td>
+              <td class="nj-num">{{ row.delta|floatformat:4 }}</td>
+              <td class="nj-num">{{ row.gamma|floatformat:6 }}</td>
+              <td class="nj-num">{{ row.vega|floatformat:4 }}</td>
+              <td class="nj-num">{{ row.theta|floatformat:4 }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script>
+    (function () {
+      const errEl = document.getElementById('greeks-chart-error');
+      const showErr = (msg) => {
+        if (!errEl) return;
+        errEl.textContent = msg;
+        errEl.classList.remove('d-none');
+      };
+      if (typeof echarts === 'undefined') {
+        showErr('ECharts CDN failed to load — table below still works.');
+        return;
+      }
+      const raw = document.getElementById('greeks-lab-data');
+      if (!raw) return;
+      let payload;
+      try { payload = JSON.parse(raw.textContent); }
+      catch (e) { showErr('Bad chart payload.'); return; }
+
+      const mats = payload.maturities || [];
+      const panels = payload.panels || [];
+      const isCall = !!payload.is_call;
+      const strike = Number(payload.strike);
+      const refSpot = Number(payload.ref_spot);
+      const colors = ['#fbbf24', '#60a5fa', '#2dd4bf'];
+      if (!mats.length || !panels.length) return;
+
+      const marks = [
+        {
+          xAxis: strike,
+          lineStyle: { color: '#94a3b8', type: 'dashed', width: 1.1 },
+          label: { formatter: 'K', color: '#94a3b8', fontSize: 10, position: 'insideEndTop' },
+        },
+      ];
+      if (Number.isFinite(refSpot) && Math.abs(refSpot - strike) > 1e-9) {
+        marks.push({
+          xAxis: refSpot,
+          lineStyle: { color: '#e2e8f0', type: 'dotted', width: 1.1 },
+          label: { formatter: 'S', color: '#e2e8f0', fontSize: 10, position: 'insideEndTop' },
+        });
+      }
+
+      const yBounds = (key) => {
+        if (key === 'delta') {
+          return isCall ? { min: 0, max: 1, interval: 0.25 } : { min: -1, max: 0, interval: 0.25 };
+        }
+        return { scale: true };
+      };
+
+      const charts = [];
+      panels.forEach((panel) => {
+        const el = document.getElementById('greeks-chart-' + panel.key);
+        if (!el) return;
+        const chart = echarts.init(el, null, { renderer: 'canvas' });
+        const yb = yBounds(panel.key);
+        chart.setOption({
+          animationDuration: 280,
+          backgroundColor: 'transparent',
+          grid: { left: 48, right: 16, top: 28, bottom: 36 },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'cross', label: { backgroundColor: '#1e293b' } },
+            valueFormatter: (v) => (v == null || Number.isNaN(Number(v))
+              ? '—'
+              : Number(v).toFixed(panel.key === 'gamma' ? 6 : 4)),
+          },
+          legend: {
+            show: panel.key === 'delta',
+            top: 0,
+            right: 4,
+            data: mats.map((m) => m.label),
+            textStyle: { color: '#94a3b8', fontSize: 11 },
+          },
+          xAxis: {
+            type: 'value',
+            name: 'spot',
+            nameLocation: 'middle',
+            nameGap: 22,
+            min: payload.x_min,
+            max: payload.x_max,
+            nameTextStyle: { color: '#64748b', fontSize: 10 },
+            axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (v) => Number(v).toFixed(0) },
+            axisLine: { lineStyle: { color: '#334155' } },
+            splitLine: { lineStyle: { color: '#1e293b' } },
+          },
+          yAxis: {
+            type: 'value',
+            name: panel.y_name,
+            min: yb.min,
+            max: yb.max,
+            interval: yb.interval,
+            scale: !!yb.scale,
+            axisLabel: {
+              color: '#94a3b8',
+              fontSize: 10,
+              formatter: (v) => {
+                const n = Number(v);
+                if (panel.key === 'gamma') return n.toExponential(1);
+                if (panel.key === 'delta') return n.toFixed(2);
+                return n.toFixed(3);
+              },
+            },
+            nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+            splitLine: { lineStyle: { color: '#1e293b' } },
+            axisLine: { show: false },
+          },
+          series: mats.map((m, i) => ({
+            name: m.label,
+            type: 'line',
+            showSymbol: false,
+            smooth: 0.12,
+            lineStyle: { width: 2.25, color: colors[i % colors.length] },
+            itemStyle: { color: colors[i % colors.length] },
+            emphasis: { focus: 'series', lineStyle: { width: 3 } },
+            data: (m.x || []).map((x, j) => [x, (m[panel.key] || [])[j]]),
+            markLine: i === 0 ? { symbol: 'none', silent: true, data: marks } : undefined,
+          })),
+        });
+        charts.push(chart);
+      });
+
+      const resizeAll = () => charts.forEach((c) => c.resize());
+      window.addEventListener('resize', resizeAll);
+      requestAnimationFrame(resizeAll);
+      setTimeout(resizeAll, 50);
+    })();
+  </script>
+{% endblock %}
