@@ -85,6 +85,18 @@ std::vector<DailyCloseObservation> LoadUnderlyingDailyClosesRange(const std::str
     }
 }
 
+std::optional<double> LookupUnderlyingDailyClose(const std::string& database_file_path,
+                                                 const std::string_view underlying_id,
+                                                 const std::string_view as_of_iso_yyyy_mm_dd,
+                                                 const int adjusted) {
+    const auto rows = LoadUnderlyingDailyClosesRange(
+            database_file_path, underlying_id, as_of_iso_yyyy_mm_dd, as_of_iso_yyyy_mm_dd, adjusted);
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return rows.front().close;
+}
+
 std::vector<std::string> ListDistinctBookUnderlyingIds(const std::string& database_file_path,
                                                      const std::optional<std::string_view> trade_status,
                                                      const std::optional<std::string_view> portfolio_id) {

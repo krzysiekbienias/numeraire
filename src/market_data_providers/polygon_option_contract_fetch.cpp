@@ -81,17 +81,45 @@ namespace {
     return true;
 }
 
+[[nodiscard]] bool TryEquityClose(SQLite::Database& db,
+                                  const std::string& equity_ticker,
+                                  const std::string& as_of,
+                                  double& close_out) {
+    SQLite::Statement q(db,
+                        "SELECT close FROM equity_daily_eod WHERE UPPER(ticker) = UPPER(?) AND as_of = ? "
+                        "AND timespan = '1d' AND adjusted = 1 LIMIT 1");
+    q.bind(1, equity_ticker);
+    q.bind(2, as_of);
+    if (!q.executeStep()) {
+        return false;
+    }
+    close_out = q.getColumn(0).getDouble();
+    return true;
+}
+
+[[nodiscard]] bool TrySpotForStrikeBand(SQLite::Database& db,
+                                        const std::string& underlying,
+                                        const std::string& index_ticker,
+                                        const std::string& as_of,
+                                        double& close_out) {
+    if (!index_ticker.empty() && TryIndexClose(db, index_ticker, as_of, close_out)) {
+        return true;
+    }
+    return TryEquityClose(db, underlying, as_of, close_out);
+}
+
 [[nodiscard]] std::string BuildOptionsContractsUrl(const std::string& base,
                                                    const std::string& underlying,
                                                    const std::string& listing_as_of,
                                                    const std::string& contract_type,
+                                                   const std::string& exercise_style,
                                                    const bool filter_strike,
                                                    const std::int64_t strike_min,
                                                    const std::int64_t strike_max) {
     std::ostringstream oss;
     oss << base << "/v3/reference/options/contracts?underlying_ticker=" << cpr::util::urlEncode(underlying)
         << "&as_of=" << cpr::util::urlEncode(listing_as_of) << "&contract_type=" << cpr::util::urlEncode(contract_type)
-        << "&exercise_style=" << cpr::util::urlEncode(std::string("european"));
+        << "&exercise_style=" << cpr::util::urlEncode(exercise_style);
     if (filter_strike) {
         oss << "&strike_price.gte=" << strike_min << "&strike_price.lte=" << strike_max;
     }
@@ -204,14 +232,21 @@ namespace {
                                            const std::string& underlying,
                                            const std::string& listing_as_of,
                                            const std::string& contract_type,
+                                           const std::string& exercise_style,
                                            const bool filter_strike,
                                            const std::int64_t strike_min,
                                            const std::int64_t strike_max,
                                            const int throttle_sec,
                                            const std::string& source_label,
                                            const std::string& ingested_at) {
-    std::string url = BuildOptionsContractsUrl(
-            base_url, underlying, listing_as_of, contract_type, filter_strike, strike_min, strike_max);
+    std::string url = BuildOptionsContractsUrl(base_url,
+                                               underlying,
+                                               listing_as_of,
+                                               contract_type,
+                                               exercise_style,
+                                               filter_strike,
+                                               strike_min,
+                                               strike_max);
     int total = 0;
     for (;;) {
         nlohmann::json j;
@@ -267,6 +302,7 @@ namespace {
                                    const std::string& underlying,
                                    const std::string& index_ticker,
                                    const std::string& listing_as_of,
+                                   const std::string& exercise_style,
                                    const bool use_strike_band,
                                    const double strike_band,
                                    const int throttle_sec,
@@ -277,10 +313,13 @@ namespace {
 
     if (use_strike_band) {
         double spot = 0.0;
-        if (!TryIndexClose(db, index_ticker, listing_as_of, spot)) {
-            Logger::NumError("No index_daily_eod row for ticker={} as_of={} (need close for --strike-band).",
-                             index_ticker,
-                             listing_as_of);
+        if (!TrySpotForStrikeBand(db, underlying, index_ticker, listing_as_of, spot)) {
+            Logger::NumError(
+                    "No equity/index daily close for underlying={} index_ticker={} as_of={} "
+                    "(need close for --strike-band).",
+                    underlying,
+                    index_ticker.empty() ? "(none)" : index_ticker,
+                    listing_as_of);
             return 1;
         }
 
@@ -300,6 +339,7 @@ namespace {
                                underlying,
                                listing_as_of,
                                "call",
+                               exercise_style,
                                filter_strike,
                                strike_min,
                                strike_max,
@@ -314,6 +354,7 @@ namespace {
                                underlying,
                                listing_as_of,
                                "put",
+                               exercise_style,
                                filter_strike,
                                strike_min,
                                strike_max,
@@ -324,14 +365,16 @@ namespace {
     }
 
     if (filter_strike) {
-        Logger::NumInfo("option contracts: finished {} (strike band ±{} → {}..{}).",
+        Logger::NumInfo("option contracts: finished {} ({} strike band ±{} → {}..{}).",
                         listing_as_of,
+                        exercise_style,
                         strike_band,
                         strike_min,
                         strike_max);
     } else {
-        Logger::NumInfo("option contracts: finished {} (full European chain for {}).",
+        Logger::NumInfo("option contracts: finished {} (full {} chain for {}).",
                         listing_as_of,
+                        exercise_style,
                         underlying);
     }
     return 0;
@@ -341,14 +384,13 @@ namespace {
 
 void PrintOptionContractFetchUsageLines() {
     Logger::NumError(
-            "  dev_main --fetch-option-contracts --from YYYY-MM-DD --to YYYY-MM-DD --underlying NDX "
-            "[--strike-band 250] [--index-ticker I:NDX]\n"
-            "    Loads European options reference into `option_contract` (needs POLYGON_API_KEY).\n"
-            "    Default: full chain (no strike filter) — discovery map for strike/expiry span.\n"
-            "    Optional --strike-band: limit to index_daily_eod close ± band (requires index row).\n"
-            "    Default --index-ticker I:NDX when --underlying is NDX; else pass --index-ticker.\n"
-            "    Base URL: POLYGON_BASE_URL. Throttle: NUMERAIRE_POLYGON_OPTIONS_PLAN=basic|starter or "
-            "NUMERAIRE_POLYGON_OPTIONS_SLEEP_SEC.");
+            "  dev_main --fetch-option-contracts --from YYYY-MM-DD --to YYYY-MM-DD --underlying NDX|AAPL "
+            "[--strike-band 250] [--index-ticker I:NDX] [--exercise-style european|american]\n"
+            "    Loads options reference into `option_contract` (needs POLYGON_API_KEY).\n"
+            "    Default exercise: european for NDX, american for single-name equities.\n"
+            "    Optional --strike-band: spot ± band (index_daily_eod or equity_daily_eod).\n"
+            "    Default --index-ticker I:NDX when --underlying is NDX.\n"
+            "    Base URL: POLYGON_BASE_URL. Throttle: NUMERAIRE_POLYGON_OPTIONS_PLAN / SLEEP_SEC.");
 }
 
 int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -357,6 +399,7 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
     std::string to_iso;
     std::string underlying;
     std::string index_ticker;
+    std::string exercise_style;
     bool use_strike_band = false;
     double strike_band = 250.0;
 
@@ -387,6 +430,12 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
                 return 1;
             }
             index_ticker = argv[++i];
+        } else if (std::strcmp(argv[i], "--exercise-style") == 0) {
+            if (i + 1 >= argc) {
+                Logger::NumError("--exercise-style requires european|american.");
+                return 1;
+            }
+            exercise_style = argv[++i];
         } else if (std::strcmp(argv[i], "--strike-band") == 0) {
             if (i + 1 >= argc) {
                 Logger::NumError("--strike-band requires a non-negative number (index points).");
@@ -425,14 +474,14 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
         PrintOptionContractFetchUsageLines();
         return 1;
     }
-    if (use_strike_band && index_ticker.empty()) {
-        if (underlying == "NDX") {
-            index_ticker = "I:NDX";
-        } else {
-            Logger::NumError("--index-ticker is required with --strike-band unless --underlying is NDX.");
-            PrintOptionContractFetchUsageLines();
-            return 1;
-        }
+    if (index_ticker.empty() && underlying == "NDX") {
+        index_ticker = "I:NDX";
+    }
+    if (exercise_style.empty()) {
+        exercise_style = (underlying == "NDX") ? "european" : "american";
+    } else if (exercise_style != "european" && exercise_style != "american") {
+        Logger::NumError("--exercise-style must be european or american.");
+        return 1;
     }
 
     const char* key = PolygonApiKey();
@@ -464,6 +513,7 @@ int TryRunPolygonOptionContractFetch(const int argc, char** argv, const numerair
                                  underlying,
                                  index_ticker,
                                  day,
+                                 exercise_style,
                                  use_strike_band,
                                  strike_band,
                                  throttle_sec,

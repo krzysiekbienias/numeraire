@@ -2,6 +2,7 @@
 
 #include <numeraire/database/index_daily_eod_lookup.hpp>
 #include <numeraire/database/option_universe_grid_config.hpp>
+#include <numeraire/database/underlying_daily_closes.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/database_path.hpp>
@@ -172,11 +173,20 @@ void DeleteExistingUniverse(SQLite::Database& db,
 
 OptionUniverseBuildStats BuildOptionUniverseEod(const OptionUniverseBuildParams& params,
                                                 const OptionUniverseGridConfig& grid) {
-    const auto spot_opt = LookupIndexDailyClose(
-            params.database_file_path, params.index_ticker, params.listing_as_of, params.spot_adjusted);
+    // Prefer explicit index ticker (NDX → I:NDX); else equity/index via underlying_id.
+    std::optional<double> spot_opt;
+    if (!params.index_ticker.empty()) {
+        spot_opt = LookupIndexDailyClose(
+                params.database_file_path, params.index_ticker, params.listing_as_of, params.spot_adjusted);
+    }
+    if (!spot_opt.has_value()) {
+        spot_opt = LookupUnderlyingDailyClose(
+                params.database_file_path, params.underlying_ticker, params.listing_as_of, params.spot_adjusted);
+    }
     if (!spot_opt || *spot_opt <= 0.0) {
-        throw ValidationError("No index_daily_eod close for ticker=" + params.index_ticker + " as_of=" +
-                              params.listing_as_of);
+        throw ValidationError("No equity/index daily close for underlying=" + params.underlying_ticker +
+                              (params.index_ticker.empty() ? "" : " index=" + params.index_ticker) +
+                              " as_of=" + params.listing_as_of);
     }
     const double spot = *spot_opt;
 
@@ -287,10 +297,10 @@ OptionUniverseBuildStats BuildOptionUniverseEod(const OptionUniverseBuildParams&
 
 void PrintOptionUniverseEodBuildUsageLines() {
     Logger::NumError(
-            "  dev_main --build-option-universe --from YYYY-MM-DD --to YYYY-MM-DD --underlying NDX "
+            "  dev_main --build-option-universe --from YYYY-MM-DD --to YYYY-MM-DD --underlying NDX|AAPL "
             "[--index-ticker I:NDX] [--grid-config configs/option_universe_grid.json]\n"
             "    Map `option_contract` → `option_universe_eod` using parametric grid JSON (nearest expiry/strike).\n"
-            "    Requires index_daily_eod close on each listing_as_of. Run before --fetch-option-daily-price-eod.");
+            "    Spot: --index-ticker close, else equity_daily_eod / NDX→I:NDX. Run before option price fetch.");
 }
 
 int TryRunOptionUniverseEodBuild(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -355,13 +365,8 @@ int TryRunOptionUniverseEodBuild(const int argc, char** argv, const numeraire::u
         return 1;
     }
 
-    if (index_ticker.empty()) {
-        if (underlying == "NDX") {
-            index_ticker = "I:NDX";
-        } else {
-            Logger::NumError("--index-ticker is required unless --underlying is NDX (default I:NDX).");
-            return 1;
-        }
+    if (index_ticker.empty() && underlying == "NDX") {
+        index_ticker = "I:NDX";
     }
 
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
@@ -381,10 +386,10 @@ int TryRunOptionUniverseEodBuild(const int argc, char** argv, const numeraire::u
                     ? 0
                     : 1;
 
-    Logger::NumInfo("build-option-universe → SQLite {} underlying={} index={} grid={} range {}..{}.",
+    Logger::NumInfo("build-option-universe → SQLite {} underlying={} index_ticker={} grid={} range {}..{}.",
                     db_path.string(),
                     underlying,
-                    index_ticker,
+                    index_ticker.empty() ? "(equity/auto)" : index_ticker,
                     grid.name,
                     from_iso,
                     to_iso);

@@ -4,6 +4,7 @@
 #include <numeraire/database/index_daily_eod_lookup.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_vol_surface_repository.hpp>
+#include <numeraire/database/underlying_daily_closes.hpp>
 #include <numeraire/database/vol_surface_quote_loader.hpp>
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/quant/discount_curve_bootstrap.hpp>
@@ -59,9 +60,10 @@ using numeraire::utils::ResolveDatabasePath;
     return a < b ? -1 : 1;
 }
 
-[[nodiscard]] bool IsEuropeanExercise(const std::string& exercise_style) {
+/// European (index) or American (single-name); IV inverted with European BS either way.
+[[nodiscard]] bool IsInvertibleExercise(const std::string& exercise_style) {
     const std::string key = utils::ToLowerAscii(utils::TrimCopy(exercise_style));
-    return key == "european" || key.empty();
+    return key == "european" || key == "american" || key.empty();
 }
 
 [[nodiscard]] const char* ContractTypeLabel(const OptionType kind) {
@@ -121,10 +123,19 @@ using numeraire::utils::ResolveDatabasePath;
 [[nodiscard]] VolSurfaceBuildStats BuildOneDay(const VolSurfaceBuildParams& params) {
     VolSurfaceBuildStats stats{};
 
-    const std::optional<double> spot =
-            LookupIndexDailyClose(params.database_file_path, params.index_ticker, params.as_of, params.adjusted);
+    std::optional<double> spot;
+    if (!params.index_ticker.empty()) {
+        spot = LookupIndexDailyClose(
+                params.database_file_path, params.index_ticker, params.as_of, params.adjusted);
+    }
     if (!spot.has_value()) {
-        throw ValidationError("No index_daily_eod close for ticker=" + params.index_ticker + " as_of=" + params.as_of);
+        spot = LookupUnderlyingDailyClose(
+                params.database_file_path, params.underlying_id, params.as_of, params.adjusted);
+    }
+    if (!spot.has_value()) {
+        throw ValidationError("No equity/index daily close for underlying=" + params.underlying_id +
+                              (params.index_ticker.empty() ? "" : " index=" + params.index_ticker) +
+                              " as_of=" + params.as_of);
     }
 
     const std::optional<DiscountCurveEodRead> curve = TryLoadLatestDiscountCurveEod(
@@ -148,7 +159,7 @@ using numeraire::utils::ResolveDatabasePath;
     std::unordered_set<std::string> seen_slices;
 
     for (const VolSurfaceOptionQuoteInput& q : quotes) {
-        if (!IsEuropeanExercise(q.exercise_style)) {
+        if (!IsInvertibleExercise(q.exercise_style)) {
             ++stats.skipped_non_european;
             continue;
         }
@@ -244,12 +255,11 @@ VolSurfaceBuildStats BuildVolSurfaceEod(const VolSurfaceBuildParams& params) {
 
 void PrintVolSurfaceEodBuildUsageLines() {
     Logger::NumError(
-            "  dev_main --build-vol-surface-eod --as-of YYYY-MM-DD --underlying NDX "
+            "  dev_main --build-vol-surface-eod --as-of YYYY-MM-DD --underlying NDX|AAPL "
             "[--index-ticker I:NDX] [--curve-id USD_TREASURY_PAR_FRED] [--from YYYY-MM-DD --to YYYY-MM-DD]\n"
-            "    Invert European BS implied vol from `option_daily_price_eod` + `index_daily_eod` close.\n"
+            "    Invert European BS IV from option_daily_price_eod + equity/index spot (American ok as EU-IV).\n"
             "    Per-expiry r(τ) from discount_curve_* (latest ≤ as_of); flat fallback NUMERAIRE_DEV_RATE (0.03).\n"
-            "    Div: NUMERAIRE_DEV_DIV_YIELD (default 0). Curve id: --curve-id or "
-            "NUMERAIRE_DEV_DISCOUNT_CURVE_ID. Spot adjusted: NUMERAIRE_DEV_SPOT_ADJUSTED (default 1).");
+            "    Spot: --index-ticker, else equity_daily_eod / NDX→I:NDX. Div: NUMERAIRE_DEV_DIV_YIELD.");
 }
 
 int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -313,13 +323,8 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
         return 1;
     }
 
-    if (index_ticker.empty()) {
-        if (underlying == "NDX") {
-            index_ticker = "I:NDX";
-        } else {
-            Logger::NumError("--index-ticker is required unless --underlying is NDX (default I:NDX).");
-            return 1;
-        }
+    if (index_ticker.empty() && underlying == "NDX") {
+        index_ticker = "I:NDX";
     }
 
     if (!from_iso.empty() || !to_iso.empty()) {
@@ -370,10 +375,10 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
     params.batch_run_id = "vol-surface-" + from_iso + "-" + to_iso;
 
     Logger::NumInfo(
-            "build-vol-surface-eod → SQLite {} underlying={} index={} curve={} range {}..{}.",
+            "build-vol-surface-eod → SQLite {} underlying={} index_ticker={} curve={} range {}..{}.",
             db_path.string(),
             underlying,
-            index_ticker,
+            index_ticker.empty() ? "(equity/auto)" : index_ticker,
             curve_id,
             from_iso,
             to_iso);
