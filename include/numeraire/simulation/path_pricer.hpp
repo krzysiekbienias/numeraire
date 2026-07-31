@@ -6,7 +6,7 @@
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/leg_path_pv_buffer.hpp>
-#include <numeraire/simulation/path_pricing_quotes.hpp>
+#include <numeraire/simulation/path_pricing_market_config.hpp>
 #include <numeraire/simulation/scenario_buffer.hpp>
 
 #include <memory>
@@ -20,6 +20,7 @@ namespace numeraire::simulation {
 /// One LIVE leg prepared for path-wise repricing.
 struct PathPricingLegEntry {
     std::string leg_id;
+    std::string trade_id;
     std::string underlying_id;
     std::size_t factor_index{0};
     numeraire::PositionDirection direction{};
@@ -44,7 +45,7 @@ void PricePortfolioAlongPaths(const ScenarioBuffer& buffer,
                               const ExposureTimeGrid& time_grid,
                               std::span<const std::string> factor_underlying_ids,
                               const std::vector<PathPricingLegEntry>& legs,
-                              const PathPricingQuotes& quotes,
+                              const PathPricingMarketConfig& market_config,
                               const core::IPricer& pricer,
                               LegPathPvBuffer& out_pv,
                               std::vector<std::string>& out_leg_ids);

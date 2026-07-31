@@ -1,18 +1,25 @@
+#include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <numeraire/database/historical_calibration_eod_read.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
+#include <numeraire/database/sqlite_trade_leg_exposure_repository.hpp>
 #include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/exposure_grid_config.hpp>
+#include <numeraire/simulation/exposure_metrics.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/gbm_evolution.hpp>
 #include <numeraire/simulation/historical_calibration_loader.hpp>
 #include <numeraire/simulation/historical_gbm_simulate.hpp>
+#include <numeraire/simulation/leg_exposure_dump.hpp>
 #include <numeraire/simulation/leg_path_pv_buffer.hpp>
 #include <numeraire/simulation/path_pricer.hpp>
+#include <numeraire/simulation/path_pricing_market_config.hpp>
 #include <numeraire/simulation/path_pricing_quotes.hpp>
 #include <numeraire/simulation/random_engine.hpp>
 #include <numeraire/simulation/scenario_buffer.hpp>
@@ -98,6 +105,34 @@ using numeraire::utils::ResolveDatabasePath;
     return std::filesystem::path{"configs/simulation_exposure_grid.json"};
 }
 
+[[nodiscard]] std::string DefaultDiscountCurveId() {
+    if (const std::optional<std::string> from_env = EnvNonEmptyString("NUMERAIRE_DEV_DISCOUNT_CURVE_ID")) {
+        return *from_env;
+    }
+    return "USD_TREASURY_PAR_FRED";
+}
+
+[[nodiscard]] bool EnvFlagEnabled(const char* key) {
+    const char* raw = std::getenv(key);
+    return raw != nullptr && raw[0] != '\0' && std::strcmp(raw, "0") != 0;
+}
+
+[[nodiscard]] std::string MakeExposureBatchRunId() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_buf{};
+#if defined(_WIN32)
+    gmtime_s(&tm_buf, &t);
+#else
+    gmtime_r(&t, &tm_buf);
+#endif
+    std::array<char, 32> buf{};
+    if (std::strftime(buf.data(), buf.size(), "exposure-%Y%m%dT%H%M%SZ", &tm_buf) == 0U) {
+        return "exposure-unknown";
+    }
+    return std::string(buf.data());
+}
+
 }  // namespace
 
 void PrintHistoricalGbmSimulateUsageLines() {
@@ -107,13 +142,18 @@ void PrintHistoricalGbmSimulateUsageLines() {
             "`as_of <= valuation_date` for the portfolio (`scope_key = portfolio_id`).\n"
             "    Env: NUMERAIRE_SIM_BOOK / NUMERAIRE_CALIB_BOOK, NUMERAIRE_DEV_AS_OF, "
             "NUMERAIRE_MC_PATHS, NUMERAIRE_MC_SEED, NUMERAIRE_DEV_RATE, NUMERAIRE_DEV_DIV_YIELD, "
-            "NUMERAIRE_DEV_VOL, NUMERAIRE_DUMP_SCENARIOS, NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS.\n"
-            "    Optional: --price-paths reprices LIVE portfolio legs on every (step, path).");
+            "NUMERAIRE_DEV_VOL, NUMERAIRE_DEV_DISCOUNT_CURVE_ID, "
+            "NUMERAIRE_DUMP_SCENARIOS, NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS, "
+            "NUMERAIRE_DUMP_LEG_EXPOSURE, NUMERAIRE_DUMP_LEG_EXPOSURE_MAX_PATHS, "
+            "NUMERAIRE_PERSIST_EXPOSURE.\n"
+            "    Optional: --price-paths reprices LIVE legs (IV+rate from DB @ as_of); "
+            "--persist-exposure writes EE/PFE to trade_leg_exposure_eod.");
 }
 
 int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::utils::Config& cfg) {
     bool mode = false;
     bool price_paths = false;
+    bool persist_exposure = EnvFlagEnabled("NUMERAIRE_PERSIST_EXPOSURE");
     std::string as_of;
     std::string book;
     int num_paths = EnvInt("NUMERAIRE_MC_PATHS", DefaultPathsFromConfig(cfg));
@@ -148,6 +188,8 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
             num_paths = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--price-paths") == 0) {
             price_paths = true;
+        } else if (std::strcmp(argv[i], "--persist-exposure") == 0) {
+            persist_exposure = true;
         } else if (std::strcmp(argv[i], "--seed") == 0) {
             if (i + 1 >= argc) {
                 Logger::NumError("--seed requires an integer.");
@@ -262,7 +304,8 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
 
     if (dumped) {
         Logger::NumInfo(
-                "simulate: multifactor scenario CSV written (NUMERAIRE_DUMP_SCENARIOS, all factors).");
+                "simulate: multifactor scenario CSV written (NUMERAIRE_DUMP_SCENARIOS, all {} paths).",
+                buffer.NumPaths());
     }
 
     if (price_paths) {
@@ -271,23 +314,31 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
         const std::vector<PathPricingLegEntry> legs =
                 LoadPathPricingLegsForPortfolio(db_path.string(), book, factor_by_underlying);
 
-        const PathPricingQuotes quotes{
+        const PathPricingQuotes flat_fallbacks{
                 .risk_free_rate = risk_free_rate,
                 .dividend_yield = dividend_yield,
                 .flat_implied_volatility = flat_vol,
         };
+        const PathPricingMarketConfig market_config = LoadPathPricingMarketConfig(
+                db_path.string(),
+                std::span<const std::string>(calibration_read->factor_ids),
+                as_of,
+                DefaultDiscountCurveId(),
+                flat_fallbacks);
+
         auto pricer = pricers::PricerFactory::Make(numeraire::PricingEngineType::kAnalytic,
                                                    numeraire::ModelType::kBlackScholes);
         LegPathPvBuffer leg_pv(legs.size(), time_grid.NumSteps(), buffer.NumPaths());
         std::vector<std::string> leg_ids;
         PricePortfolioAlongPaths(buffer, time_grid,
                                  std::span<const std::string>(calibration_read->factor_ids), legs,
-                                 quotes, *pricer, leg_pv, leg_ids);
+                                 market_config, *pricer, leg_pv, leg_ids);
 
-        Logger::NumInfo("simulate: path pricing finished legs={} steps={} paths={}.",
+        Logger::NumInfo("simulate: path pricing finished legs={} steps={} paths={} quotes={}.",
                         leg_ids.size(),
                         time_grid.NumSteps(),
-                        buffer.NumPaths());
+                        buffer.NumPaths(),
+                        market_config.quote_remarks);
 
         for (std::size_t leg_index = 0; leg_index < leg_ids.size(); ++leg_index) {
             double sum_t0 = 0.0;
@@ -303,6 +354,54 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
                             leg_ids[leg_index],
                             mean_t0,
                             mean_terminal);
+        }
+
+        std::vector<LegExposureIdentity> leg_identities;
+        leg_identities.reserve(legs.size());
+        for (const PathPricingLegEntry& leg : legs) {
+            leg_identities.push_back(LegExposureIdentity{.leg_id = leg.leg_id, .trade_id = leg.trade_id});
+        }
+
+        const bool exposure_dumped =
+                DumpLegExposurePathsIfEnvSet(leg_pv, time_grid, leg_identities);
+        if (exposure_dumped) {
+            Logger::NumInfo(
+                    "simulate: leg exposure CSV written (NUMERAIRE_DUMP_LEG_EXPOSURE, all {} paths).",
+                    buffer.NumPaths());
+        }
+
+        if (persist_exposure) {
+            std::vector<LegExposureMetrics> metrics;
+            ComputeLegExposureMetrics(leg_pv, leg_identities, time_grid, metrics);
+
+            database::SqliteTradeLegExposureRepository exposure_repo(db_path.string());
+            const std::string batch_run_id = MakeExposureBatchRunId();
+            for (const LegExposureMetrics& metric : metrics) {
+                database::TradeLegExposureEodRow row{};
+                row.as_of = as_of;
+                row.trade_id = metric.trade_id;
+                row.leg_id = metric.leg_id;
+                row.pillar_id = metric.pillar_id;
+                row.grid_step = metric.grid_step;
+                row.year_fraction = metric.year_fraction;
+                row.exposure_date = metric.exposure_date;
+                row.ee = metric.ee;
+                row.pfe_95 = metric.pfe_95;
+                row.pfe_97 = metric.pfe_97;
+                row.num_paths = num_paths;
+                row.mc_seed = seed;
+                row.calibration_id = calibration_read->calibration_id;
+                row.scope_key = book;
+                row.batch_run_id = batch_run_id;
+                row.pricing_engine = kPathExposurePricingEngine;
+                row.remarks = market_config.quote_remarks;
+                exposure_repo.Upsert(row);
+            }
+
+            Logger::NumInfo(
+                    "simulate: persisted {} exposure row(s) to trade_leg_exposure_eod batch_run_id={}.",
+                    metrics.size(),
+                    batch_run_id);
         }
     }
 

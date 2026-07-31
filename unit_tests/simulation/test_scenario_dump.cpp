@@ -10,6 +10,8 @@
 #include <sstream>
 #include <string>
 
+#include <cstdlib>
+
 namespace fs = std::filesystem;
 
 namespace {
@@ -17,6 +19,7 @@ namespace {
 using numeraire::schedule::ParseIsoDate;
 using numeraire::simulation::BuildExposureTimeGrid;
 using numeraire::simulation::DumpMultiFactorScenarioPathsCsv;
+using numeraire::simulation::DumpMultiFactorScenarioPathsIfEnvSet;
 using numeraire::simulation::DumpMultiFactorScenarioPathsOptions;
 using numeraire::simulation::DumpScenarioPathsCsv;
 using numeraire::simulation::DumpScenarioPathsOptions;
@@ -103,6 +106,49 @@ TEST(ScenarioDumpTest, WritesMultiFactorCsvWithPathCap) {
     }
     EXPECT_EQ(line_count, 1U + (2U * buffer.NumFactors() * grid.NumSteps()));
 
+    fs::remove(out);
+}
+
+TEST(ScenarioDumpTest, WritesAllPathsWhenMaxPathsEqualsBufferSize) {
+    const auto grid = SimpleGrid();
+    ScenarioBuffer buffer(2, grid.NumSteps(), 6);
+    for (std::size_t factor = 0; factor < buffer.NumFactors(); ++factor) {
+        for (std::size_t step = 0; step < grid.NumSteps(); ++step) {
+            for (std::size_t path = 0; path < buffer.NumPaths(); ++path) {
+                buffer.At(factor, step, path) =
+                        static_cast<double>((factor * 1000U) + (step * 10U) + path);
+            }
+        }
+    }
+
+    const std::vector<std::string> underlyings{"AAPL", "MSFT"};
+    const fs::path out = fs::temp_directory_path() / "numeraire_scenario_dump_full_test.csv";
+    DumpMultiFactorScenarioPathsOptions options{.max_paths = buffer.NumPaths()};
+    DumpMultiFactorScenarioPathsCsv(out, buffer, grid, underlyings, options);
+
+    const std::string text = ReadFile(out);
+    EXPECT_NE(text.find("5,0,AAPL,"), std::string::npos);
+    EXPECT_EQ(text.find("6,0,AAPL,"), std::string::npos);
+
+    fs::remove(out);
+}
+
+TEST(ScenarioDumpTest, EnvDumpUsesAllPathsByDefault) {
+    const auto grid = SimpleGrid();
+    ScenarioBuffer buffer(1, grid.NumSteps(), 5);
+    const std::vector<std::string> underlyings{"AAPL"};
+    const fs::path out = fs::temp_directory_path() / "numeraire_scenario_dump_env_test.csv";
+
+    setenv("NUMERAIRE_DUMP_SCENARIOS", out.c_str(), 1);
+    unsetenv("NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS");
+
+    ASSERT_TRUE(DumpMultiFactorScenarioPathsIfEnvSet(buffer, grid, underlyings));
+
+    const std::string text = ReadFile(out);
+    EXPECT_NE(text.find("4,0,AAPL,"), std::string::npos);
+    EXPECT_EQ(text.find("5,0,AAPL,"), std::string::npos);
+
+    unsetenv("NUMERAIRE_DUMP_SCENARIOS");
     fs::remove(out);
 }
 

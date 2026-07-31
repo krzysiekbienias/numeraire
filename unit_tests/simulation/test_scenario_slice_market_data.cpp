@@ -4,7 +4,7 @@
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/path_pricer.hpp>
-#include <numeraire/simulation/path_pricing_quotes.hpp>
+#include <numeraire/simulation/path_pricing_market_config.hpp>
 #include <numeraire/simulation/scenario_buffer.hpp>
 #include <numeraire/simulation/scenario_slice_market_data.hpp>
 
@@ -18,6 +18,7 @@ using numeraire::schedule::ParseIsoDate;
 using numeraire::simulation::BuildFactorIndexByUnderlying;
 using numeraire::simulation::ExposureGridNode;
 using numeraire::simulation::ExposureTimeGrid;
+using numeraire::simulation::PathPricingMarketConfig;
 using numeraire::simulation::PathPricingQuotes;
 using numeraire::simulation::ScenarioBuffer;
 using numeraire::simulation::ScenarioSliceMarketData;
@@ -44,9 +45,11 @@ TEST(ScenarioSliceMarketDataTest, SpotMatchesScenarioBufferSlice) {
 
     const std::vector<std::string> factors{"AAPL"};
     const auto factor_map = BuildFactorIndexByUnderlying(factors);
-    const PathPricingQuotes quotes{.risk_free_rate = 0.03, .dividend_yield = 0.0, .flat_implied_volatility = 0.2};
+    PathPricingMarketConfig market_config{};
+    market_config.flat_fallbacks = PathPricingQuotes{
+            .risk_free_rate = 0.03, .dividend_yield = 0.0, .flat_implied_volatility = 0.2};
 
-    ScenarioSliceMarketData market(buffer, grid, factor_map, quotes);
+    ScenarioSliceMarketData market(buffer, grid, factor_map, market_config);
     market.SetSlice(0, 1);
     EXPECT_DOUBLE_EQ(market.Spot("AAPL"), 101.0);
     EXPECT_EQ(market.ValuationDate().year, 2026);

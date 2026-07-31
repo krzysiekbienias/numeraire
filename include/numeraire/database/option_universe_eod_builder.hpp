@@ -1,9 +1,8 @@
 #pragma once
 
+#include <filesystem>
 #include <numeraire/database/option_universe_grid_config.hpp>
 #include <numeraire/utils/config.hpp>
-
-#include <filesystem>
 #include <string>
 
 namespace numeraire::database {

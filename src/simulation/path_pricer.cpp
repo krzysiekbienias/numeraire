@@ -75,6 +75,7 @@ std::vector<PathPricingLegEntry> LoadPathPricingLegsForPortfolio(
 
             PathPricingLegEntry entry;
             entry.leg_id = row.leg.leg_id;
+            entry.trade_id = bundle.trade.trade_id;
             entry.underlying_id = underlying;
             entry.factor_index = factor_it->second;
             entry.direction = row.leg.direction;
@@ -96,7 +97,7 @@ void PricePortfolioAlongPaths(const ScenarioBuffer& buffer,
                               const ExposureTimeGrid& time_grid,
                               const std::span<const std::string> factor_underlying_ids,
                               const std::vector<PathPricingLegEntry>& legs,
-                              const PathPricingQuotes& quotes,
+                              const PathPricingMarketConfig& market_config,
                               const core::IPricer& pricer,
                               LegPathPvBuffer& out_pv,
                               std::vector<std::string>& out_leg_ids) {
@@ -123,7 +124,7 @@ void PricePortfolioAlongPaths(const ScenarioBuffer& buffer,
         out_leg_ids.push_back(leg.leg_id);
     }
 
-    ScenarioSliceMarketData market(buffer, time_grid, factor_by_underlying, quotes);
+    ScenarioSliceMarketData market(buffer, time_grid, factor_by_underlying, market_config);
 
     for (std::size_t step = 0; step < time_grid.NumSteps(); ++step) {
         const schedule::Date& node_date = time_grid.nodes[step].date;
