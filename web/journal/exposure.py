@@ -51,7 +51,7 @@ def portfolio_exposure_profile(as_of: date, portfolio_id: str) -> dict | None:
         .annotate(
             ee=Sum('ee'),
             pfe_95=Sum('pfe_95'),
-            pfe_97=Sum('pfe_97'),
+            pfe_975=Sum('pfe_975'),
         )
         .order_by('grid_step', 'pillar_id')
     )
@@ -60,7 +60,7 @@ def portfolio_exposure_profile(as_of: date, portfolio_id: str) -> dict | None:
         .annotate(
             ee=Sum('ee'),
             pfe_95=Sum('pfe_95'),
-            pfe_97=Sum('pfe_97'),
+            pfe_975=Sum('pfe_975'),
             pillars=Count('id'),
         )
         .order_by('-pfe_95', 'trade_id')
@@ -73,7 +73,7 @@ def portfolio_exposure_profile(as_of: date, portfolio_id: str) -> dict | None:
             'date': p['exposure_date'].isoformat() if p['exposure_date'] else None,
             'ee': p['ee'],
             'pfe_95': p['pfe_95'],
-            'pfe_97': p['pfe_97'],
+            'pfe_975': p['pfe_975'],
         }
         for p in pillars
     ]
@@ -96,7 +96,7 @@ def trade_exposure_profile(trade_id: str, as_of: date) -> dict | None:
         .annotate(
             ee=Sum('ee'),
             pfe_95=Sum('pfe_95'),
-            pfe_97=Sum('pfe_97'),
+            pfe_975=Sum('pfe_975'),
         )
         .order_by('grid_step', 'pillar_id')
     )
@@ -110,7 +110,7 @@ def trade_exposure_profile(trade_id: str, as_of: date) -> dict | None:
                 't': p['year_fraction'],
                 'ee': p['ee'],
                 'pfe_95': p['pfe_95'],
-                'pfe_97': p['pfe_97'],
+                'pfe_975': p['pfe_975'],
             }
             for p in pillars
         ],

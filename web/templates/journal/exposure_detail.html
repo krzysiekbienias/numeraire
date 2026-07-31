@@ -108,7 +108,7 @@
                   <th>Date</th>
                   <th class="nj-num">EE</th>
                   <th class="nj-num">PFE 95</th>
-                  <th class="nj-num">PFE 97</th>
+                  <th class="nj-num">PFE 97.5</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,7 +119,7 @@
                     <td class="small">{% if p.exposure_date %}{{ p.exposure_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
                     <td class="nj-num">{{ p.ee|nj_num:2 }}</td>
                     <td class="nj-num">{{ p.pfe_95|nj_num:2 }}</td>
-                    <td class="nj-num">{{ p.pfe_97|nj_num:2 }}</td>
+                    <td class="nj-num">{{ p.pfe_975|nj_num:2 }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -142,7 +142,7 @@
                   <th>Trade</th>
                   <th class="nj-num">Σ EE</th>
                   <th class="nj-num">Σ PFE 95</th>
-                  <th class="nj-num">Σ PFE 97</th>
+                  <th class="nj-num">Σ PFE 97.5</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,7 +151,7 @@
                     <td><a href="{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}">{{ row.trade_id }}</a></td>
                     <td class="nj-num">{{ row.ee|nj_num:2 }}</td>
                     <td class="nj-num">{{ row.pfe_95|nj_num:2 }}</td>
-                    <td class="nj-num">{{ row.pfe_97|nj_num:2 }}</td>
+                    <td class="nj-num">{{ row.pfe_975|nj_num:2 }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -240,7 +240,7 @@
             {
               name: 'PFE 97.5',
               type: 'line',
-              data: series.map((p) => p.pfe_97),
+              data: series.map((p) => p.pfe_975),
               showSymbol: true,
               symbolSize: 6,
               lineStyle: { width: 2, color: '#fbbf24' },

@@ -76,7 +76,7 @@ class TradeLegMtmEodAdmin(ReadOnlyAdmin):
 class TradeLegExposureEodAdmin(ReadOnlyAdmin):
     list_display = (
         'as_of', 'leg', 'pillar_id', 'grid_step', 'exposure_date',
-        'year_fraction', 'ee', 'pfe_95', 'pfe_97', 'num_paths',
+        'year_fraction', 'ee', 'pfe_95', 'pfe_975', 'num_paths',
     )
     list_filter = ('as_of', 'pillar_id', 'pricing_engine', 'scope_key')
     search_fields = ('leg__leg_id', 'trade__trade_id', 'batch_run_id')

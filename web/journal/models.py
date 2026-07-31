@@ -144,7 +144,7 @@ class TradeLegExposureEod(models.Model):
     exposure_date = models.DateField()
     ee = models.FloatField()
     pfe_95 = models.FloatField()
-    pfe_97 = models.FloatField()
+    pfe_975 = models.FloatField()
     num_paths = models.IntegerField()
     mc_seed = models.IntegerField()
     calibration_id = models.IntegerField(blank=True, null=True)
