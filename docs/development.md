@@ -154,14 +154,14 @@ WHERE t.trade_id = 'TRD_10004';
 
 ## Daily jobs (Hetzner / cron)
 
-Two scripts (booking is **manual** in `dev_main`, not cron):
+Two cron jobs (booking is **manual** in `dev_main`, not cron):
 
 | Script | Role |
 |--------|------|
 | [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) | **All Polygon ingest** — `market_data_prep_scope` + equity catch-up for book underlyings not in scope |
-| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **MTM only** — `LIVE` trades, `SPOT_SOURCE=db`, `VOL_SOURCE=db` |
+| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **Risk engine** — FO MTM for `LIVE` trades, then CCR exposure via [`daily_book_exposure.sh`](../scripts/daily_book_exposure.sh) (`--simulate --price-paths --persist-exposure` → `trade_leg_exposure_eod`: EE, PFE 95%, PFE 97.5%) |
 
-[`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) is **deprecated** (wrapper: prep → book MTM).
+[`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) is **deprecated** (wrapper: prep → book MTM → exposure).
 
 **`as_of` default:** `NUMERAIRE_AS_OF_LAG_DAYS` calendar days ago (default **1** in scripts, UTC). Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US holidays are not skipped.
 
@@ -173,7 +173,8 @@ cd /opt/numeraire/dev
 NUMERAIRE_DRY_RUN=1 ./scripts/daily_market_prep.sh
 NUMERAIRE_DRY_RUN=1 ./scripts/daily_book_mtm.sh
 ./scripts/daily_market_prep.sh    # needs POLYGON_API_KEY in .env
-./scripts/daily_book_mtm.sh       # after prep; LIVE + execution_price > 0 per leg
+./scripts/daily_book_mtm.sh       # after prep; MTM then exposure (needs GBM calibration per book)
+NUMERAIRE_SKIP_EXPOSURE=1 ./scripts/daily_book_mtm.sh   # MTM only
 ```
 
 ### Cron install (example)
@@ -181,6 +182,7 @@ NUMERAIRE_DRY_RUN=1 ./scripts/daily_book_mtm.sh
 ```bash
 chmod +x /opt/numeraire/dev/scripts/daily_market_prep.sh
 chmod +x /opt/numeraire/dev/scripts/daily_book_mtm.sh
+chmod +x /opt/numeraire/dev/scripts/daily_book_exposure.sh
 sudo crontab -e
 ```
 
@@ -189,7 +191,7 @@ sudo crontab -e
 0 6 * * 2-6 /opt/numeraire/dev/scripts/daily_book_mtm.sh >> /var/log/numeraire-mtm.log 2>&1
 ```
 
-Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). MTM: only trades with `status = LIVE` (see `daily_book_mtm.sh`).
+Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). Risk job: `LIVE` MTM, then EE/PFE into [`trade_leg_exposure_eod`](../sql/schema_v1.sql) (requires prior `--calibrate-historical-gbm` for each portfolio).
 
 Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …
 
@@ -199,6 +201,8 @@ Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, 
 |----------|--------|--------|
 | `NUMERAIRE_AS_OF_LAG_DAYS` | both | when `NUMERAIRE_AS_OF` unset |
 | `NUMERAIRE_PREP_SKIP_BOOK_EQUITY` | prep | `1` = skip book equity catch-up |
+| `NUMERAIRE_SKIP_EXPOSURE` | MTM | `1` = skip CCR simulate after MTM |
+| `NUMERAIRE_SIM_BOOK` / `NUMERAIRE_SIM_BOOKS` | exposure | override LIVE portfolio discovery |
 | `NUMERAIRE_DRY_RUN` | both | `1` = log commands only |
 
 ### Manual backfill (gaps)
