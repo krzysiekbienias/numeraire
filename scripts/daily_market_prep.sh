@@ -14,7 +14,7 @@
 #   2. option_contract catalog (optional)
 #   3. option_universe_eod build (optional)
 #   4. option_daily_price_eod (optional)
-#   5. vol_surface_eod build (optional; index spot via --index-ticker)
+#   5. vol_surface_eod build (optional; index spot via --index-ticker, equity via equity_daily_eod)
 #
 # Usage:
 #   /opt/numeraire/dev/scripts/daily_market_prep.sh
@@ -122,7 +122,7 @@ update_prep_status() {
 
 # Prints pipe-separated rows (no header):
 # scope_id|instrument_id|provider_symbol|asset_class|flags...|option_underlying_id|grid_name|equity_adj
-# Polygon index symbol for option strike-band / vol build (e.g. I:NDX for NDX).
+# Polygon index symbol for index option strike-band / vol (e.g. I:NDX for NDX).
 lookup_index_provider_symbol() {
     local underlying="$1"
     sqlite3 "${DB_PATH}" "
@@ -134,6 +134,11 @@ lookup_index_provider_symbol() {
         ORDER BY ingest_priority, scope_id
         LIMIT 1;
     "
+}
+
+# Absolute strike band around equity spot (saves Polygon/DB volume vs full chain).
+equity_option_strike_band() {
+    echo "${NUMERAIRE_EQUITY_OPTION_STRIKE_BAND:-80}"
 }
 
 read_prep_scope_rows() {
@@ -171,11 +176,14 @@ run_scope_row() {
 
     log "scope ${scope_id}: instrument=${instrument_id} provider=${provider_symbol} class=${asset_class}"
 
+    # Index underlyings: Polygon I:NDX spot. Equities: spot from equity_daily_eod (no --index-ticker).
     local index_ticker=""
+    local exercise_style="european"
     if [[ "${asset_class}" == "INDEX" ]]; then
         index_ticker="${provider_symbol}"
-    elif [[ -n "${option_underlying}" ]]; then
-        index_ticker="$(lookup_index_provider_symbol "${option_underlying}")"
+        exercise_style="european"
+    else
+        exercise_style="american"
     fi
     local -a index_extra=()
     if [[ -n "${index_ticker}" ]]; then
@@ -204,15 +212,20 @@ run_scope_row() {
 
     if [[ -n "${option_underlying}" ]]; then
         if [[ "${ingest_contracts}" == "1" ]]; then
-            log "  ${scope_id}: fetch_option_contracts"
+            log "  ${scope_id}: fetch_option_contracts (${exercise_style})"
             local -a contract_args=(
                 --fetch-option-contracts
                 --from "${as_of}"
                 --to "${as_of}"
                 --underlying "${option_underlying}"
+                --exercise-style "${exercise_style}"
             )
             if [[ "${#index_extra[@]}" -gt 0 ]]; then
                 contract_args+=("${index_extra[@]}")
+            fi
+            # Equity: always band around spot to avoid full American chain bloat.
+            if [[ "${asset_class}" == "EQUITY" ]]; then
+                contract_args+=(--strike-band "$(equity_option_strike_band)")
             fi
             if ! run_cmd "${DEV_MAIN}" "${contract_args[@]}"; then
                 failed=1

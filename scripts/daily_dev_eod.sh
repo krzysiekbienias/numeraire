@@ -2,7 +2,7 @@
 # ============================================================================
 # DEPRECATED — use the two-job split instead:
 #   scripts/daily_market_prep.sh   all Polygon / market-data ingest
-#   scripts/daily_book_mtm.sh      LIVE book MTM only (no booking)
+#   scripts/daily_book_mtm.sh      LIVE book MTM + CCR exposure (no booking)
 #
 # This wrapper runs both in order for backward-compatible cron entries.
 # ============================================================================
