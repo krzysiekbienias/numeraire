@@ -2,6 +2,9 @@ README.md
 pyproject.toml
 numeraire_viz/__init__.py
 numeraire_viz/db.py
+numeraire_viz/discount_curve.py
+numeraire_viz/historical_calibration.py
+numeraire_viz/scenario_paths.py
 numeraire_viz/vol_surface.py
 numeraire_viz.egg-info/PKG-INFO
 numeraire_viz.egg-info/SOURCES.txt

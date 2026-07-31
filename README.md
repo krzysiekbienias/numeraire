@@ -29,7 +29,7 @@ Sprint history and what is actually shipped (including SQLite schema and Polygon
 | [`viz/`](viz/) | Python [`numeraire_viz`](viz/numeraire_viz/) + Jupyter notebooks (SQLite → plots; vol surface, …) |
 | [`trades/incoming/`](trades/incoming/) | Draft trade bundle JSON for import (only [`trade_bundle.sample.json`](trades/incoming/trade_bundle.sample.json) tracked; other `*.json` ignored) |
 | [`configs/`](configs/) | JSON defaults loaded by [`utils::Config`](include/numeraire/utils/config.hpp) |
-| [`docs/`](docs/) | [`architecture.md`](docs/architecture.md), [`development.md`](docs/development.md) (sprints / stages), [`mathematical_background.md`](docs/mathematical_background.md), [`coding_style.md`](docs/coding_style.md) |
+| [`docs/`](docs/) | [`architecture.md`](docs/architecture.md), [`development.md`](docs/development.md) (sprints / stages), [`ccr_demo_script.md`](docs/ccr_demo_script.md) (CCR / exposure interview demo), [`mathematical_background.md`](docs/mathematical_background.md), [`coding_style.md`](docs/coding_style.md) |
 
 ---
 

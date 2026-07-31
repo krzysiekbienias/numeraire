@@ -32,7 +32,9 @@ export NUMERAIRE_DB_PATH=/opt/numeraire/dev/db.sqlite3
 | -------- | ----------- |
 | [`notebooks/vol_surface_eod.ipynb`](notebooks/vol_surface_eod.ipynb) | EOD implied-vol surface from `vol_surface_eod` / `vol_surface_point_eod` |
 | [`notebooks/discount_curve_eod.ipynb`](notebooks/discount_curve_eod.ipynb) | FRED par yields, bootstrapped zero rates, discount factors |
-| [`notebooks/gbm_calibration_scenarios.ipynb`](notebooks/gbm_calibration_scenarios.ipynb) | Historical GBM calibration (vol + correlation heatmap) and MC scenario paths from `exports/` |
+| [`notebooks/gbm_calibration_scenarios.ipynb`](notebooks/gbm_calibration_scenarios.ipynb) | Historical GBM calibration (vol + correlation heatmap) and MC scenario paths from `exports/`; trade exposure review chart at the end |
+
+Interview / demo talk track for the CCR exposure pipeline: [`../docs/ccr_demo_script.md`](../docs/ccr_demo_script.md).
 
 Launch:
 
@@ -86,7 +88,20 @@ matrix, labels = correlation_matrix_from_sparse(factors, corr)
 plot_calibration_overview(header, factors, matrix, labels)
 
 scenarios = load_scenario_paths(scope_key="BOOK_1", valuation_as_of="2026-06-15")
-plot_scenario_paths_grid(scenarios, max_paths=10)
+plot_scenario_paths_grid(scenarios, max_paths=50)
+```
+
+**Trade scenario + exposure review (aligned path fans, EE/PFE from DB):**
+
+```python
+from numeraire_viz import plot_trade_scenario_and_exposure
+
+plot_trade_scenario_and_exposure(
+    "TRD_10001",
+    scope_key="BOOK_1",
+    valuation_as_of="2026-06-01",
+    max_paths=50,
+)
 ```
 
 Future modules (spot history, trade MTM, etc.) can live alongside `vol_surface.py` / `discount_curve.py` under `numeraire_viz/`.
