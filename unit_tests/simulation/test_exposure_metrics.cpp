@@ -34,7 +34,7 @@ TEST(ExposureMetricsTest, ComputesEeAndPfeFromLegPv) {
     const ExposureTimeGrid grid = SimpleGrid();
     LegPathPvBuffer leg_pv(1, grid.NumSteps(), 4);
 
-    // step 0: exposures 0, 10, 20, 30 -> ee=15, pfe95=28.5, pfe97=29.1
+    // step 0: exposures 0, 10, 20, 30 -> ee=15, pfe95=28.5, pfe97.5=29.25
     leg_pv.At(0, 0, 0) = -5.0;
     leg_pv.At(0, 0, 1) = 10.0;
     leg_pv.At(0, 0, 2) = 20.0;
@@ -59,10 +59,10 @@ TEST(ExposureMetricsTest, ComputesEeAndPfeFromLegPv) {
     EXPECT_EQ(metrics[0].pillar_id, "ASOF");
     EXPECT_DOUBLE_EQ(metrics[0].ee, 15.0);
     EXPECT_DOUBLE_EQ(metrics[0].pfe_95, 28.5);
-    EXPECT_DOUBLE_EQ(metrics[0].pfe_97, 29.1);
+    EXPECT_DOUBLE_EQ(metrics[0].pfe_975, 29.25);
 
     EXPECT_EQ(metrics[1].pillar_id, "M1");
     EXPECT_DOUBLE_EQ(metrics[1].ee, 0.0);
     EXPECT_DOUBLE_EQ(metrics[1].pfe_95, 0.0);
-    EXPECT_DOUBLE_EQ(metrics[1].pfe_97, 0.0);
+    EXPECT_DOUBLE_EQ(metrics[1].pfe_975, 0.0);
 }

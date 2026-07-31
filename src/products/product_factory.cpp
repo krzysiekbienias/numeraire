@@ -122,7 +122,7 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
         return numeraire::ExerciseStyle::kEuropean;
     }
     if (k == "american") {
-        throw numeraire::ValidationError("ProductFactory: american exercise_style is not implemented yet");
+        return numeraire::ExerciseStyle::kAmerican;
     }
     throw numeraire::ValidationError("ProductFactory: unsupported exercise_style: " + *catalog_exercise);
 }
@@ -216,9 +216,19 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
                     return std::make_unique<VanillaEquityOptionProduct>(
                             equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
                 case EquityCatalogInstrumentKind::kAssetOrNothing:
+                    if (exercise == ExerciseStyle::kAmerican) {
+                        throw ValidationError(
+                                "ProductFactory: american exercise_style is only supported for vanilla equity "
+                                "options");
+                    }
                     return std::make_unique<EquityAssetOrNothingProduct>(
                             equity.underlying_id, opt, exercise, *product.strike, trade_date, expiry);
                 case EquityCatalogInstrumentKind::kCashOrNothing: {
+                    if (exercise == ExerciseStyle::kAmerican) {
+                        throw ValidationError(
+                                "ProductFactory: american exercise_style is only supported for vanilla equity "
+                                "options");
+                    }
                     const double payout = ParseCashPayoutPerShare(product.attributes_json);
                     return std::make_unique<EquityCashOrNothingProduct>(
                             equity.underlying_id, opt, exercise, *product.strike, payout, trade_date, expiry);

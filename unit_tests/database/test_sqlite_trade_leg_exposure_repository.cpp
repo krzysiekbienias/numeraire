@@ -88,7 +88,7 @@ TEST(SqliteTradeLegExposureRepositoryTest, UpsertOfficialAndArchive) {
     row.exposure_date = "2026-07-15";
     row.ee = 1000.0;
     row.pfe_95 = 2000.0;
-    row.pfe_97 = 2500.0;
+    row.pfe_975 = 2500.0;
     row.num_paths = 1000;
     row.mc_seed = 42;
     row.calibration_id = 3;

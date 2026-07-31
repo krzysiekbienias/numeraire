@@ -387,7 +387,7 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
                 row.exposure_date = metric.exposure_date;
                 row.ee = metric.ee;
                 row.pfe_95 = metric.pfe_95;
-                row.pfe_97 = metric.pfe_97;
+                row.pfe_975 = metric.pfe_975;
                 row.num_paths = num_paths;
                 row.mc_seed = seed;
                 row.calibration_id = calibration_read->calibration_id;

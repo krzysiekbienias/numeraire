@@ -12,11 +12,23 @@ namespace numeraire::database {
 namespace {
 
 void ApplySchemaPatches(SQLite::Database& db) {
-    SQLite::Statement columns(
-            db,
-            "SELECT 1 FROM pragma_table_info('par_curve_point_eod') WHERE name = 'quoted_price'");
-    if (!columns.executeStep()) {
-        db.exec("ALTER TABLE par_curve_point_eod ADD COLUMN quoted_price REAL");
+    {
+        SQLite::Statement columns(
+                db,
+                "SELECT 1 FROM pragma_table_info('par_curve_point_eod') WHERE name = 'quoted_price'");
+        if (!columns.executeStep()) {
+            db.exec("ALTER TABLE par_curve_point_eod ADD COLUMN quoted_price REAL");
+        }
+    }
+    // Rename legacy PFE column (was mislabeled pfe_97; stores the 97.5% quantile).
+    for (const char* table : {"trade_leg_exposure_eod", "trade_leg_exposure_eod_archive"}) {
+        SQLite::Statement has_old(
+                db, std::string{"SELECT 1 FROM pragma_table_info('"} + table + "') WHERE name = 'pfe_97'");
+        SQLite::Statement has_new(
+                db, std::string{"SELECT 1 FROM pragma_table_info('"} + table + "') WHERE name = 'pfe_975'");
+        if (has_old.executeStep() && !has_new.executeStep()) {
+            db.exec(std::string{"ALTER TABLE "} + table + " RENAME COLUMN pfe_97 TO pfe_975");
+        }
     }
 }
 

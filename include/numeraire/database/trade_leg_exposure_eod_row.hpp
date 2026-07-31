@@ -16,7 +16,7 @@ struct TradeLegExposureEodRow {
     std::string exposure_date;
     double ee{};
     double pfe_95{};
-    double pfe_97{};
+    double pfe_975{};
     int num_paths{0};
     int mc_seed{0};
     std::optional<int> calibration_id;

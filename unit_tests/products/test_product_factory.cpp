@@ -44,6 +44,47 @@ TEST(ProductFactoryTest, BuildsVanillaEuropeanFromCatalogRows) {
     EXPECT_EQ(instrument->PaymentSchedule(), nullptr);
 }
 
+TEST(ProductFactoryTest, BuildsVanillaAmericanFromCatalogRows) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "P_AAPL_AM";
+    product.option_side = "PUT";
+    product.strike = 200.0;
+    product.catalog_exercise_style = std::string{"american"};
+    product.attributes_json = "{}";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "P_AAPL_AM";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+    equity.expiry_date = std::string{"2025-11-04"};
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr);
+
+    ASSERT_NE(instrument, nullptr);
+    EXPECT_EQ(instrument->Exercise(), numeraire::ExerciseStyle::kAmerican);
+    EXPECT_NE(dynamic_cast<const numeraire::products::VanillaEquityOptionProduct*>(instrument.get()), nullptr);
+}
+
+TEST(ProductFactoryTest, AmericanBinaryThrows) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "P_AON_AM";
+    product.option_side = "CALL";
+    product.strike = 100.0;
+    product.catalog_exercise_style = std::string{"american"};
+    product.catalog_instrument_type = std::string{"AssetOrNothingOption"};
+    product.attributes_json = "{}";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "P_AON_AM";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+    equity.expiry_date = std::string{"2025-11-04"};
+
+    EXPECT_THROW(static_cast<void>(numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
+                 numeraire::ValidationError);
+}
+
 TEST(ProductFactoryTest, NullTradeUsesExpiryAsTradeDate) {
     numeraire::database::ProductDto product{};
     product.product_id = "P_X_001";

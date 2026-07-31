@@ -88,7 +88,7 @@ void ComputeLegExposureMetrics(const LegPathPvBuffer& leg_pv,
             metrics.exposure_date = schedule::FormatIsoDate(node.date);
             metrics.ee = Mean(exposures);
             metrics.pfe_95 = Quantile(exposures, 0.95);
-            metrics.pfe_97 = Quantile(exposures, 0.97);
+            metrics.pfe_975 = Quantile(exposures, 0.975);
             out_metrics.push_back(std::move(metrics));
         }
     }

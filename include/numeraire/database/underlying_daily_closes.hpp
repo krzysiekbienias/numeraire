@@ -22,6 +22,12 @@ struct DailyCloseObservation {
         std::string_view to_iso_yyyy_mm_dd,
         int adjusted = 1);
 
+/// Single-day close for universe / vol-surface spot: equity first, then NDX→I:NDX index map.
+[[nodiscard]] std::optional<double> LookupUnderlyingDailyClose(const std::string& database_file_path,
+                                                               std::string_view underlying_id,
+                                                               std::string_view as_of_iso_yyyy_mm_dd,
+                                                               int adjusted = 1);
+
 /// Distinct `products.underlying_id` from booked legs. Default filter: `trades.status = 'LIVE'`.
 /// When `portfolio_id` is set, only legs from that `trades.portfolio_id` are included.
 [[nodiscard]] std::vector<std::string> ListDistinctBookUnderlyingIds(

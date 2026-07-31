@@ -30,7 +30,7 @@ namespace {
 constexpr const char* kArchiveInsertSql =
         "INSERT INTO trade_leg_exposure_eod_archive ("
         "batch_run_id, calculated_at, as_of, trade_id, leg_id, pillar_id, grid_step, "
-        "year_fraction, exposure_date, ee, pfe_95, pfe_97, num_paths, mc_seed, calibration_id, "
+        "year_fraction, exposure_date, ee, pfe_95, pfe_975, num_paths, mc_seed, calibration_id, "
         "scope_key, pricing_engine, remarks"
         ") VALUES ("
         "?, ?, ?, ?, ?, ?, ?, "
@@ -41,7 +41,7 @@ constexpr const char* kArchiveInsertSql =
 constexpr const char* kUpsertSql =
         "INSERT OR REPLACE INTO trade_leg_exposure_eod ("
         "as_of, trade_id, leg_id, pillar_id, grid_step, year_fraction, exposure_date, "
-        "ee, pfe_95, pfe_97, num_paths, mc_seed, calibration_id, scope_key, batch_run_id, "
+        "ee, pfe_95, pfe_975, num_paths, mc_seed, calibration_id, scope_key, batch_run_id, "
         "pricing_engine, calculated_at, remarks"
         ") VALUES ("
         "?, ?, ?, ?, ?, ?, ?, "
@@ -95,7 +95,7 @@ void SqliteTradeLegExposureRepository::InsertArchive(const TradeLegExposureEodRo
         st.bind(i++, row.exposure_date);
         st.bind(i++, row.ee);
         st.bind(i++, row.pfe_95);
-        st.bind(i++, row.pfe_97);
+        st.bind(i++, row.pfe_975);
         st.bind(i++, row.num_paths);
         st.bind(i++, row.mc_seed);
         if (row.calibration_id.has_value()) {
@@ -147,7 +147,7 @@ void SqliteTradeLegExposureRepository::Upsert(const TradeLegExposureEodRow& row)
         st.bind(i++, row.exposure_date);
         st.bind(i++, row.ee);
         st.bind(i++, row.pfe_95);
-        st.bind(i++, row.pfe_97);
+        st.bind(i++, row.pfe_975);
         st.bind(i++, row.num_paths);
         st.bind(i++, row.mc_seed);
         if (row.calibration_id.has_value()) {

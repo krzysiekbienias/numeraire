@@ -26,7 +26,8 @@ struct LegExposureMetrics {
     std::string exposure_date;
     double ee{};
     double pfe_95{};
-    double pfe_97{};
+    /// Potential Future Exposure at the 97.5% quantile (DB column `pfe_975`).
+    double pfe_975{};
 };
 
 /// Compute EE (mean) and PFE quantiles from path-wise leg PV totals.
