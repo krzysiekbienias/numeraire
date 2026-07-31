@@ -12,18 +12,18 @@ namespace numeraire::simulation {
 
 /// Environment variable: when set to a non-empty file path, scenario paths are written as CSV.
 inline constexpr const char* kDumpScenarioPathsEnvVar = "NUMERAIRE_DUMP_SCENARIOS";
-/// Cap exported Monte Carlo paths when dumping (default used by multifactor simulate export).
+/// Optional cap on exported paths (omit or <=0 = dump every simulated path; viz subsamples in Python).
 inline constexpr const char* kDumpScenarioPathsMaxPathsEnvVar = "NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS";
 
 struct DumpScenarioPathsOptions {
     std::size_t factor = 0;
-    /// Cap paths written (simulation may use 1000+; dump only a sample for offline viz).
-    std::size_t max_paths = 32;
+    /// Paths written; use `buffer.NumPaths()` for a full run (default when env cap is unset).
+    std::size_t max_paths = 0;
 };
 
 struct DumpMultiFactorScenarioPathsOptions {
-    /// Cap paths written per underlying (viz sample).
-    std::size_t max_paths = 10;
+    /// Paths written; use `buffer.NumPaths()` for a full run (default when env cap is unset).
+    std::size_t max_paths = 0;
 };
 
 /// Write long-form CSV for one factor: `path,step,year_fraction,value`.
@@ -45,7 +45,7 @@ void DumpMultiFactorScenarioPathsCsv(const std::filesystem::path& output_path,
                                              const DumpScenarioPathsOptions& options = {});
 
 /// Dump all factors to `NUMERAIRE_DUMP_SCENARIOS` when set.
-/// Honors `NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS` (default 10).
+/// Writes all simulated paths unless `NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS` is set.
 [[nodiscard]] bool DumpMultiFactorScenarioPathsIfEnvSet(
         const ScenarioBuffer& buffer,
         const ExposureTimeGrid& time_grid,

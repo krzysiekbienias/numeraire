@@ -11,6 +11,31 @@
 namespace numeraire::simulation {
 namespace {
 
+[[nodiscard]] int EnvIntOrDefault(const char* key, const int default_value) {
+    const char* raw = std::getenv(key);
+    if (raw == nullptr || raw[0] == '\0') {
+        return default_value;
+    }
+    char* end = nullptr;
+    const long v = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return default_value;
+    }
+    return static_cast<int>(v);
+}
+
+[[nodiscard]] std::size_t ResolvePathsToWrite(const std::size_t buffer_num_paths,
+                                              const std::size_t requested_max_paths,
+                                              const int env_cap) {
+    if (env_cap > 0) {
+        return std::min(buffer_num_paths, static_cast<std::size_t>(env_cap));
+    }
+    if (requested_max_paths > 0U) {
+        return std::min(buffer_num_paths, requested_max_paths);
+    }
+    return buffer_num_paths;
+}
+
 void ValidateSingleFactorDumpInputs(const ScenarioBuffer& buffer, const ExposureTimeGrid& time_grid,
                                     const DumpScenarioPathsOptions& options) {
     if (buffer.NumSteps() != time_grid.NumSteps()) {
@@ -44,19 +69,6 @@ void ValidateMultiFactorDumpInputs(const ScenarioBuffer& buffer, const ExposureT
     if (options.max_paths == 0U) {
         throw ValidationError("DumpMultiFactorScenarioPathsCsv: max_paths must be > 0.");
     }
-}
-
-[[nodiscard]] int EnvIntOrDefault(const char* key, const int default_value) {
-    const char* raw = std::getenv(key);
-    if (raw == nullptr || raw[0] == '\0') {
-        return default_value;
-    }
-    char* end = nullptr;
-    const long v = std::strtol(raw, &end, 10);
-    if (end == raw) {
-        return default_value;
-    }
-    return static_cast<int>(v);
 }
 
 }  // namespace
@@ -117,7 +129,10 @@ bool DumpScenarioPathsIfEnvSet(const ScenarioBuffer& buffer, const ExposureTimeG
     if (raw == nullptr || raw[0] == '\0') {
         return false;
     }
-    DumpScenarioPathsCsv(std::filesystem::path(raw), buffer, time_grid, options);
+    DumpScenarioPathsOptions resolved = options;
+    resolved.max_paths = ResolvePathsToWrite(buffer.NumPaths(), options.max_paths,
+                                             EnvIntOrDefault(kDumpScenarioPathsMaxPathsEnvVar, 0));
+    DumpScenarioPathsCsv(std::filesystem::path(raw), buffer, time_grid, resolved);
     return true;
 }
 
@@ -130,10 +145,8 @@ bool DumpMultiFactorScenarioPathsIfEnvSet(const ScenarioBuffer& buffer,
         return false;
     }
     DumpMultiFactorScenarioPathsOptions resolved = options;
-    const int from_env = EnvIntOrDefault(kDumpScenarioPathsMaxPathsEnvVar, -1);
-    if (from_env > 0) {
-        resolved.max_paths = static_cast<std::size_t>(from_env);
-    }
+    resolved.max_paths = ResolvePathsToWrite(buffer.NumPaths(), options.max_paths,
+                                             EnvIntOrDefault(kDumpScenarioPathsMaxPathsEnvVar, 0));
     DumpMultiFactorScenarioPathsCsv(std::filesystem::path(raw), buffer, time_grid, underlying_ids,
                                     resolved);
     return true;
