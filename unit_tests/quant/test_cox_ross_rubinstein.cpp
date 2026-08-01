@@ -12,6 +12,7 @@ namespace {
 using numeraire::ExerciseStyle;
 using numeraire::OptionType;
 using numeraire::quant::CoxRossRubinsteinVanillaPrice;
+using numeraire::quant::CoxRossRubinsteinVanillaTree;
 using numeraire::quant::EuropeanVanillaPrice;
 
 }  // namespace
@@ -86,4 +87,27 @@ TEST(CoxRossRubinsteinTest, ZeroTimeIsIntrinsic) {
                                                      0.2, 0.0, 50);
     EXPECT_NEAR(call, 10.0, 1.0e-12);
     EXPECT_NEAR(put, 10.0, 1.0e-12);
+}
+
+TEST(CoxRossRubinsteinTest, TreeDumpRootMatchesPriceAndNodeCount) {
+    constexpr double spot = 100.0;
+    constexpr double strike = 100.0;
+    constexpr double r = 0.05;
+    constexpr double q = 0.0;
+    constexpr double vol = 0.25;
+    constexpr double tau = 1.0;
+    constexpr std::size_t n = 3;
+
+    const double price = CoxRossRubinsteinVanillaPrice(OptionType::kPut, ExerciseStyle::kAmerican, spot, strike, r, q,
+                                                       vol, tau, n);
+    const auto dump = CoxRossRubinsteinVanillaTree(OptionType::kPut, ExerciseStyle::kAmerican, spot, strike, r, q, vol,
+                                                   tau, n);
+    EXPECT_NEAR(dump.npv, price, 1.0e-12);
+    EXPECT_EQ(dump.n_steps, n);
+    EXPECT_EQ(dump.nodes.size(), (n + 1U) * (n + 2U) / 2U);
+    ASSERT_FALSE(dump.nodes.empty());
+    EXPECT_EQ(dump.nodes.front().step, 0);
+    EXPECT_NEAR(dump.nodes.front().value, price, 1.0e-12);
+    EXPECT_GT(dump.u, 1.0);
+    EXPECT_LT(dump.d, 1.0);
 }
