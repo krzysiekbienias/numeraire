@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from journal import views
 
@@ -14,5 +15,16 @@ urlpatterns = [
     path('exposure/', views.ExposureView.as_view(), name='exposure'),
     path('surfaces/', views.SurfaceView.as_view(), name='surfaces'),
     path('inventory/', views.InventoryView.as_view(), name='inventory'),
-    path('greeks/', views.GreeksLabView.as_view(), name='greeks'),
+    path('lab/', views.QuantLabHubView.as_view(), name='quant_lab'),
+    path('lab/pricing/', views.QuantLabView.as_view(), name='quant_lab_pricing'),
+    path('lab/simulation/', views.SimulationLabView.as_view(), name='simulation_lab'),
+    path(
+        'simulation/',
+        RedirectView.as_view(pattern_name='journal:simulation_lab', permanent=False),
+    ),
+    path(
+        'greeks/',
+        RedirectView.as_view(pattern_name='journal:quant_lab_pricing', permanent=False),
+        name='greeks',
+    ),
 ]

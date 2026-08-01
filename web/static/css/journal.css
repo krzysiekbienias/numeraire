@@ -596,6 +596,413 @@ body {
   padding-top: 0.7rem;
 }
 
+.nj-sym {
+  font-family: "IBM Plex Serif", "Iowan Old Style", Georgia, serif;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--bs-primary) 75%, #e2e8f0);
+  margin-right: 0.2rem;
+}
+
+/* Quant Lab — dense single-screen layout */
+.nj-quant-lab .nj-panel {
+  margin-bottom: 0.55rem;
+}
+
+.nj-quant-setup-body {
+  padding: 0.65rem 0.85rem !important;
+}
+
+.nj-quant-setup-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.nj-quant-type {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  max-width: 18rem;
+  width: 100%;
+}
+
+.nj-quant-type .form-select {
+  width: 100%;
+}
+
+.nj-quant-type-tag {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  padding-bottom: 0.2rem;
+}
+
+.nj-quant-params {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.45rem 0.65rem;
+}
+
+.nj-quant-params label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  min-width: 5.25rem;
+  max-width: 6.5rem;
+}
+
+.nj-quant-params input.form-control,
+.nj-quant-params select.form-select {
+  min-width: 5.25rem;
+  max-width: 6.5rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.nj-quant-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-bottom: 0.05rem;
+}
+
+.nj-quant-edu-body {
+  padding: 0.55rem 0.85rem !important;
+}
+
+.nj-quant-edu-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.nj-quant-edu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 0.65rem 1.25rem;
+}
+
+.nj-quant-edu-block-wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .nj-quant-edu-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nj-quant-edu-label {
+  display: block;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-bottom: 0.15rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.nj-quant-edu-math {
+  overflow-x: auto;
+  color: #e2e8f0;
+}
+
+.nj-quant-edu-math .katex-display {
+  margin: 0.15rem 0;
+}
+
+.nj-quant-edu-math-sub .katex-display {
+  margin: 0.1rem 0 0;
+}
+
+.nj-quant-edu-math-sub {
+  opacity: 0.9;
+  font-size: 0.92em;
+}
+
+.nj-quant-edu-note {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 0.25rem;
+}
+
+.nj-quant-crr-body {
+  padding: 0.55rem 0.85rem !important;
+}
+
+.nj-crr-tree {
+  width: 100%;
+  min-height: 12rem;
+  margin: 0.35rem 0 0.75rem;
+  overflow-x: auto;
+}
+
+.nj-crr-tree svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+
+.nj-crr-tree .link {
+  stroke: #475569;
+  stroke-width: 1.25;
+  fill: none;
+}
+
+.nj-crr-tree .node-disc {
+  fill: #0f172a;
+  stroke: #64748b;
+  stroke-width: 1.25;
+}
+
+.nj-crr-tree .node-disc.ee {
+  fill: color-mix(in srgb, var(--nj-accent) 35%, #0f172a);
+  stroke: var(--nj-accent);
+}
+
+.nj-crr-tree .node-label {
+  fill: #e2e8f0;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-anchor: middle;
+}
+
+.nj-crr-tree .node-sub {
+  fill: #94a3b8;
+  font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-anchor: middle;
+}
+
+.nj-crr-table {
+  max-width: 42rem;
+}
+
+.nj-crr-table tr.nj-crr-ee td {
+  color: var(--nj-accent);
+}
+
+.nj-quant-sim-body {
+  padding: 0.65rem 0.85rem !important;
+}
+
+.nj-sim-paths-chart {
+  height: 22rem;
+  min-height: 22rem;
+  margin-top: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 70%, transparent);
+  border-radius: 0.3rem;
+  background:
+    radial-gradient(120% 80% at 10% 0%, rgba(45, 212, 191, 0.06), transparent 55%),
+    color-mix(in srgb, #020617 55%, transparent);
+}
+
+.nj-quant-sim-meta {
+  margin-bottom: 0.15rem;
+}
+
+/* Quant Lab hub — two workspaces */
+.nj-lab-hub {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  min-height: min(62vh, 28rem);
+}
+
+@media (max-width: 900px) {
+  .nj-lab-hub {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+
+.nj-lab-tile {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: 18rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 85%, transparent);
+  border-radius: 0.35rem;
+  text-decoration: none;
+  color: #f8fafc;
+  isolation: isolate;
+  transition: border-color 0.2s ease, transform 0.25s ease;
+}
+
+.nj-lab-tile:hover {
+  border-color: color-mix(in srgb, var(--nj-accent) 55%, var(--bs-border-color));
+  color: #f8fafc;
+  transform: translateY(-2px);
+}
+
+.nj-lab-tile-media {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.02);
+  transition: transform 0.45s ease;
+  z-index: 0;
+}
+
+.nj-lab-tile:hover .nj-lab-tile-media {
+  transform: scale(1.06);
+}
+
+.nj-lab-tile-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(2, 6, 23, 0.15) 0%,
+      rgba(2, 6, 23, 0.45) 45%,
+      rgba(2, 6, 23, 0.88) 100%
+    );
+}
+
+.nj-lab-tile-body {
+  position: relative;
+  z-index: 2;
+  padding: 1.25rem 1.35rem 1.35rem;
+  width: 100%;
+}
+
+.nj-lab-tile-kicker {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nj-accent);
+  margin-bottom: 0.35rem;
+}
+
+.nj-lab-tile h2 {
+  font-size: 1.45rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.35rem;
+  color: #f8fafc;
+}
+
+.nj-lab-tile p {
+  margin: 0 0 0.85rem;
+  max-width: 28rem;
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.nj-lab-tile-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.nj-lab-tile-cta i {
+  transition: transform 0.2s ease;
+}
+
+.nj-lab-tile:hover .nj-lab-tile-cta i {
+  transform: translateX(3px);
+}
+
+.nj-lab-hub-note {
+  margin-top: 0.85rem;
+}
+
+.nj-lab-hub-note code {
+  font-size: 0.78em;
+}
+
+.nj-quant-result-body {
+  padding: 0.55rem 0.85rem !important;
+}
+
+.nj-quant-result-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.5rem;
+}
+
+.nj-quant-pv .label {
+  display: block;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-bottom: 0;
+}
+
+.nj-quant-pv .value {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.nj-quant-greeks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
+}
+
+.nj-quant-charts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.nj-quant-lab .nj-greeks-lab-body {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.nj-quant-greeks-grid.row {
+  --bs-gutter-x: 0.75rem;
+  --bs-gutter-y: 0.5rem;
+}
+
+.nj-quant-lab .nj-greeks-grid .nj-chart.nj-greeks-panel-chart {
+  height: 10.5rem;
+  min-height: 10.5rem;
+  max-height: 10.5rem;
+}
+
+.nj-quant-tenor-table {
+  margin-top: 0.5rem;
+  max-width: 28rem;
+}
+
+.nj-quant-tenor-table th,
+.nj-quant-tenor-table td {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.78rem;
+}
+
 .nj-greeks-inputs {
   margin-bottom: 0.65rem;
   padding-bottom: 0.65rem;

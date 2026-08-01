@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Quant Lab{% endblock %}
+{% block page_title %}Quant Lab{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">Choose a workspace · pricing and simulation stay separate</p>
+{% endblock %}
+
+{% block content %}
+  <div class="nj-lab-hub">
+    <a class="nj-lab-tile" href="{% url 'journal:quant_lab_pricing' %}">
+      <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/lab-pricing.jpg' %}?v=2')"></div>
+      <div class="nj-lab-tile-shade"></div>
+      <div class="nj-lab-tile-body">
+        <span class="nj-lab-tile-kicker">Workspace</span>
+        <h2>Pricing &amp; sensitivities</h2>
+        <p>Vanilla · binary · forward · CRR tree · educational formulas</p>
+        <span class="nj-lab-tile-cta">Open pricing <i class="bi bi-arrow-right"></i></span>
+      </div>
+    </a>
+
+    <a class="nj-lab-tile" href="{% url 'journal:simulation_lab' %}">
+      <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/lab-simulation.jpg' %}?v=2')"></div>
+      <div class="nj-lab-tile-shade"></div>
+      <div class="nj-lab-tile-body">
+        <span class="nj-lab-tile-kicker">Workspace</span>
+        <h2>Simulation</h2>
+        <p>GBM paths on a uniform toy horizon · 2W–1Y · model stubs for later</p>
+        <span class="nj-lab-tile-cta">Open simulation <i class="bi bi-arrow-right"></i></span>
+      </div>
+    </a>
+  </div>
+{% endblock %}

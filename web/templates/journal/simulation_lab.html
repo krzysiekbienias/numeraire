@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Simulation · Quant Lab{% endblock %}
+{% block page_title %}Simulation{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+    · not persisted
+    · uniform toy grid (not prod schedule)
+    · C++ <code>EvolveSingleFactorGbm</code>
+  </p>
+{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+        integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+        crossorigin="anonymous">
+{% endblock %}
+
+{% block content %}
+  <div class="nj-quant-lab nj-sim-lab">
+    <div class="nj-panel nj-quant-sim mb-2">
+      <div class="nj-panel-body nj-quant-sim-body">
+        <div class="nj-quant-edu-head">
+          <strong>Risk-factor paths</strong>
+          <span class="small text-secondary">
+            fixed horizon · equal time steps · GBM wired · other models stubbed
+          </span>
+        </div>
+        <form method="get" action="{% url 'journal:simulation_lab' %}" class="nj-quant-lab-form" id="sim-lab-form">
+          <input type="hidden" name="run" value="1">
+          <div class="nj-quant-params">
+            <label title="Diffusion model">
+              <span>Model</span>
+              <select class="form-select form-select-sm" name="model">
+                {% for m in sim_models %}
+                  <option value="{{ m.id }}" {% if sim.model == m.id %}selected{% endif %}>
+                    {{ m.label }}{% if not m.wired %} (stub){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <label title="Simulation horizon (uniform grid)">
+              <span>Horizon</span>
+              <select class="form-select form-select-sm" name="horizon_days">
+                {% for h in horizons %}
+                  <option value="{{ h.days }}" {% if sim.horizon_days == h.days %}selected{% endif %}>
+                    {{ h.label }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <label title="Initial spot">
+              <span><span class="nj-sym">S</span>Spot</span>
+              <input class="form-control form-control-sm" type="number" step="any"
+                     name="spot" value="{{ sim.spot }}">
+            </label>
+            <label title="Continuous rate">
+              <span><span class="nj-sym">r</span>Rate</span>
+              <input class="form-control form-control-sm" type="number" step="any"
+                     name="rate" value="{{ sim.rate }}">
+            </label>
+            <label title="Dividend yield">
+              <span><span class="nj-sym">q</span>Div</span>
+              <input class="form-control form-control-sm" type="number" step="any"
+                     name="div" value="{{ sim.div }}">
+            </label>
+            <label title="Volatility">
+              <span><span class="nj-sym">σ</span>IV</span>
+              <input class="form-control form-control-sm" type="number" step="any"
+                     name="vol" value="{{ sim.vol }}">
+            </label>
+            <label title="Number of paths (max 100)">
+              <span>Paths</span>
+              <input class="form-control form-control-sm" type="number" step="1"
+                     name="n_paths" value="{{ sim.n_paths }}">
+            </label>
+            <label title="RNG seed">
+              <span>Seed</span>
+              <input class="form-control form-control-sm" type="number" step="1"
+                     name="seed" value="{{ sim.seed }}">
+            </label>
+            <div class="nj-quant-actions">
+              <button type="submit" class="btn btn-sm btn-primary">Simulate</button>
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="{% url 'journal:simulation_lab' %}">Reset</a>
+            </div>
+          </div>
+        </form>
+
+        {% if sim_result and not sim_result.ok %}
+          <p class="small text-secondary mt-2 mb-0">{{ sim_result.message }}</p>
+        {% elif not sim.run %}
+          <p class="small text-secondary mt-2 mb-0">
+            Pick a horizon and Simulate — paths use equal Δt across that window.
+          </p>
+        {% endif %}
+
+        {% if show_sim_chart and sim_result %}
+          {{ sim_result|json_script:"sim-paths-data" }}
+          <div class="nj-quant-sim-meta small text-secondary mt-2">
+            {{ sim_result.engine }}
+            · uniform grid
+            · horizon {{ sim_result.horizon_days }}d
+            · {{ sim_result.n_paths }} paths
+            · {{ sim_result.n_steps }} nodes
+            · seed {{ sim_result.seed }}
+          </div>
+          <div id="sim-paths-chart" class="nj-chart nj-sim-paths-chart" aria-label="Simulated path fan"></div>
+          <div class="nj-quant-edu mt-2">
+            <span class="nj-quant-edu-label">GBM SDE</span>
+            <div class="nj-quant-edu-math">\[
+              dS_t = (r-q)\,S_t\,dt + \sigma\,S_t\,dW_t
+            \]</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+          integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+          crossorigin="anonymous"></script>
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+          crossorigin="anonymous"
+          onload="renderMathInElement(document.querySelector('.nj-sim-lab') || document.body, {
+            delimiters: [
+              {left: '\\[', right: '\\]', display: true},
+              {left: '\\(', right: '\\)', display: false}
+            ],
+            throwOnError: false
+          });"></script>
+  {% if show_sim_chart %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script>
+    (function () {
+      const el = document.getElementById('sim-paths-data');
+      const host = document.getElementById('sim-paths-chart');
+      if (!el || !host || typeof echarts === 'undefined') return;
+      let data;
+      try { data = JSON.parse(el.textContent); } catch (e) { return; }
+      const days = data.days || [];
+      const times = data.times || [];
+      const paths = data.paths || [];
+      const mean = data.mean_path || [];
+      if (!paths.length) return;
+
+      const x = days.length === paths[0].length
+        ? days
+        : times.map((t) => Number(t) * 365);
+
+      const fan = paths.map((seriesVals, i) => ({
+        name: 'path',
+        type: 'line',
+        showSymbol: false,
+        silent: true,
+        legendHoverLink: false,
+        lineStyle: { width: 1.15, opacity: 0.22, color: '#64748b' },
+        itemStyle: { color: '#64748b' },
+        data: x.map((t, j) => [t, seriesVals[j]]),
+        z: 1,
+      }));
+
+      const series = fan;
+      if (mean.length) {
+        series.push({
+          name: 'mean',
+          type: 'line',
+          showSymbol: false,
+          lineStyle: { width: 2.6, opacity: 1, color: '#2dd4bf' },
+          itemStyle: { color: '#2dd4bf' },
+          data: x.map((t, j) => [t, mean[j]]),
+          z: 3,
+        });
+      }
+      // Spot marker at t=0
+      if (paths[0] && paths[0].length) {
+        series.push({
+          name: 'S₀',
+          type: 'scatter',
+          symbolSize: 8,
+          itemStyle: { color: '#f8fafc', borderColor: '#2dd4bf', borderWidth: 2 },
+          data: [[x[0], paths[0][0]]],
+          z: 4,
+        });
+      }
+
+      const chart = echarts.init(host, null, { renderer: 'canvas' });
+      chart.setOption({
+        animationDuration: 320,
+        backgroundColor: 'transparent',
+        grid: { left: 52, right: 20, top: 28, bottom: 42 },
+        legend: {
+          show: true,
+          top: 0,
+          right: 8,
+          data: ['mean'],
+          textStyle: { color: '#94a3b8', fontSize: 11 },
+        },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'line', lineStyle: { color: '#475569' } },
+          backgroundColor: 'rgba(15, 23, 42, 0.92)',
+          borderColor: '#334155',
+          textStyle: { color: '#e2e8f0', fontSize: 12 },
+          formatter: (items) => {
+            if (!items || !items.length) return '';
+            const day = Number(items[0].axisValue);
+            const meanItem = items.find((it) => it.seriesName === 'mean');
+            let html = '<div style="margin-bottom:4px"><b>day ' + day.toFixed(0) + '</b></div>';
+            if (meanItem != null && meanItem.data != null) {
+              html += 'mean S ≈ ' + Number(meanItem.data[1]).toFixed(2);
+            }
+            return html;
+          },
+        },
+        xAxis: {
+          type: 'value',
+          name: 'days',
+          nameLocation: 'middle',
+          nameGap: 28,
+          nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+          min: 0,
+          max: data.horizon_days || undefined,
+          axisLabel: { color: '#94a3b8', fontSize: 10 },
+          axisLine: { lineStyle: { color: '#334155' } },
+          splitLine: { show: true, lineStyle: { color: '#1e293b', type: 'dashed' } },
+        },
+        yAxis: {
+          type: 'value',
+          scale: true,
+          name: 'S',
+          nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+          axisLabel: { color: '#94a3b8', fontSize: 10 },
+          splitLine: { lineStyle: { color: '#1e293b' } },
+          axisLine: { show: false },
+        },
+        series,
+      });
+      const resize = () => chart.resize();
+      window.addEventListener('resize', resize);
+      requestAnimationFrame(resize);
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

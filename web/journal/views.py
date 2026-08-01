@@ -19,7 +19,8 @@ from journal.exposure import (
     portfolio_exposure_profile,
     trade_exposure_profile,
 )
-from journal.greeks_lab import build_greeks_vs_time, params_from_get
+from journal.quant_lab import build_quant_lab
+from journal.simulation_lab import build_simulation_lab
 from journal.inventory import is_priceable, pricing_notes
 from journal.market import list_underliers, resolve_underlier
 from journal.payoff import build_trade_payoff_chart
@@ -725,20 +726,29 @@ class InventoryView(TemplateView):
         return context
 
 
-class GreeksLabView(TemplateView):
-    """Educational greeks vs spot lab — Δ|Γ / ν|Θ, 5D/1M/2M (Python BS sandbox)."""
+class QuantLabHubView(TemplateView):
+    """Quant Lab landing — pick Pricing or Simulation workspace."""
 
-    template_name = 'journal/greeks_lab.html'
+    template_name = 'journal/quant_lab_hub.html'
+
+
+class QuantLabView(TemplateView):
+    """Pricing & sensitivities sandbox (C++ pricers). Nothing persisted."""
+
+    template_name = 'journal/quant_lab.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        params = params_from_get(self.request.GET)
-        lab = build_greeks_vs_time(params)
-        context.update(
-            {
-                'lab': lab,
-                'params': params,
-                'greeks_chart': lab['chart'],
-            }
-        )
+        context.update(build_quant_lab(self.request.GET))
+        return context
+
+
+class SimulationLabView(TemplateView):
+    """Simulation workspace — risk-factor paths on the production exposure grid."""
+
+    template_name = 'journal/simulation_lab.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(build_simulation_lab(self.request.GET))
         return context
