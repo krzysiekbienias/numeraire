@@ -11,6 +11,12 @@ project(numeraire
 option(NUMERAIRE_BUILD_TESTS "Build unit + integration tests" ON)
 option(NUMERAIRE_BUILD_APP "Build the production app entry point" ON)
 option(NUMERAIRE_BUILD_DEV_MAIN "Build the dev_main sandbox entry point" ON)
+option(NUMERAIRE_BUILD_PYTHON "Build pybind11 module numeraire_cpp for Quant Lab" ON)
+
+# Shared Python module needs PIC objects in static libs it links.
+if(NUMERAIRE_BUILD_PYTHON)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # ---------------------------------------------------------------------------
 # Compile options + external dependencies
@@ -57,6 +63,13 @@ if(NUMERAIRE_BUILD_DEV_MAIN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app/dev_main.
 endif()
 
 # ---------------------------------------------------------------------------
+# Python bindings (Quant Lab)
+# ---------------------------------------------------------------------------
+if(NUMERAIRE_BUILD_PYTHON AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/CMakeLists.txt)
+    add_subdirectory(bindings/python)
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 if(NUMERAIRE_BUILD_TESTS)
@@ -79,4 +92,5 @@ message(STATUS "  C++ standard : ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Tests        : ${NUMERAIRE_BUILD_TESTS}")
 message(STATUS "  App          : ${NUMERAIRE_BUILD_APP}")
 message(STATUS "  Dev main     : ${NUMERAIRE_BUILD_DEV_MAIN}")
+message(STATUS "  Python bind  : ${NUMERAIRE_BUILD_PYTHON}")
 message(STATUS "")
