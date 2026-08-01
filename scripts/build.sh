@@ -15,12 +15,21 @@ BUILD_TYPE="${1:-Debug}"
 
 cd "${REPO_ROOT}"
 
-echo "[build] Configuring ${BUILD_TYPE} build into ${BUILD_DIR}/ ..."
-cmake -S . -B "${BUILD_DIR}" -G Ninja \
-    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+)
+
+# Prefer the Django / uv venv so `numeraire_cpp` links against the same Python.
+if [[ -x "${REPO_ROOT}/web/.venv/bin/python" ]]; then
+    CMAKE_ARGS+=(-DPython3_EXECUTABLE="${REPO_ROOT}/web/.venv/bin/python")
+    echo "[build] Python bindings → web/.venv (${REPO_ROOT}/web/.venv/bin/python)"
+fi
+
+echo "[build] Configuring ${BUILD_TYPE} build into ${BUILD_DIR}/ ..."
+cmake -S . -B "${BUILD_DIR}" -G Ninja "${CMAKE_ARGS[@]}"
 
 echo "[build] Compiling..."
 cmake --build "${BUILD_DIR}" -j
 
-echo "[build] Done. Binaries in ${BUILD_DIR}/"
+echo "[build] Done. Binaries in ${BUILD_DIR}/ (and web/numeraire_cpp*.so if Python ON)"
