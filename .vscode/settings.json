@@ -36,6 +36,19 @@
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,
     "files.trimFinalNewlines": true,
+    "markdown.math.enabled": true,
+    "markdown.extension.math.enabled": false,
+    "markdown.preview.scrollPreviewWithEditor": true,
+    "markdown.preview.scrollEditorWithPreview": true,
+    "markdown-preview-enhanced.mathRenderingOption": "KaTeX",
+    "markdown-preview-enhanced.mathBlockDelimiters": [
+        ["$$", "$$"],
+        ["\\[", "\\]"]
+    ],
+    "markdown-preview-enhanced.mathInlineDelimiters": [
+        ["\\(", "\\)"],
+        ["$", "$"]
+    ],
     "sqltools.connections": [
         {
             "previewLimit": 50,
