@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
+export PATH="$HOME/.local/bin:$PATH"
 cd /opt/numeraire/prod
 
 echo "[deploy] Pulling latest code..."
