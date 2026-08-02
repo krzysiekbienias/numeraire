@@ -410,7 +410,7 @@ CREATE INDEX IF NOT EXISTS idx_mtm_archive_batch_run ON trade_leg_mtm_eod_archiv
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_leg_asof_engine_batch ON trade_leg_mtm_eod_archive (leg_id, as_of, pricing_engine, batch_run_id);
 CREATE INDEX IF NOT EXISTS idx_mtm_archive_trade_asof ON trade_leg_mtm_eod_archive (trade_id, as_of);
 -- ---------------------------------------------------------------------------
--- Monte Carlo exposure metrics per leg and exposure-grid pillar (EE, PFE quantiles).
+-- Monte Carlo exposure metrics per leg and exposure-grid pillar (EE, PFE 95%, PFE 97.5%).
 -- Raw path-wise PV/exposure samples are not stored — export via NUMERAIRE_DUMP_LEG_EXPOSURE.
 CREATE TABLE IF NOT EXISTS trade_leg_exposure_eod (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -423,7 +423,7 @@ CREATE TABLE IF NOT EXISTS trade_leg_exposure_eod (
     exposure_date TEXT NOT NULL,
     ee REAL NOT NULL,
     pfe_95 REAL NOT NULL,
-    pfe_97 REAL NOT NULL,
+    pfe_975 REAL NOT NULL,
     num_paths INTEGER NOT NULL,
     mc_seed INTEGER NOT NULL,
     calibration_id INTEGER,
@@ -453,7 +453,7 @@ CREATE TABLE IF NOT EXISTS trade_leg_exposure_eod_archive (
     exposure_date TEXT NOT NULL,
     ee REAL NOT NULL,
     pfe_95 REAL NOT NULL,
-    pfe_97 REAL NOT NULL,
+    pfe_975 REAL NOT NULL,
     num_paths INTEGER NOT NULL,
     mc_seed INTEGER NOT NULL,
     calibration_id INTEGER,

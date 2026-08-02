@@ -9,9 +9,10 @@
 --   fetch_option_daily_price_eod → needs option_universe_eod (build_option_universe)
 --   build_option_universe → needs option_contract + index/equity spot for grid
 --   build_vol_surface_eod (NDX) → needs index_daily_eod on provider_symbol (I:NDX)
---   Single-name vol from equity spot is NOT wired yet (index close only in builder).
+--   build_vol_surface_eod (AAPL) → equity_daily_eod spot + american option chain (EU-BS IV)
 PRAGMA foreign_keys = ON;
-INSERT OR REPLACE INTO market_data_prep_scope (
+INSERT
+    OR REPLACE INTO market_data_prep_scope (
         scope_id,
         instrument_id,
         provider_symbol,
@@ -59,13 +60,13 @@ VALUES -- Full NDX option pipeline + implied-vol surface (production path for in
         1,
         0,
         1,
-        0,
-        0,
-        0,
-        0,
-        NULL,
+        1,
+        1,
+        1,
+        1,
+        'AAPL',
         'default_index_option_universe',
-        'Equity EOD only; enable ingest_option_contracts=1 for chain catalog'
+        'Equity EOD + american option universe + vol surface (spot from equity_daily_eod)'
     ),
     (
         'MSFT_EOD',
