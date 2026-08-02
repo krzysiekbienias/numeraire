@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "django>=5.2,<6",
     "django-filter>=25.1",
+    "gunicorn>=26.0.0",
 ]
 
 # Not a distributable package: this is a Django project that gets run, not imported.
