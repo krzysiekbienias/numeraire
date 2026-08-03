@@ -6,6 +6,7 @@ add_library(numeraire_quant STATIC
         fixed_income_pricing.cpp
         implied_vol_european.cpp
         nearest_correlation.cpp
+        interest_rate_transforms.cpp
 )
 
 target_include_directories(numeraire_quant

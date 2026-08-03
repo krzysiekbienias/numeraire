@@ -1,3 +1,11 @@
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdint>
+#include <memory>
 #include <numeraire/core/imarket_data.hpp>
 #include <numeraire/core/ipricer.hpp>
 #include <numeraire/core/pricing_result.hpp>
@@ -12,6 +20,7 @@
 #include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/quant/cox_ross_rubinstein.hpp>
+#include <numeraire/quant/interest_rate_transforms.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/gbm_evolution.hpp>
@@ -19,15 +28,6 @@
 #include <numeraire/simulation/random_engine.hpp>
 #include <numeraire/simulation/scenario_buffer.hpp>
 #include <numeraire/utils/exception.hpp>
-
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-
-#include <algorithm>
-#include <cctype>
-#include <cmath>
-#include <cstdint>
-#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -36,12 +36,8 @@ namespace py = pybind11;
 namespace {
 
 class FlatMarket final : public numeraire::core::IMarketData {
-   public:
-    FlatMarket(numeraire::schedule::Date valuation,
-               double spot,
-               double rate,
-               double div,
-               double vol)
+public:
+    FlatMarket(numeraire::schedule::Date valuation, double spot, double rate, double div, double vol)
         : valuation_(valuation), spot_(spot), rate_(rate), div_(div), vol_(vol) {}
 
     [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override { return valuation_; }
@@ -59,7 +55,7 @@ class FlatMarket final : public numeraire::core::IMarketData {
         return vol_;
     }
 
-   private:
+private:
     numeraire::schedule::Date valuation_;
     double spot_;
     double rate_;
@@ -91,8 +87,7 @@ struct LabDates {
     out["ok"] = true;
     out["engine"] = engine_label;
     out["npv"] = *result.Npv();
-    out["tau_years_used"] =
-            numeraire::schedule::Act365FixedYearFraction(dates.valuation, dates.expiry);
+    out["tau_years_used"] = numeraire::schedule::Act365FixedYearFraction(dates.valuation, dates.expiry);
 
     if (result.Greeks().has_value()) {
         const auto& g = *result.Greeks();
@@ -161,9 +156,8 @@ void RequireNonNegVol(const double vol) {
 
     const std::string ex = [&] {
         std::string s = exercise;
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
+        std::transform(
+                s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return s;
     }();
 
@@ -190,8 +184,7 @@ void RequireNonNegVol(const double vol) {
         try {
             const std::size_t steps =
                     n_steps == 0 ? numeraire::pricers::BinomialBlackScholesEquityPricer::kFallbackSteps : n_steps;
-            const auto pricer =
-                    std::make_unique<numeraire::pricers::BinomialBlackScholesEquityPricer>(steps);
+            const auto pricer = std::make_unique<numeraire::pricers::BinomialBlackScholesEquityPricer>(steps);
             py::dict out = ResultToDict(pricer->Price(product, market), "c++_binomial_crr", dates);
             out["n_steps"] = static_cast<int>(pricer->NSteps());
             return out;
@@ -227,9 +220,8 @@ constexpr std::size_t kMaxCrrTreeDumpSteps = 12;
 
     const std::string ex = [&] {
         std::string s = exercise;
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
+        std::transform(
+                s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return s;
     }();
     numeraire::ExerciseStyle style = numeraire::ExerciseStyle::kEuropean;
@@ -323,15 +315,11 @@ constexpr std::size_t kMaxCrrTreeDumpSteps = 12;
     return PriceWithAnalytic(product, market, dates, "c++_analytic_con");
 }
 
-[[nodiscard]] py::dict PriceEquityForward(const double spot,
-                                          const double forward_price,
-                                          const double rate,
-                                          const double div,
-                                          const double tau_years) {
+[[nodiscard]] py::dict PriceEquityForward(
+        const double spot, const double forward_price, const double rate, const double div, const double tau_years) {
     RequirePositiveSpotStrike(spot, forward_price);
     const LabDates dates = MakeLabDates(tau_years);
-    const numeraire::products::EquityForwardProduct product(
-            "LAB", forward_price, dates.valuation, dates.expiry);
+    const numeraire::products::EquityForwardProduct product("LAB", forward_price, dates.valuation, dates.expiry);
     // Vol unused for forwards; FlatMarket still needs a value.
     const FlatMarket market(dates.valuation, spot, rate, div, 0.0);
     return PriceWithAnalytic(product, market, dates, "c++_analytic_forward");
@@ -351,10 +339,9 @@ constexpr int kMaxLabHorizonDays = 730;
 
 /// Uniform toy grid for Simulation Lab (not the production CCR schedule).
 /// `n_intervals` equal steps over `horizon_days` (Act/365 year fractions).
-[[nodiscard]] numeraire::simulation::ExposureTimeGrid MakeUniformLabGrid(
-        const numeraire::schedule::Date& valuation,
-        const int horizon_days,
-        const std::size_t n_intervals) {
+[[nodiscard]] numeraire::simulation::ExposureTimeGrid MakeUniformLabGrid(const numeraire::schedule::Date& valuation,
+                                                                         const int horizon_days,
+                                                                         const std::size_t n_intervals) {
     numeraire::simulation::ExposureTimeGrid grid;
     grid.valuation_date = valuation;
     grid.nodes.reserve(n_intervals + 1U);
@@ -408,27 +395,21 @@ constexpr int kMaxLabHorizonDays = 730;
     }
 
     const std::string model_key = NormalizeModel(model);
-    if (model_key == "bachelier" || model_key == "hull_white" || model_key == "hull-white" ||
-        model_key == "heston") {
-        throw py::value_error("model '" + model_key +
-                              "' is stubbed — only 'gbm' is wired in Quant Lab");
+    if (model_key == "bachelier" || model_key == "hull_white" || model_key == "hull-white" || model_key == "heston") {
+        throw py::value_error("model '" + model_key + "' is stubbed — only 'gbm' is wired in Quant Lab");
     }
     if (model_key != "gbm") {
-        throw py::value_error("unknown model '" + model +
-                              "' (supported: gbm; stubs: bachelier, hull_white, heston)");
+        throw py::value_error("unknown model '" + model + "' (supported: gbm; stubs: bachelier, hull_white, heston)");
     }
 
     try {
         const numeraire::schedule::Date valuation{.year = 2026, .month = 1, .day = 2};
-        const numeraire::simulation::ExposureTimeGrid grid =
-                MakeUniformLabGrid(valuation, horizon_days, n_intervals);
+        const numeraire::simulation::ExposureTimeGrid grid = MakeUniformLabGrid(valuation, horizon_days, n_intervals);
 
         numeraire::simulation::ScenarioBuffer buffer(1, grid.NumSteps(), n_paths);
         numeraire::simulation::MersenneTwisterEngine engine(seed);
-        const numeraire::simulation::SingleFactorGbmSpec spec{.spot = spot,
-                                                              .risk_free_rate = rate,
-                                                              .dividend_yield = div,
-                                                              .volatility = vol};
+        const numeraire::simulation::SingleFactorGbmSpec spec{
+                .spot = spot, .risk_free_rate = rate, .dividend_yield = div, .volatility = vol};
         numeraire::simulation::EvolveSingleFactorGbm(buffer, grid, spec, engine);
 
         py::list times;
@@ -555,4 +536,15 @@ horizon_days: fixed lab horizon (e.g. 14 / 30 / 90 / 180 / 365).
 n_intervals: equal steps across that horizon.
 Stubs: bachelier, hull_white, heston.
 )pbdoc");
+
+    m.def("discount_factor_from_continuous_zero",
+          &numeraire::quant::DiscountFactorFromContinuousZero,
+          py::arg("zero_rate"),
+          py::arg("time_years"),
+          "DF = exp(-z * t) for continuous zero.");
+    m.def("continuous_zero_from_discount_factor",
+          &numeraire::quant::ContinuousZeroFromDiscountFactor,
+          py::arg("discount_factor"),
+          py::arg("time_years"),
+          "z = -ln(DF) / t.");
 }
