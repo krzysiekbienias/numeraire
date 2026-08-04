@@ -197,6 +197,13 @@ body {
   color: var(--nj-accent);
 }
 
+.nj-version {
+  margin-left: 0.35rem;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
 /* --- Cards / metrics ----------------------------------------------------- */
 
 .nj-metric {

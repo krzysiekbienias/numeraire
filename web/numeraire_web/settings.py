@@ -37,6 +37,9 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Product version shown in the Journal footer (semver, leading 0 = pre-1.0).
+APP_VERSION = os.environ.get('NUMERAIRE_APP_VERSION', '0.4.2')
+
 
 # Application definition
 
@@ -79,11 +82,15 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'numeraire_web.context_processors.app_meta',
             ],
             # Explicit so runserver reloads pick up custom filters without a cold start.
             'libraries': {
                 'journal_fmt': 'journal.templatetags.journal_fmt',
             },
+            'builtins': [
+                'journal.templatetags.journal_fmt',
+            ],
         },
     },
 ]

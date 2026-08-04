@@ -1,4 +1,4 @@
-{% load static %}
+{% load static journal_fmt %}
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 
@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
     integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-  <link href="{% static 'css/journal.css' %}?v=10" rel="stylesheet">
+  <link href="{% static 'css/journal.css' %}?v=11" rel="stylesheet">
 </head>
 
 <body>
@@ -109,7 +109,7 @@
           risk and trading can review it without opening a notebook.
         </p>
       </div>
-      <p class="nj-login-photo-credit">© 2026 Numeraire Journal</p>
+      <p class="nj-login-photo-credit">© 2026 Numeraire Journal <span class="nj-version">v{% app_version %}</span></p>
     </aside>
   </div>
 </body>

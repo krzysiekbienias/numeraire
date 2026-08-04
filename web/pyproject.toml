@@ -1,6 +1,6 @@
 [project]
 name = "numeraire-web"
-version = "0.1.0"
+version = "0.4.2"
 description = "Django review frontend over the Numeraire++ SQLite database"
 requires-python = ">=3.12"
 dependencies = [

@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from django import template
+from django.conf import settings
 
 register = template.Library()
+
+
+@register.simple_tag
+def app_version():
+    """Product version from settings (works even if context processors lag a reload)."""
+    return getattr(settings, 'APP_VERSION', '0.4.2')
 
 # Model theta is ∂V/∂t per calendar year (QuantLib / architecture.md).
 # Desk UI shows calendar-day decay for comparison with PV / daily PnL.
