@@ -376,7 +376,7 @@ body {
 }
 
 .nj-about-photo-secondary img {
-  object-position: center 15%;
+  object-position: center center;
 }
 
 .nj-about-copy {
@@ -1500,7 +1500,8 @@ body {
   position: absolute;
   inset: 0;
   background-size: cover;
-  background-position: center 40%;
+  background-position: center center;
+  background-repeat: no-repeat;
   z-index: 0;
 }
 
