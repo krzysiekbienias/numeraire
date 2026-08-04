@@ -6,6 +6,7 @@ from journal import views
 app_name = 'journal'
 
 urlpatterns = [
+    path('about/', views.AboutView.as_view(), name='about'),
     path('', views.DashboardView.as_view(), name='dashboard'),
     path('trades/', views.TradeListView.as_view(), name='trade_list'),
     path('trades/<str:trade_id>/', views.TradeDetailView.as_view(), name='trade_detail'),
@@ -26,5 +27,11 @@ urlpatterns = [
         'greeks/',
         RedirectView.as_view(pattern_name='journal:quant_lab_pricing', permanent=False),
         name='greeks',
+
+    ),
+    path(
+        'lab/rates_conversion/',
+        views.RatesConversionLabView.as_view(),
+        name='rates_conversion_lab',
     ),
 ]

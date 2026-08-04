@@ -1,8 +1,10 @@
 from datetime import date as date_cls
 
+from django.contrib.auth.decorators import login_not_required
 from django.db import OperationalError
 from django.db.models import Count, Max, Prefetch, Sum
 from django.http import Http404
+from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView
 
 from journal.curves import (
@@ -49,6 +51,7 @@ from journal.whatif import (
     parse_whatif_inputs,
     run_trade_whatif,
 )
+from journal.rates_conversion_lab import build_rates_conversion_lab
 
 
 def _parse_as_of(raw: str, available: list) -> date_cls | None:
@@ -726,6 +729,13 @@ class InventoryView(TemplateView):
         return context
 
 
+@method_decorator(login_not_required, name='dispatch')
+class AboutView(TemplateView):
+    """Public about page — reachable before sign-in."""
+
+    template_name = 'journal/about.html'
+
+
 class QuantLabHubView(TemplateView):
     """Quant Lab landing — pick Pricing or Simulation workspace."""
 
@@ -751,4 +761,15 @@ class SimulationLabView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(build_simulation_lab(self.request.GET))
+        return context
+
+
+class RatesConversionLabView(TemplateView):
+    """Rates conversion sandbox (continuous zero ↔ DF). Nothing persisted."""
+
+    template_name = 'journal/interest_rate_conversion.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(build_rates_conversion_lab(self.request.GET))
         return context

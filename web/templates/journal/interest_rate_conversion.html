@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Rates conversion · Quant Lab{% endblock %}
+{% block page_title %}Rates conversion{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+    · not persisted
+    · continuous zero ↔ discount factor via C++
+  </p>
+{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+        integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+        crossorigin="anonymous">
+{% endblock %}
+
+{% block content %}
+  <div class="nj-quant-lab nj-rates-lab">
+    <div class="nj-rates-hero">
+      <div class="nj-rates-hero-media"
+           style="background-image: url('{% static 'img/doniczka.jpg' %}')"></div>
+      <div class="nj-rates-hero-shade"></div>
+      <div class="nj-rates-hero-body">
+        <span class="nj-rates-hero-kicker">Workspace</span>
+        <h2>Rates conversion</h2>
+        <p>
+          Educational transforms between rate conventions.
+          Start with continuous compounding — more blocks (forwards, …) later.
+        </p>
+      </div>
+    </div>
+
+    {# ── Block 1: continuous compounding (forwards / simple / … = next blocks) ── #}
+    <section class="nj-panel nj-rates-block mb-2" aria-labelledby="rates-continuous-title">
+      <div class="nj-panel-body">
+        <div class="nj-quant-edu-head" id="rates-continuous-title">
+          <strong>Continuous compounding</strong>
+          <span class="small text-secondary">
+            \(DF = e^{-z\,t}\) · C++ <code>numeraire_cpp</code>
+          </span>
+        </div>
+
+        <div class="nj-quant-edu mb-3">
+          <div class="nj-quant-edu-grid nj-rates-formulas">
+            <div>
+              <span class="nj-quant-edu-label">Zero → discount</span>
+              <div class="nj-quant-edu-math">\[
+                DF = P(0,t) = e^{-z\,t}
+              \]</div>
+            </div>
+            <div>
+              <span class="nj-quant-edu-label">Discount → zero</span>
+              <div class="nj-quant-edu-math">\[
+                z = -\frac{\ln(DF)}{t},\quad t > 0
+              \]</div>
+            </div>
+          </div>
+          <p class="nj-quant-edu-note mb-0">
+            Absolute rates (0.05 = 5%). Tenor \(t\) in years.
+          </p>
+        </div>
+
+        <div class="nj-rates-forms">
+          <form method="get"
+                action="{% url 'journal:rates_conversion_lab' %}"
+                class="nj-quant-lab-form nj-rates-form">
+            <input type="hidden" name="direction" value="z_to_df">
+            <input type="hidden" name="discount_factor" value="{{ params.discount_factor }}">
+            <div class="nj-rates-form-title">
+              <span class="nj-sym">z</span> → <span class="nj-sym">DF</span>
+            </div>
+            <div class="nj-quant-params">
+              <label title="Continuous zero rate">
+                <span><span class="nj-sym">z</span>Zero rate</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="zero_rate" value="{{ params.zero_rate }}">
+              </label>
+              <label title="Time in years">
+                <span><span class="nj-sym">t</span>Tenor (y)</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="time_years" value="{{ params.time_years }}">
+              </label>
+              <div class="nj-quant-actions">
+                <button type="submit" class="btn btn-sm btn-primary">Convert</button>
+              </div>
+            </div>
+          </form>
+
+          <form method="get"
+                action="{% url 'journal:rates_conversion_lab' %}"
+                class="nj-quant-lab-form nj-rates-form">
+            <input type="hidden" name="direction" value="df_to_z">
+            <input type="hidden" name="zero_rate" value="{{ params.zero_rate }}">
+            <div class="nj-rates-form-title">
+              <span class="nj-sym">DF</span> → <span class="nj-sym">z</span>
+            </div>
+            <div class="nj-quant-params">
+              <label title="Discount factor">
+                <span><span class="nj-sym">DF</span>Discount</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="discount_factor" value="{{ params.discount_factor }}">
+              </label>
+              <label title="Time in years">
+                <span><span class="nj-sym">t</span>Tenor (y)</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="time_years" value="{{ params.time_years }}">
+              </label>
+              <div class="nj-quant-actions">
+                <button type="submit" class="btn btn-sm btn-primary">Convert</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {% if result and not result.ok %}
+          <p class="small text-secondary mt-3 mb-0">{{ result.message }}</p>
+        {% elif show_result and result %}
+          <div class="nj-rates-result mt-3">
+            <div class="nj-rates-result-meta small text-secondary">
+              {{ result.engine_label }}
+              · {% if result.direction == 'df_to_z' %}DF → z{% else %}z → DF{% endif %}
+            </div>
+            <div class="nj-rates-result-values">
+              {% if result.direction == 'df_to_z' %}
+                <div>
+                  <span class="nj-sym">z</span>
+                  <span class="value">{{ result.zero_rate|floatformat:8 }}</span>
+                </div>
+                <div class="muted">
+                  from DF = {{ result.discount_factor|floatformat:8 }},
+                  t = {{ params.time_years|floatformat:4 }}
+                </div>
+              {% else %}
+                <div>
+                  <span class="nj-sym">DF</span>
+                  <span class="value">{{ result.discount_factor|floatformat:8 }}</span>
+                </div>
+                {% if result.zero_rate is not None %}
+                  <div class="muted">
+                    round-trip z = {{ result.zero_rate|floatformat:8 }}
+                    (input z = {{ params.zero_rate|floatformat:8 }})
+                  </div>
+                {% endif %}
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
+
+        {% if legend %}
+          <div class="nj-rates-legend small text-secondary mt-3">
+            {% for sym, label, hint in legend %}
+              <span title="{{ hint }}"><span class="nj-sym">{{ sym }}</span> {{ label }}</span>{% if not forloop.last %} · {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+          integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+          crossorigin="anonymous"></script>
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+          crossorigin="anonymous"
+          onload="renderMathInElement(document.querySelector('.nj-rates-lab') || document.body, {
+            delimiters: [
+              {left: '\\[', right: '\\]', display: true},
+              {left: '\\(', right: '\\)', display: false}
+            ],
+            throwOnError: false
+          });"></script>
+{% endblock %}
