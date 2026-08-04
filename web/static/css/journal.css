@@ -1302,6 +1302,16 @@ body {
   display: none;
 }
 
+.nj-curve-table-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nj-scroll-table-curve {
+  max-height: 14rem;
+}
+
 .nj-scroll-table {
   max-height: 12rem;
   overflow: auto;

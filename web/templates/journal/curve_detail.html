@@ -99,21 +99,22 @@
         </div>
       </div>
 
-      {% if snapshot.instruments %}
-        <div class="nj-curve-quotes mt-3">
-          <div class="nj-curve-quotes-head mb-2">
-            <strong>Source quotes</strong>
-            <span class="small text-secondary">
-              {% if snapshot.par_header %}
-                {{ snapshot.par_header.source }}
-                · par @ {{ snapshot.header.source_par_as_of|date:"Y-m-d" }}
-              {% else %}
-                bootstrap inputs
-              {% endif %}
-              · rates recovered from these instruments
-            </span>
-          </div>
-          <div class="nj-curve-quote-strip">
+      <div class="nj-curve-quotes mt-3">
+        <div class="nj-curve-quotes-head mb-2">
+          <strong>Source quotes</strong>
+          <span class="small text-secondary">
+            {% if snapshot.par_header %}
+              {{ snapshot.par_header.source }}
+              · par @ {{ snapshot.header.source_par_as_of|date:"Y-m-d" }}
+            {% else %}
+              bootstrap inputs
+            {% endif %}
+            · rates recovered from these instruments · zeros + DF @ {{ as_of|date:"Y-m-d" }}
+          </span>
+        </div>
+
+        {% if snapshot.instruments %}
+          <div class="nj-curve-quote-strip mb-3">
             {% for row in snapshot.instruments %}
               <div class="nj-curve-quote-chip" title="{{ row.fred_series_id }} · {{ row.instrument_type }} · {{ row.quote_style }}">
                 <span class="nj-curve-quote-tenor">{{ row.tenor }}</span>
@@ -123,89 +124,69 @@
               </div>
             {% endfor %}
           </div>
-        </div>
-      {% endif %}
-    </div>
-  </div>
+        {% endif %}
 
-  <div class="row g-2">
-    <div class="col-lg-6">
-      <div class="nj-panel">
-        <div class="nj-panel-head">
-          <h2>Par instruments</h2>
-          <span class="small text-secondary">
-            {% if snapshot.par_header %}
-              {{ snapshot.par_header.source }} · quotes @ {{ snapshot.header.source_par_as_of|date:"Y-m-d" }}
+        <div class="row g-2 nj-curve-quote-tables">
+          <div class="col-lg-6">
+            <div class="nj-curve-table-label small text-secondary mb-1">Par instruments</div>
+            {% if snapshot.instruments %}
+              <div class="nj-scroll-table nj-scroll-table-curve">
+                <table class="table table-sm mb-0 nj-compact-table">
+                  <thead>
+                    <tr>
+                      <th>Tenor</th>
+                      <th>Type</th>
+                      <th>Series</th>
+                      <th class="nj-num">Quoted</th>
+                      <th class="nj-num">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in snapshot.instruments %}
+                      <tr>
+                        <td>{{ row.tenor }}</td>
+                        <td class="small">{{ row.instrument_type }}</td>
+                        <td class="small"><code>{{ row.fred_series_id }}</code></td>
+                        <td class="nj-num">{{ row.quoted_rate|floatformat:6 }}</td>
+                        <td class="nj-num">{{ row.quoted_pct|floatformat:2 }}%</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             {% else %}
-              bootstrap inputs
+              <div class="nj-empty">No par instruments for this curve day.</div>
             {% endif %}
-          </span>
-        </div>
-        <div class="nj-panel-body tight">
-          {% if snapshot.instruments %}
-            <div class="nj-scroll-table nj-scroll-table-lg">
-              <table class="table table-sm mb-0 nj-compact-table">
-                <thead>
-                  <tr>
-                    <th>Tenor</th>
-                    <th>Type</th>
-                    <th>Series</th>
-                    <th class="nj-num">Quoted</th>
-                    <th class="nj-num">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in snapshot.instruments %}
+          </div>
+          <div class="col-lg-6">
+            <div class="nj-curve-table-label small text-secondary mb-1">Bootstrapped pillars</div>
+            {% if snapshot.pillars %}
+              <div class="nj-scroll-table nj-scroll-table-curve">
+                <table class="table table-sm mb-0 nj-compact-table">
+                  <thead>
                     <tr>
-                      <td>{{ row.tenor }}</td>
-                      <td class="small">{{ row.instrument_type }}</td>
-                      <td class="small"><code>{{ row.fred_series_id }}</code></td>
-                      <td class="nj-num">{{ row.quoted_rate|floatformat:6 }}</td>
-                      <td class="nj-num">{{ row.quoted_pct|floatformat:2 }}%</td>
+                      <th>Tenor</th>
+                      <th class="nj-num">τ</th>
+                      <th class="nj-num">Zero</th>
+                      <th class="nj-num">DF</th>
                     </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% else %}
-            <div class="nj-empty">No par instruments for this curve day.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="nj-panel">
-        <div class="nj-panel-head">
-          <h2>Bootstrapped pillars</h2>
-          <span class="small text-secondary">zeros + DF @ {{ as_of|date:"Y-m-d" }}</span>
-        </div>
-        <div class="nj-panel-body tight">
-          {% if snapshot.pillars %}
-            <div class="nj-scroll-table nj-scroll-table-lg">
-              <table class="table table-sm mb-0 nj-compact-table">
-                <thead>
-                  <tr>
-                    <th>Tenor</th>
-                    <th class="nj-num">τ</th>
-                    <th class="nj-num">Zero</th>
-                    <th class="nj-num">DF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for p in snapshot.pillars %}
-                    <tr>
-                      <td>{{ p.tenor }}</td>
-                      <td class="nj-num">{{ p.time_years|floatformat:6 }}</td>
-                      <td class="nj-num">{{ p.zero_rate|floatformat:6 }}</td>
-                      <td class="nj-num">{{ p.discount_factor|floatformat:6 }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% else %}
-            <div class="nj-empty">No pillars.</div>
-          {% endif %}
+                  </thead>
+                  <tbody>
+                    {% for p in snapshot.pillars %}
+                      <tr>
+                        <td>{{ p.tenor }}</td>
+                        <td class="nj-num">{{ p.time_years|floatformat:6 }}</td>
+                        <td class="nj-num">{{ p.zero_rate|floatformat:6 }}</td>
+                        <td class="nj-num">{{ p.discount_factor|floatformat:6 }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="nj-empty">No pillars.</div>
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>
