@@ -154,10 +154,7 @@ class DashboardView(TemplateView):
                 vega_total=Sum('vega_total'),
                 theta_total=Sum('theta_total'),
             ) if mtm is not None else {},
-            # Meta.ordering would leak into SELECT DISTINCT, so reset it first.
-            'engines': list(
-                mtm.order_by().values_list('pricing_engine', flat=True).distinct()
-            ) if mtm is not None else [],
+            'engines': self._engines_breakdown(mtm) if mtm is not None else [],
             'trade_status': list(
                 Trade.objects.order_by()
                 .values('status')
@@ -173,6 +170,21 @@ class DashboardView(TemplateView):
             'curves': curves,
             'curves_meta': curves_meta,
         }
+
+    @staticmethod
+    def _engines_breakdown(mtm):
+        """Per-engine legs + PV for the selected as_of; share is by leg count."""
+        rows = list(
+            mtm.order_by()
+            .values('pricing_engine')
+            .annotate(legs=Count('pk'), pv_total=Sum('pv_total'))
+            .order_by('-legs', 'pricing_engine')
+        )
+        total_legs = sum(int(r['legs'] or 0) for r in rows)
+        for row in rows:
+            legs = int(row['legs'] or 0)
+            row['share'] = (100.0 * legs / total_legs) if total_legs else 0.0
+        return rows
 
 
 class TradeListView(ListView):

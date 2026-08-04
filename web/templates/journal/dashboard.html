@@ -135,16 +135,33 @@
     <div class="col-lg-4">
       <div class="nj-panel">
         <div class="nj-panel-head">
-          <h2>Pricing engines</h2>
+          <h2>Engines in today's marks</h2>
           <a class="small" href="{% url 'journal:inventory' %}">instrument inventory</a>
         </div>
-        <div class="nj-panel-body">
+        <div class="nj-panel-body tight">
           {% if engines %}
-            <div class="d-flex flex-wrap gap-2">
-              {% for engine in engines %}
-                <span class="badge rounded-pill text-bg-dark border">{{ engine }}</span>
-              {% endfor %}
-            </div>
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Engine</th>
+                  <th class="nj-num">Legs</th>
+                  <th class="nj-num">PV</th>
+                  <th class="nj-num">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for e in engines %}
+                  <tr>
+                    <td><code>{{ e.pricing_engine }}</code></td>
+                    <td class="nj-num">{{ e.legs }}</td>
+                    <td class="nj-num {% if e.pv_total and e.pv_total < 0 %}nj-pnl-neg{% elif e.pv_total and e.pv_total > 0 %}nj-pnl-pos{% endif %}">
+                      {% if e.pv_total != None %}{{ e.pv_total|nj_num:2 }}{% else %}—{% endif %}
+                    </td>
+                    <td class="nj-num">{{ e.share|nj_num:0 }}%</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           {% else %}
             <div class="nj-empty">No engines on this as_of.</div>
           {% endif %}
