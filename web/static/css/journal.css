@@ -62,15 +62,18 @@ body {
 }
 
 .nj-brand-mark {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.4rem;
-  background: linear-gradient(135deg, var(--nj-accent), #0f766e);
+  width: 2.45rem;
+  height: 1.65rem;
   display: inline-grid;
   place-items: center;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #042f2e;
+  flex-shrink: 0;
+  color: var(--nj-accent);
+}
+
+.nj-brand-mark svg {
+  display: block;
+  width: 2.45rem;
+  height: 1.65rem;
 }
 
 .nj-brand-text {
