@@ -35,7 +35,7 @@
           <i class="bi bi-journal-text"></i> Trades
         </a>
         <a href="{% url 'journal:quant_lab' %}"
-           class="{% if request.resolver_match.url_name == 'quant_lab' or request.resolver_match.url_name == 'quant_lab_pricing' or request.resolver_match.url_name == 'simulation_lab' %}active{% endif %}">
+           class="{% if request.resolver_match.url_name == 'quant_lab' or request.resolver_match.url_name == 'quant_lab_pricing' or request.resolver_match.url_name == 'simulation_lab' or request.resolver_match.url_name == 'rates_conversion_lab' %}active{% endif %}">
           <i class="bi bi-lightning-charge"></i> Quant Lab
         </a>
         <a href="{% url 'journal:underlier_list' %}"
@@ -97,6 +97,11 @@
       <main class="nj-content">
         {% block content %}{% endblock %}
       </main>
+
+      <footer class="nj-footer">
+        <span>© 2026 Numeraire Journal</span>
+        <a href="{% url 'journal:about' %}">About</a>
+      </footer>
     </div>
   </div>
 

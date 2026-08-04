@@ -175,6 +175,28 @@ body {
   flex: 1;
 }
 
+.nj-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.5rem;
+  border-top: 1px solid var(--bs-border-color);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--bs-secondary-color);
+}
+
+.nj-footer a {
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+}
+
+.nj-footer a:hover {
+  color: var(--nj-accent);
+}
+
 /* --- Cards / metrics ----------------------------------------------------- */
 
 .nj-metric {
@@ -271,23 +293,98 @@ body {
   font-size: 0.9rem;
 }
 
-/* --- About / invite blurb ------------------------------------------------ */
+/* --- About (public) ------------------------------------------------------ */
 
 .nj-about {
-  padding: 1.1rem 1.25rem 1.15rem;
-  border-radius: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--nj-accent) 28%, var(--bs-border-color));
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--nj-accent) 12%, transparent),
-      transparent 55%
-    ),
-    color-mix(in srgb, var(--bs-body-bg) 85%, #0f172a);
+    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(45, 212, 191, 0.08), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 90% 100%, rgba(15, 118, 110, 0.12), transparent 50%),
+    var(--bs-body-bg);
+}
+
+.nj-about-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.75rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.nj-about-top .nj-brand {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.nj-about-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: 2.5rem 3rem;
+  align-items: center;
+  padding: 2.5rem clamp(1.25rem, 4vw, 3.5rem) 2rem;
+  max-width: 68rem;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.nj-about-photos {
+  position: relative;
+  min-height: 28rem;
+  padding: 0 1.75rem 2.75rem 0;
+}
+
+.nj-about-photo {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 70%, transparent);
+  box-shadow: 0 1.25rem 2.5rem rgba(0, 0, 0, 0.35);
+  background: #0b1220;
+}
+
+.nj-about-photo img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.nj-about-photo-primary {
+  width: 88%;
+  aspect-ratio: 3 / 4;
+  z-index: 1;
+}
+
+.nj-about-photo-secondary {
+  position: absolute;
+  width: 42%;
+  aspect-ratio: 4 / 5;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  transform: rotate(2deg);
+  background: transparent;
+}
+
+.nj-about-photo-secondary img {
+  object-position: center 15%;
+}
+
+.nj-about-copy {
+  max-width: 34rem;
 }
 
 .nj-about-kicker {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.45rem;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -295,21 +392,112 @@ body {
   color: var(--nj-accent);
 }
 
-.nj-about-lede {
-  margin: 0;
-  max-width: 42rem;
-  font-size: 1.05rem;
-  line-height: 1.45;
-  font-weight: 500;
-  color: var(--bs-body-color);
+.nj-about-copy h1 {
+  margin: 0 0 0.85rem;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
-.nj-about-sub {
-  margin: 0.55rem 0 0;
-  max-width: 40rem;
-  font-size: 0.85rem;
-  line-height: 1.45;
+.nj-about-lede {
+  margin: 0 0 0.85rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: #e2e8f0;
+}
+
+.nj-about-body {
+  margin: 0 0 1.35rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
   color: var(--bs-secondary-color);
+}
+
+.nj-about-tags {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.75rem;
+  padding: 0;
+}
+
+.nj-about-tags li {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: color-mix(in srgb, var(--bs-body-color) 85%, var(--bs-secondary-color));
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 75%, transparent);
+}
+
+.nj-about-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.nj-about-contact a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  text-decoration: none;
+  color: #cbd5e1;
+  font-size: 0.92rem;
+  width: fit-content;
+}
+
+.nj-about-contact a:hover {
+  color: var(--nj-accent);
+}
+
+.nj-about-contact i {
+  width: 1.1rem;
+  text-align: center;
+  color: var(--nj-accent);
+  opacity: 0.9;
+}
+
+.nj-about-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.75rem;
+  border-top: 1px solid var(--bs-border-color);
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-about-foot a {
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+}
+
+.nj-about-foot a:hover {
+  color: var(--nj-accent);
+}
+
+@media (max-width: 860px) {
+  .nj-about-main {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    padding-top: 1.75rem;
+  }
+
+  .nj-about-photos {
+    max-width: 22rem;
+    margin: 0 auto;
+    min-height: 24rem;
+    padding: 0 1.25rem 2.25rem 0;
+  }
+
+  .nj-about-photo-secondary {
+    width: 38%;
+  }
 }
 
 /* --- What-if sandbox ----------------------------------------------------- */
@@ -811,12 +999,18 @@ body {
   margin-bottom: 0.15rem;
 }
 
-/* Quant Lab hub — two workspaces */
+/* Quant Lab hub — workspaces */
 .nj-lab-hub {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   min-height: min(62vh, 28rem);
+}
+
+@media (max-width: 1100px) {
+  .nj-lab-hub {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1135,6 +1329,17 @@ body {
   font-size: 0.95rem;
 }
 
+.nj-login-form .lede a {
+  color: var(--nj-accent);
+  text-decoration: none;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.nj-login-form .lede a:hover {
+  text-decoration: underline;
+}
+
 .nj-login-powered {
   margin-top: 2rem;
   padding-top: 1rem;
@@ -1277,6 +1482,128 @@ body {
   font-size: 0.68rem;
   letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.38);
+}
+
+/* Rates conversion lab */
+.nj-rates-hero {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: 11rem;
+  margin-bottom: 0.85rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 85%, transparent);
+  border-radius: 0.35rem;
+}
+
+.nj-rates-hero-media {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 40%;
+  z-index: 0;
+}
+
+.nj-rates-hero-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      100deg,
+      rgba(2, 6, 23, 0.88) 0%,
+      rgba(2, 6, 23, 0.55) 48%,
+      rgba(2, 6, 23, 0.25) 100%
+    );
+}
+
+.nj-rates-hero-body {
+  position: relative;
+  z-index: 2;
+  padding: 1.15rem 1.35rem 1.25rem;
+  max-width: 32rem;
+}
+
+.nj-rates-hero-kicker {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nj-accent);
+  margin-bottom: 0.3rem;
+}
+
+.nj-rates-hero h2 {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.3rem;
+  color: #f8fafc;
+}
+
+.nj-rates-hero p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.nj-rates-block .nj-rates-formulas {
+  margin-top: 0.35rem;
+}
+
+.nj-rates-forms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+@media (max-width: 800px) {
+  .nj-rates-forms {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nj-rates-form {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 85%, transparent);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--bs-body-bg) 92%, var(--bs-secondary-bg));
+}
+
+.nj-rates-form-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+  color: #e2e8f0;
+}
+
+.nj-rates-result {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--nj-accent) 35%, var(--bs-border-color));
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--nj-accent) 8%, var(--bs-body-bg));
+}
+
+.nj-rates-result-meta {
+  margin-bottom: 0.35rem;
+}
+
+.nj-rates-result-values .value {
+  font-size: 1.25rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.35rem;
+}
+
+.nj-rates-result-values .muted {
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  color: var(--bs-secondary-color);
+}
+
+.nj-rates-legend .nj-sym {
+  margin-right: 0.15rem;
 }
 
 @media (max-width: 1100px) {
