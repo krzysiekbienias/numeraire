@@ -283,6 +283,15 @@ body {
   border-bottom-color: var(--bs-border-color);
 }
 
+.nj-book-row td {
+  font-weight: 600;
+}
+
+.nj-strategy-row td {
+  font-size: 0.8rem;
+  border-top-style: dashed;
+}
+
 .nj-num {
   text-align: right;
   font-variant-numeric: tabular-nums;

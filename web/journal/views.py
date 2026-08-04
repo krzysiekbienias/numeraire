@@ -154,7 +154,8 @@ class DashboardView(TemplateView):
                 vega_total=Sum('vega_total'),
                 theta_total=Sum('theta_total'),
             ) if mtm is not None else {},
-            'engines': self._engines_breakdown(mtm) if mtm is not None else [],
+            'engines': self._mtm_breakdown(mtm, 'pricing_engine') if mtm is not None else [],
+            'books': self._books_breakdown(mtm) if mtm is not None else [],
             'trade_status': list(
                 Trade.objects.order_by()
                 .values('status')
@@ -172,19 +173,46 @@ class DashboardView(TemplateView):
         }
 
     @staticmethod
-    def _engines_breakdown(mtm):
-        """Per-engine legs + PV for the selected as_of; share is by leg count."""
+    def _mtm_breakdown(mtm, group_field: str):
+        """Per-group legs + PV for the selected as_of; share is by leg count."""
+        key = group_field.rsplit('__', 1)[-1]
         rows = list(
             mtm.order_by()
-            .values('pricing_engine')
+            .values(group_field)
             .annotate(legs=Count('pk'), pv_total=Sum('pv_total'))
-            .order_by('-legs', 'pricing_engine')
+            .order_by('-legs', group_field)
         )
         total_legs = sum(int(r['legs'] or 0) for r in rows)
         for row in rows:
+            if group_field != key:
+                row[key] = row.pop(group_field)
             legs = int(row['legs'] or 0)
             row['share'] = (100.0 * legs / total_legs) if total_legs else 0.0
         return rows
+
+    @classmethod
+    def _books_breakdown(cls, mtm):
+        """Book totals with nested strategy_type rows (legs + PV)."""
+        books = cls._mtm_breakdown(mtm, 'trade__portfolio_id')
+        for book in books:
+            book.pop('share', None)
+        strat_rows = list(
+            mtm.order_by()
+            .values('trade__portfolio_id', 'trade__strategy_type')
+            .annotate(legs=Count('pk'), pv_total=Sum('pv_total'))
+            .order_by('trade__portfolio_id', '-legs', 'trade__strategy_type')
+        )
+        by_book: dict[str, list] = {}
+        for row in strat_rows:
+            book_id = row['trade__portfolio_id']
+            by_book.setdefault(book_id, []).append({
+                'strategy_type': row['trade__strategy_type'],
+                'legs': int(row['legs'] or 0),
+                'pv_total': row['pv_total'],
+            })
+        for book in books:
+            book['strategies'] = by_book.get(book['portfolio_id'], [])
+        return books
 
 
 class TradeListView(ListView):

@@ -135,6 +135,52 @@
     <div class="col-lg-4">
       <div class="nj-panel">
         <div class="nj-panel-head">
+          <h2>PV by book</h2>
+          <a class="small" href="{% url 'journal:trade_list' %}">all trades</a>
+        </div>
+        <div class="nj-panel-body tight">
+          {% if books %}
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Book / strategy</th>
+                  <th class="nj-num">Legs</th>
+                  <th class="nj-num">PV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for b in books %}
+                  <tr class="nj-book-row">
+                    <td><code>{{ b.portfolio_id }}</code></td>
+                    <td class="nj-num">{{ b.legs }}</td>
+                    <td class="nj-num {% if b.pv_total and b.pv_total < 0 %}nj-pnl-neg{% elif b.pv_total and b.pv_total > 0 %}nj-pnl-pos{% endif %}">
+                      {% if b.pv_total != None %}{{ b.pv_total|nj_num:2 }}{% else %}—{% endif %}
+                    </td>
+                  </tr>
+                  {% for s in b.strategies %}
+                    <tr class="nj-strategy-row">
+                      <td class="ps-3 text-secondary">{{ s.strategy_type }}</td>
+                      <td class="nj-num">{{ s.legs }}</td>
+                      <td class="nj-num {% if s.pv_total and s.pv_total < 0 %}nj-pnl-neg{% elif s.pv_total and s.pv_total > 0 %}nj-pnl-pos{% endif %}">
+                        {% if s.pv_total != None %}{{ s.pv_total|nj_num:2 }}{% else %}—{% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="nj-empty">No marked books on this as_of.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
           <h2>Engines in today's marks</h2>
           <a class="small" href="{% url 'journal:inventory' %}">instrument inventory</a>
         </div>
@@ -168,7 +214,9 @@
         </div>
       </div>
     </div>
+  </div>
 
+  <div class="row g-3">
     <div class="col-lg-6">
       <div class="nj-panel">
         <div class="nj-panel-head">
