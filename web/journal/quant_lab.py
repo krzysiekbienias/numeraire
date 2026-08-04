@@ -12,8 +12,13 @@ from dataclasses import dataclass
 from journal.black_scholes import BsResult, black_scholes
 from journal.greeks_lab import GreeksLabParams, build_greeks_vs_spot, params_from_get
 from journal.models import CatalogInstrumentType
+from journal.payoff import unit_payoff
 
 DAYS_PER_YEAR = 365.0
+
+# Payoff vs PV chart (European vanilla): spot grid ±30% around K.
+_VALUE_CHART_RANGE = 0.30
+_VALUE_CHART_POINTS = 81
 
 # Full legend; UI filters to symbols needed by the selected instrument (+ greeks when priced).
 SYMBOL_LEGEND = (
@@ -38,42 +43,49 @@ _FIELD_SPOT = {
     'sym': 'S',
     'label': 'Spot',
     'kind': 'number',
+    'step': '5',
 }
 _FIELD_STRIKE = {
     'name': 'strike',
     'sym': 'K',
     'label': 'Strike',
     'kind': 'number',
+    'step': '5',
 }
 _FIELD_FORWARD = {
     'name': 'strike',
     'sym': 'K',
     'label': 'Forward',
     'kind': 'number',
+    'step': '5',
 }
 _FIELD_VOL = {
     'name': 'vol',
     'sym': 'σ',
     'label': 'IV',
     'kind': 'number',
+    'step': '0.1',
 }
 _FIELD_RATE = {
     'name': 'rate',
     'sym': 'r',
     'label': 'Rate',
     'kind': 'number',
+    'step': '0.01',
 }
 _FIELD_DIV = {
     'name': 'div',
     'sym': 'q',
     'label': 'Dividend',
     'kind': 'number',
+    'step': '0.1',
 }
 _FIELD_TAU = {
     'name': 'tau',
     'sym': 'τ',
     'label': 'Tenor (y)',
     'kind': 'number',
+    'step': '0.1',
 }
 _FIELD_SIDE = {
     'name': 'side',
@@ -86,12 +98,14 @@ _FIELD_CASH = {
     'sym': 'Q',
     'label': 'Cash Q',
     'kind': 'number',
+    'step': '1',
 }
 _FIELD_STEPS = {
     'name': 'n_steps',
     'sym': 'N',
     'label': 'Steps',
     'kind': 'number',
+    'step': '1',
 }
 
 _OPTION_FIELDS = (
@@ -639,6 +653,131 @@ def price_sandbox(
     )
 
 
+def _value_spot_grid(strike: float, n: int = _VALUE_CHART_POINTS) -> list[float]:
+    lo = strike * (1.0 - _VALUE_CHART_RANGE)
+    hi = strike * (1.0 + _VALUE_CHART_RANGE)
+    if lo <= 0:
+        lo = max(strike * 0.05, 1e-6)
+    n = max(40, n)
+    step = (hi - lo) / n
+    return [round(lo + i * step, 6) for i in range(n + 1)]
+
+
+def build_payoff_value_chart(
+    params: GreeksLabParams,
+    tau: float,
+) -> dict | None:
+    """Payoff at T vs PV today along a spot grid (European vanilla only).
+
+    Payoff is pure Python; PV uses C++ ``price_vanilla`` when available,
+    else Python BS fallback. Full reprice per spot (not delta). Also returns
+    the delta-tangent at the mark spot: V(S₀)+Δ·(S−S₀) — the gap to PV is Γ.
+    """
+    if tau < 0.0 or params.strike <= 0.0:
+        return None
+
+    spots = _value_spot_grid(params.strike)
+    payoffs = [
+        unit_payoff(
+            kind='vanilla',
+            is_call=params.is_call,
+            strike=params.strike,
+            spot=s,
+        )
+        for s in spots
+    ]
+
+    mod = _try_import_cpp()
+    values: list[float] = []
+    engine = 'python_bs_fallback'
+    mark_pv: float | None = None
+    mark_delta: float | None = None
+
+    if mod is not None and hasattr(mod, 'price_vanilla'):
+        engine = 'c++_analytic_bs'
+        try:
+            for s in spots:
+                raw = mod.price_vanilla(
+                    float(s),
+                    float(params.strike),
+                    float(params.vol),
+                    float(params.rate),
+                    float(params.div),
+                    float(tau),
+                    bool(params.is_call),
+                    'european',
+                    0,
+                )
+                values.append(float(raw['npv']))
+            mark = mod.price_vanilla(
+                float(params.spot),
+                float(params.strike),
+                float(params.vol),
+                float(params.rate),
+                float(params.div),
+                float(tau),
+                bool(params.is_call),
+                'european',
+                0,
+            )
+            mark_pv = float(mark['npv'])
+            if mark.get('delta') is not None:
+                mark_delta = float(mark['delta'])
+        except Exception:  # noqa: BLE001
+            values = []
+            mark_pv = None
+            mark_delta = None
+            engine = 'python_bs_fallback'
+
+    if not values:
+        engine = 'python_bs_fallback'
+        try:
+            for s in spots:
+                g = black_scholes(
+                    s,
+                    params.strike,
+                    tau,
+                    params.vol,
+                    params.rate,
+                    params.div,
+                    is_call=params.is_call,
+                )
+                values.append(float(g.pv_unit))
+            mark_g = black_scholes(
+                params.spot,
+                params.strike,
+                tau,
+                params.vol,
+                params.rate,
+                params.div,
+                is_call=params.is_call,
+            )
+            mark_pv = float(mark_g.pv_unit)
+            mark_delta = float(mark_g.delta)
+        except (ValueError, OverflowError):
+            return None
+
+    if mark_pv is None or mark_delta is None:
+        return None
+
+    s0 = float(params.spot)
+    tangent = [mark_pv + mark_delta * (s - s0) for s in spots]
+
+    return {
+        'engine': engine,
+        'spot_mark': s0,
+        'strike': float(params.strike),
+        'is_call': bool(params.is_call),
+        'tau': float(tau),
+        'mark_pv': mark_pv,
+        'mark_delta': mark_delta,
+        'spots': spots,
+        'payoff': payoffs,
+        'value': values,
+        'tangent': tangent,
+    }
+
+
 def build_quant_lab(get) -> dict:
     choices = list_inventory_choices()
     params, tau, meta = resolve_lab_params(get)
@@ -653,6 +792,7 @@ def build_quant_lab(get) -> dict:
     quote: QuantLabQuote | None = None
     charts = None
     crr_tree = None
+    payoff_value_chart = None
     n_steps = int(meta.get('n_steps') or _CRR_DEFAULT_STEPS)
     if selected and params is not None and product in {'vanilla', 'aon', 'con', 'forward'}:
         quote = price_sandbox(
@@ -666,6 +806,7 @@ def build_quant_lab(get) -> dict:
         # Educational greeks-vs-spot shapes only for European vanillas (Python BS).
         if product == 'vanilla' and exercise != 'american':
             charts = build_greeks_vs_spot(params)
+            payoff_value_chart = build_payoff_value_chart(params, tau)
         if product == 'vanilla' and exercise == 'american' and quote and quote.ok:
             steps_used = quote.n_steps if quote.n_steps is not None else n_steps
             crr_tree = _dump_crr_tree(params, tau, exercise, steps_used)
@@ -698,4 +839,6 @@ def build_quant_lab(get) -> dict:
         'crr_tree': crr_tree,
         'show_crr_tree': bool(crr_tree and crr_tree.get('nodes')),
         'crr_tree_max_steps': _CRR_TREE_MAX_STEPS,
+        'payoff_value_chart': payoff_value_chart,
+        'show_payoff_value': payoff_value_chart is not None,
     }

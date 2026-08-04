@@ -4,28 +4,26 @@
 {% block title %}Pricing · Quant Lab{% endblock %}
 {% block page_title %}Pricing &amp; sensitivities{% endblock %}
 {% block page_subtitle %}
-  <p class="muted">
-    <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
-    · not persisted
-    · C++ pricers
-  </p>
+<p class="muted">
+  <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+  · not persisted
+  · C++ pricers
+</p>
 {% endblock %}
 
 {% block extra_head %}
-  <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
-        integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
-        crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+  integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
 {% endblock %}
 
 {% block content %}
-  <div class="nj-quant-lab">
+<div class="nj-quant-lab">
   {% if greeks_chart %}
-    {{ greeks_chart|json_script:"greeks-lab-data" }}
+  {{ greeks_chart|json_script:"greeks-lab-data" }}
   {% endif %}
 
   {% if db_error %}
-    <div class="alert alert-warning py-2 small">Database: {{ db_error }}</div>
+  <div class="alert alert-warning py-2 small">Database: {{ db_error }}</div>
   {% endif %}
 
   {# One compact setup card: type + params #}
@@ -34,194 +32,228 @@
       <div class="nj-quant-setup-top">
         <label class="nj-quant-type">
           <span>Type</span>
-          <select class="form-select form-select-sm" id="quant-lab-instrument"
-                  aria-label="Instrument type">
+          <select class="form-select form-select-sm" id="quant-lab-instrument" aria-label="Instrument type">
             <option value="">— pick —</option>
             {% for c in choices %}
-              <option value="{{ c.code }}"
-                      {% if meta.instrument_code == c.code %}selected{% endif %}>
-                {{ c.label }}
-              </option>
+            <option value="{{ c.code }}" {% if meta.instrument_code == c.code %}selected{% endif %}>
+              {{ c.label }}
+            </option>
             {% endfor %}
           </select>
         </label>
         {% if instrument_selected and meta.instrument_code %}
-          <span class="nj-quant-type-tag">
-            <span class="nj-sym">{{ meta.instrument_code }}</span>
-            {% if meta.instrument_title %}{{ meta.instrument_title }}{% endif %}
-          </span>
+        <span class="nj-quant-type-tag">
+          <span class="nj-sym">{{ meta.instrument_code }}</span>
+          {% if meta.instrument_title %}{{ meta.instrument_title }}{% endif %}
+        </span>
         {% endif %}
       </div>
 
       {% if instrument_selected and fields %}
-        <form method="get" action="{% url 'journal:quant_lab_pricing' %}"
-              class="nj-quant-lab-form" id="quant-lab-params-form">
-          <input type="hidden" name="instrument" value="{{ meta.instrument_code }}">
-          <div class="nj-quant-params">
-            {% for f in fields %}
-              {% if f.kind == 'side' %}
-                <label title="Call or put">
-                  <span>{{ f.label }}</span>
-                  <select class="form-select form-select-sm" name="side">
-                    <option value="call" {% if params.is_call %}selected{% endif %}>call</option>
-                    <option value="put" {% if not params.is_call %}selected{% endif %}>put</option>
-                  </select>
-                </label>
-              {% else %}
-                <label title="{% for sym, name, desc in legend %}{% if sym == f.sym %}{{ name }} — {{ desc }}{% endif %}{% endfor %}">
-                  <span>{% if f.sym %}<span class="nj-sym">{{ f.sym }}</span>{% endif %}{{ f.label }}</span>
-                  <input class="form-control form-control-sm" type="number" step="any"
-                         name="{{ f.name }}"
-                         value="{% if f.name == 'tau' %}{{ tau }}{% elif f.name == 'spot' %}{{ params.spot }}{% elif f.name == 'strike' %}{{ params.strike }}{% elif f.name == 'vol' %}{{ params.vol }}{% elif f.name == 'rate' %}{{ params.rate }}{% elif f.name == 'div' %}{{ params.div }}{% elif f.name == 'cash_payout' %}{{ meta.cash_payout }}{% elif f.name == 'n_steps' %}{{ meta.n_steps }}{% endif %}">
-                </label>
-              {% endif %}
-            {% endfor %}
-            <div class="nj-quant-actions">
-              <button type="submit" class="btn btn-sm btn-primary">Price</button>
-              <a class="btn btn-sm btn-outline-secondary"
-                 href="{% url 'journal:quant_lab_pricing' %}?instrument={{ meta.instrument_code }}">Reset</a>
-            </div>
+      <form method="get" action="{% url 'journal:quant_lab_pricing' %}" class="nj-quant-lab-form"
+        id="quant-lab-params-form">
+        <input type="hidden" name="instrument" value="{{ meta.instrument_code }}">
+        <div class="nj-quant-params">
+          {% for f in fields %}
+          {% if f.kind == 'side' %}
+          <label title="Call or put">
+            <span>{{ f.label }}</span>
+            <select class="form-select form-select-sm" name="side">
+              <option value="call" {% if params.is_call %}selected{% endif %}>call</option>
+              <option value="put" {% if not params.is_call %}selected{% endif %}>put</option>
+            </select>
+          </label>
+          {% else %}
+          <label
+            title="{% for sym, name, desc in legend %}{% if sym == f.sym %}{{ name }} — {{ desc }}{% endif %}{% endfor %}">
+            <span>{% if f.sym %}<span class="nj-sym">{{ f.sym }}</span>{% endif %}{{ f.label }}</span>
+            <input class="form-control form-control-sm" type="number" step="{{ f.step|default:'any' }}"
+              name="{{ f.name }}"
+              value="{% if f.name == 'tau' %}{{ tau }}{% elif f.name == 'spot' %}{{ params.spot }}{% elif f.name == 'strike' %}{{ params.strike }}{% elif f.name == 'vol' %}{{ params.vol }}{% elif f.name == 'rate' %}{{ params.rate }}{% elif f.name == 'div' %}{{ params.div }}{% elif f.name == 'cash_payout' %}{{ meta.cash_payout }}{% elif f.name == 'n_steps' %}{{ meta.n_steps }}{% endif %}">
+          </label>
+          {% endif %}
+          {% endfor %}
+          <div class="nj-quant-actions">
+            <button type="submit" class="btn btn-sm btn-primary">Price</button>
+            <a class="btn btn-sm btn-outline-secondary"
+              href="{% url 'journal:quant_lab_pricing' %}?instrument={{ meta.instrument_code }}">Reset</a>
           </div>
-        </form>
+        </div>
+      </form>
       {% elif not instrument_selected %}
-        <p class="small text-secondary mb-0">Pick a type to show its inputs.</p>
+      <p class="small text-secondary mb-0">Pick a type to show its inputs.</p>
       {% endif %}
     </div>
   </div>
 
   {% if show_formulas and params %}
-    <div class="nj-panel nj-quant-edu mb-2">
-      <div class="nj-panel-body nj-quant-edu-body">
-        <div class="nj-quant-edu-head">
-          <strong>Formulas</strong>
-          <span class="small text-secondary">
-            {% if meta.lab_product == 'forward' %}
-              long equity forward
-            {% else %}
-              {% if params.is_call %}call{% else %}put{% endif %}
-              · {% if meta.exercise == 'american' %}American{% else %}European{% endif %}
-            {% endif %}
-            · educational reminder
-          </span>
-        </div>
-        <div class="nj-quant-edu-grid">
-          <div class="nj-quant-edu-block">
-            <span class="nj-quant-edu-label">Payoff at \(T\)</span>
-            {% if meta.lab_product == 'forward' %}
-              <div class="nj-quant-edu-math">\[S_T - K\]</div>
-            {% elif meta.lab_product == 'aon' %}
-              {% if params.is_call %}
-                <div class="nj-quant-edu-math">\[S_T\,\mathbf{1}_{\{S_T > K\}}\]</div>
-              {% else %}
-                <div class="nj-quant-edu-math">\[S_T\,\mathbf{1}_{\{S_T < K\}}\]</div>
-              {% endif %}
-            {% elif meta.lab_product == 'con' %}
-              {% if params.is_call %}
-                <div class="nj-quant-edu-math">\[Q\,\mathbf{1}_{\{S_T > K\}}\]</div>
-              {% else %}
-                <div class="nj-quant-edu-math">\[Q\,\mathbf{1}_{\{S_T < K\}}\]</div>
-              {% endif %}
-            {% elif params.is_call %}
-              <div class="nj-quant-edu-math">\[\bigl(S_T - K\bigr)^+ = \max(S_T - K,\ 0)\]</div>
-            {% else %}
-              <div class="nj-quant-edu-math">\[\bigl(K - S_T\bigr)^+ = \max(K - S_T,\ 0)\]</div>
-            {% endif %}
-          </div>
-          <div class="nj-quant-edu-block">
-            <span class="nj-quant-edu-label">
-              {% if meta.lab_product == 'forward' %}
-                Forward price
-              {% elif meta.lab_product == 'aon' %}
-                Asset-or-nothing price
-              {% elif meta.lab_product == 'con' %}
-                Cash-or-nothing price
-              {% elif meta.exercise == 'american' %}
-                Price (no closed form)
-              {% else %}
-                Black–Scholes price
-              {% endif %}
-            </span>
-            {% if meta.lab_product == 'forward' %}
-              <div class="nj-quant-edu-math">\[
-                V = S_0 e^{-q\tau} - K e^{-r\tau}
-              \]</div>
-              <p class="nj-quant-edu-note mb-0">
-                Analytic equity forward (<code>c++_analytic_forward</code>) · no vol
-              </p>
-            {% elif meta.lab_product == 'aon' %}
-              {% if params.is_call %}
-                <div class="nj-quant-edu-math">\[A_{\mathrm{call}} = S_0 e^{-q\tau}\,N(d_1)\]</div>
-              {% else %}
-                <div class="nj-quant-edu-math">\[A_{\mathrm{put}} = S_0 e^{-q\tau}\,N(-d_1)\]</div>
-              {% endif %}
-              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
-                d_1 = \dfrac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}}
-              \]</div>
-            {% elif meta.lab_product == 'con' %}
-              {% if params.is_call %}
-                <div class="nj-quant-edu-math">\[C_{\mathrm{cash}} = Q\,e^{-r\tau}\,N(d_2)\]</div>
-              {% else %}
-                <div class="nj-quant-edu-math">\[P_{\mathrm{cash}} = Q\,e^{-r\tau}\,N(-d_2)\]</div>
-              {% endif %}
-              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
-                d_2 = \dfrac{\ln(S_0/K)+(r-q-\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}}
-              \]</div>
-            {% elif meta.exercise == 'american' %}
-              <div class="nj-quant-edu-math">\[
-                V_t = \sup_{\tau\in\mathcal{T}_{[t,T]}}
-                \mathbb{E}^{\mathbb{Q}}\!\bigl[e^{-r(\tau-t)}\,\mathrm{payoff}(S_\tau)\bigr]
-              \]</div>
-              <p class="nj-quant-edu-note mb-0">
-                Early exercise · priced by CRR binomial (<code>c++_binomial_crr</code>)
-              </p>
-            {% elif params.is_call %}
-              <div class="nj-quant-edu-math">\[
-                C = S_0 e^{-q\tau} N(d_1) - K e^{-r\tau} N(d_2)
-              \]</div>
-              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
-                d_1 = \dfrac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}},\quad
-                d_2 = d_1 - \sigma\sqrt{\tau}
-              \]</div>
-            {% else %}
-              <div class="nj-quant-edu-math">\[
-                P = K e^{-r\tau} N(-d_2) - S_0 e^{-q\tau} N(-d_1)
-              \]</div>
-              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
-                d_1 = \dfrac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}},\quad
-                d_2 = d_1 - \sigma\sqrt{\tau}
-              \]</div>
-            {% endif %}
-          </div>
-          {% if meta.lab_product == 'vanilla' and meta.exercise == 'american' %}
-            <div class="nj-quant-edu-block nj-quant-edu-block-wide">
-              <span class="nj-quant-edu-label">CRR tree parameters</span>
-              <div class="nj-quant-edu-math">\[
-                \Delta t = \dfrac{\tau}{N},\quad
-                u = e^{\sigma\sqrt{\Delta t}},\quad
-                d = \dfrac{1}{u}
-              \]</div>
-              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
-                p = \dfrac{e^{(r-q)\Delta t} - d}{u - d},\quad
-                q = 1 - p
-              \]</div>
-              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
-                V = \max\!\bigl(\mathrm{payoff}(S),\;
-                e^{-r\Delta t}\bigl(p\,V_u + q\,V_d\bigr)\bigr)
-              \]</div>
-              <p class="nj-quant-edu-note mb-0">
-                Risk-neutral \(p\) (up), \(q\) (down) · same \(u,d,p\) as in the tree panel below
-              </p>
-            </div>
+  <div class="nj-panel nj-quant-edu mb-2">
+    <div class="nj-panel-body nj-quant-edu-body">
+      <div class="nj-quant-edu-head">
+        <strong>Formulas</strong>
+        <span class="small text-secondary">
+          {% if meta.lab_product == 'forward' %}
+          long equity forward
+          {% else %}
+          {% if params.is_call %}call{% else %}put{% endif %}
+          · {% if meta.exercise == 'american' %}American{% else %}European{% endif %}
           {% endif %}
+          · educational reminder
+        </span>
+      </div>
+      <div class="nj-quant-edu-grid">
+        <div class="nj-quant-edu-block">
+          <span class="nj-quant-edu-label">Payoff at \(T\)</span>
+          {% if meta.lab_product == 'forward' %}
+          <div class="nj-quant-edu-math">\[S_T - K\]</div>
+          {% elif meta.lab_product == 'aon' %}
+          {% if params.is_call %}
+          <div class="nj-quant-edu-math">\[S_T\,\mathbf{1}_{\{S_T > K\}}\]</div>
+          {% else %}
+          <div class="nj-quant-edu-math">\[S_T\,\mathbf{1}_{\{S_T < K\}}\]</div>
+              {% endif %}
+              {% elif meta.lab_product == 'con' %}
+              {% if params.is_call %}
+              <div class="nj-quant-edu-math">\[Q\,\mathbf{1}_{\{S_T > K\}}\]</div>
+              {% else %}
+              <div class="nj-quant-edu-math">\[Q\,\mathbf{1}_{\{S_T < K\}}\]</div>
+                  {% endif %}
+                  {% elif params.is_call %}
+                  <div class="nj-quant-edu-math">\[\bigl(S_T - K\bigr)^+ = \max(S_T - K,\ 0)\]</div>
+                  {% else %}
+                  <div class="nj-quant-edu-math">\[\bigl(K - S_T\bigr)^+ = \max(K - S_T,\ 0)\]</div>
+                  {% endif %}
+              </div>
+              <div class="nj-quant-edu-block">
+                <span class="nj-quant-edu-label">
+                  {% if meta.lab_product == 'forward' %}
+                  Forward price
+                  {% elif meta.lab_product == 'aon' %}
+                  Asset-or-nothing price
+                  {% elif meta.lab_product == 'con' %}
+                  Cash-or-nothing price
+                  {% elif meta.exercise == 'american' %}
+                  Price (no closed form)
+                  {% else %}
+                  Black–Scholes price
+                  {% endif %}
+                </span>
+                {% if meta.lab_product == 'forward' %}
+                <div class="nj-quant-edu-math">\[
+                  V = S_0 e^{-q\tau} - K e^{-r\tau}
+                  \]</div>
+                <p class="nj-quant-edu-note mb-0">
+                  Analytic equity forward (<code>c++_analytic_forward</code>) · no vol
+                </p>
+                {% elif meta.lab_product == 'aon' %}
+                {% if params.is_call %}
+                <div class="nj-quant-edu-math">\[A_{\mathrm{call}} = S_0 e^{-q\tau}\,N(d_1)\]</div>
+                {% else %}
+                <div class="nj-quant-edu-math">\[A_{\mathrm{put}} = S_0 e^{-q\tau}\,N(-d_1)\]</div>
+                {% endif %}
+                <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                  d_1 = \dfrac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}}
+                  \]</div>
+                {% elif meta.lab_product == 'con' %}
+                {% if params.is_call %}
+                <div class="nj-quant-edu-math">\[C_{\mathrm{cash}} = Q\,e^{-r\tau}\,N(d_2)\]</div>
+                {% else %}
+                <div class="nj-quant-edu-math">\[P_{\mathrm{cash}} = Q\,e^{-r\tau}\,N(-d_2)\]</div>
+                {% endif %}
+                <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                  d_2 = \dfrac{\ln(S_0/K)+(r-q-\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}}
+                  \]</div>
+                {% elif meta.exercise == 'american' %}
+                <div class="nj-quant-edu-math">\[
+                  V_t = \sup_{\tau\in\mathcal{T}_{[t,T]}}
+                  \mathbb{E}^{\mathbb{Q}}\!\bigl[e^{-r(\tau-t)}\,\mathrm{payoff}(S_\tau)\bigr]
+                  \]</div>
+                <p class="nj-quant-edu-note mb-0">
+                  Early exercise · priced by CRR binomial (<code>c++_binomial_crr</code>)
+                </p>
+                {% elif params.is_call %}
+                <div class="nj-quant-edu-math">\[
+                  C = S_0 e^{-q\tau} N(d_1) - K e^{-r\tau} N(d_2)
+                  \]</div>
+                <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                  d_1 = \dfrac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}},\quad
+                  d_2 = d_1 - \sigma\sqrt{\tau}
+                  \]</div>
+                {% else %}
+                <div class="nj-quant-edu-math">\[
+                  P = K e^{-r\tau} N(-d_2) - S_0 e^{-q\tau} N(-d_1)
+                  \]</div>
+                <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                  d_1 = \dfrac{\ln(S_0/K)+(r-q+\tfrac12\sigma^2)\tau}{\sigma\sqrt{\tau}},\quad
+                  d_2 = d_1 - \sigma\sqrt{\tau}
+                  \]</div>
+                {% endif %}
+              </div>
+              {% if meta.lab_product == 'vanilla' and meta.exercise == 'american' %}
+              <div class="nj-quant-edu-block nj-quant-edu-block-wide">
+                <span class="nj-quant-edu-label">CRR tree parameters</span>
+                <div class="nj-quant-edu-math">\[
+                  \Delta t = \dfrac{\tau}{N},\quad
+                  u = e^{\sigma\sqrt{\Delta t}},\quad
+                  d = \dfrac{1}{u}
+                  \]</div>
+                <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                  p = \dfrac{e^{(r-q)\Delta t} - d}{u - d},\quad
+                  q = 1 - p
+                  \]</div>
+                <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                  V = \max\!\bigl(\mathrm{payoff}(S),\;
+                  e^{-r\Delta t}\bigl(p\,V_u + q\,V_d\bigr)\bigr)
+                  \]</div>
+                <p class="nj-quant-edu-note mb-0">
+                  Risk-neutral \(p\) (up), \(q\) (down) · same \(u,d,p\) as in the tree panel below
+                </p>
+              </div>
+              {% endif %}
+          </div>
         </div>
       </div>
-    </div>
-  {% endif %}
+      {% endif %}
 
-  {% if instrument_selected and quote %}
-    <div class="nj-panel nj-quant-result mb-2">
-      <div class="nj-panel-body nj-quant-result-body">
-        {% if quote.ok %}
+      {% if show_payoff_value and payoff_value_chart %}
+      {{ payoff_value_chart|json_script:"payoff-value-data" }}
+      <div class="nj-panel nj-quant-payoff-value mb-2">
+        <div class="nj-panel-body nj-quant-edu-body">
+          <div class="nj-quant-edu-head">
+            <strong>Payoff vs price</strong>
+            <span class="small text-secondary">
+              European · {{ payoff_value_chart.engine }}
+              · K={{ payoff_value_chart.strike|nj_num:2 }}
+            </span>
+          </div>
+          <div class="nj-payoff-value-split">
+            <div id="payoff-value-chart" class="nj-chart nj-payoff-value-chart"
+              aria-label="Option payoff at expiry versus present value versus spot"></div>
+            <div class="nj-payoff-value-note">
+              <span class="nj-quant-edu-label">Delta hedge · why gamma</span>
+              <div class="nj-quant-edu-math">\[
+                V(S) \approx V(S_0) + \Delta\,(S - S_0)
+                \]</div>
+              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                V(S) - \bigl[V(S_0)+\Delta\,(S-S_0)\bigr]
+                \;\approx\; \tfrac12\,\Gamma\,(S-S_0)^2
+                \]</div>
+              <p class="nj-quant-edu-note mb-0">
+                Dot = price at \(S_0\).<br>
+                Yellow line = \(\Delta\)-tangent (local linear hedge).<br>
+                Gap to teal PV \(\approx\) gamma (convexity the hedge misses).<br>
+                Scroll on chart to zoom · drag to pan.<br>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if instrument_selected and quote %}
+      <div class="nj-panel nj-quant-result mb-2">
+        <div class="nj-panel-body nj-quant-result-body">
+          {% if quote.ok %}
           <div class="nj-quant-result-row">
             <div class="nj-quant-pv">
               <span class="label">
@@ -231,57 +263,57 @@
               <span class="value">{{ quote.pv_unit|nj_num:4 }}</span>
             </div>
             {% if show_quote_greeks %}
-              <div class="nj-quant-greeks">
-                <div><span class="nj-sym">Δ</span> {{ quote.delta|floatformat:4 }}</div>
-                <div><span class="nj-sym">Γ</span> {{ quote.gamma|floatformat:6 }}</div>
-                <div><span class="nj-sym">ν</span> {{ quote.vega|floatformat:4 }}</div>
-                <div><span class="nj-sym">Θ/d</span> {{ quote.theta_day|floatformat:4 }}</div>
-                <div><span class="nj-sym">ρ</span> {{ quote.rho|floatformat:4 }}</div>
-              </div>
+            <div class="nj-quant-greeks">
+              <div><span class="nj-sym">Δ</span> {{ quote.delta|floatformat:4 }}</div>
+              <div><span class="nj-sym">Γ</span> {{ quote.gamma|floatformat:6 }}</div>
+              <div><span class="nj-sym">ν</span> {{ quote.vega|floatformat:4 }}</div>
+              <div><span class="nj-sym">Θ/d</span> {{ quote.theta_day|floatformat:4 }}</div>
+              <div><span class="nj-sym">ρ</span> {{ quote.rho|floatformat:4 }}</div>
+            </div>
             {% elif meta.lab_product == 'vanilla' and meta.exercise == 'american' %}
-              <p class="small text-secondary mb-0 align-self-center">
-                CRR bump greeks · set Steps ≤ {{ crr_tree_max_steps }} to draw the tree
-              </p>
+            <p class="small text-secondary mb-0 align-self-center">
+              CRR bump greeks · set Steps ≤ {{ crr_tree_max_steps }} to draw the tree
+            </p>
             {% else %}
-              <p class="small text-secondary mb-0 align-self-center">NPV only (no analytic greeks for this product)</p>
+            <p class="small text-secondary mb-0 align-self-center">NPV only (no analytic greeks for this product)</p>
             {% endif %}
           </div>
-        {% else %}
+          {% else %}
           <p class="small text-secondary mb-0">{{ quote.message }}</p>
-        {% endif %}
-      </div>
-    </div>
-  {% endif %}
-
-  {% if show_crr_tree and crr_tree %}
-    {{ crr_tree|json_script:"crr-tree-data" }}
-    <div class="nj-panel nj-quant-crr mb-2">
-      <div class="nj-panel-body nj-quant-crr-body">
-        <div class="nj-quant-edu-head">
-          <strong>CRR tree</strong>
-          <span class="small text-secondary">
-            N={{ crr_tree.n_steps }}
-            · u={{ crr_tree.u|floatformat:4 }}
-            · d={{ crr_tree.d|floatformat:4 }}
-            · p={{ crr_tree.p_up|floatformat:4 }}
-            · highlight = early exercise
-          </span>
+          {% endif %}
         </div>
-        <div id="crr-tree-svg" class="nj-crr-tree" aria-label="Cox-Ross-Rubinstein pricing tree"></div>
-        <table class="table table-sm mb-0 nj-compact-table nj-crr-table">
-          <thead>
-            <tr>
-              <th>step</th>
-              <th>ups</th>
-              <th class="nj-num">S</th>
-              <th class="nj-num">exercise</th>
-              <th class="nj-num">continue</th>
-              <th class="nj-num">V</th>
-              <th>EE</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for n in crr_tree.nodes %}
+      </div>
+      {% endif %}
+
+      {% if show_crr_tree and crr_tree %}
+      {{ crr_tree|json_script:"crr-tree-data" }}
+      <div class="nj-panel nj-quant-crr mb-2">
+        <div class="nj-panel-body nj-quant-crr-body">
+          <div class="nj-quant-edu-head">
+            <strong>CRR tree</strong>
+            <span class="small text-secondary">
+              N={{ crr_tree.n_steps }}
+              · u={{ crr_tree.u|floatformat:4 }}
+              · d={{ crr_tree.d|floatformat:4 }}
+              · p={{ crr_tree.p_up|floatformat:4 }}
+              · highlight = early exercise
+            </span>
+          </div>
+          <div id="crr-tree-svg" class="nj-crr-tree" aria-label="Cox-Ross-Rubinstein pricing tree"></div>
+          <table class="table table-sm mb-0 nj-compact-table nj-crr-table">
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>ups</th>
+                <th class="nj-num">S</th>
+                <th class="nj-num">exercise</th>
+                <th class="nj-num">continue</th>
+                <th class="nj-num">V</th>
+                <th>EE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for n in crr_tree.nodes %}
               <tr class="{% if n.early_exercise %}nj-crr-ee{% endif %}">
                 <td>{{ n.step }}</td>
                 <td>{{ n.up_moves }}</td>
@@ -291,55 +323,55 @@
                 <td class="nj-num">{{ n.value|floatformat:4 }}</td>
                 <td>{% if n.early_exercise %}yes{% else %}—{% endif %}</td>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-  {% endif %}
+      {% endif %}
 
-  {% if show_charts and lab %}
-    <div class="nj-panel nj-quant-charts mb-2">
-      <div class="nj-panel-body nj-greeks-lab-body">
-        <div class="nj-quant-charts-head">
-          <strong>Greeks vs spot</strong>
-          <span class="small text-secondary">
-            5D · 1M · 2M
-            · {% if params.is_call %}call{% else %}put{% endif %}
-            · K={{ params.strike|nj_num:2 }}
-          </span>
-        </div>
-        <div id="greeks-chart-error" class="alert alert-warning py-1 small d-none" role="alert"></div>
-        <div class="row nj-greeks-grid nj-quant-greeks-grid" aria-label="Greeks 2 by 2 grid">
-          <div class="col-6">
-            <div class="nj-chart-label"><span>Delta</span></div>
-            <div id="greeks-chart-delta" class="nj-chart nj-greeks-panel-chart"></div>
+      {% if show_charts and lab %}
+      <div class="nj-panel nj-quant-charts mb-2">
+        <div class="nj-panel-body nj-greeks-lab-body">
+          <div class="nj-quant-charts-head">
+            <strong>Greeks vs spot</strong>
+            <span class="small text-secondary">
+              5D · 1M · 2M
+              · {% if params.is_call %}call{% else %}put{% endif %}
+              · K={{ params.strike|nj_num:2 }}
+            </span>
           </div>
-          <div class="col-6">
-            <div class="nj-chart-label"><span>Gamma</span></div>
-            <div id="greeks-chart-gamma" class="nj-chart nj-greeks-panel-chart"></div>
+          <div id="greeks-chart-error" class="alert alert-warning py-1 small d-none" role="alert"></div>
+          <div class="row nj-greeks-grid nj-quant-greeks-grid" aria-label="Greeks 2 by 2 grid">
+            <div class="col-6">
+              <div class="nj-chart-label"><span>Delta</span></div>
+              <div id="greeks-chart-delta" class="nj-chart nj-greeks-panel-chart"></div>
+            </div>
+            <div class="col-6">
+              <div class="nj-chart-label"><span>Gamma</span></div>
+              <div id="greeks-chart-gamma" class="nj-chart nj-greeks-panel-chart"></div>
+            </div>
+            <div class="col-6">
+              <div class="nj-chart-label"><span>Vega</span></div>
+              <div id="greeks-chart-vega" class="nj-chart nj-greeks-panel-chart"></div>
+            </div>
+            <div class="col-6">
+              <div class="nj-chart-label"><span>Theta / day</span></div>
+              <div id="greeks-chart-theta" class="nj-chart nj-greeks-panel-chart"></div>
+            </div>
           </div>
-          <div class="col-6">
-            <div class="nj-chart-label"><span>Vega</span></div>
-            <div id="greeks-chart-vega" class="nj-chart nj-greeks-panel-chart"></div>
-          </div>
-          <div class="col-6">
-            <div class="nj-chart-label"><span>Theta / day</span></div>
-            <div id="greeks-chart-theta" class="nj-chart nj-greeks-panel-chart"></div>
-          </div>
-        </div>
-        <table class="table table-sm mb-0 nj-compact-table nj-quant-tenor-table">
-          <thead>
-            <tr>
-              <th>Tenor</th>
-              <th class="nj-num">Δ</th>
-              <th class="nj-num">Γ</th>
-              <th class="nj-num">ν</th>
-              <th class="nj-num">Θ/d</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in lab.table %}
+          <table class="table table-sm mb-0 nj-compact-table nj-quant-tenor-table">
+            <thead>
+              <tr>
+                <th>Tenor</th>
+                <th class="nj-num">Δ</th>
+                <th class="nj-num">Γ</th>
+                <th class="nj-num">ν</th>
+                <th class="nj-num">Θ/d</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in lab.table %}
               <tr>
                 <td>{{ row.label }}</td>
                 <td class="nj-num">{{ row.delta|floatformat:4 }}</td>
@@ -347,244 +379,371 @@
                 <td class="nj-num">{{ row.vega|floatformat:4 }}</td>
                 <td class="nj-num">{{ row.theta|floatformat:4 }}</td>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
+      {% endif %}
     </div>
-  {% endif %}
-  </div>
-{% endblock %}
+    {% endblock %}
 
-{% block extra_js %}
-  <script defer
-          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
-          integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
-          crossorigin="anonymous"></script>
-  <script defer
-          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
-          integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
-          crossorigin="anonymous"
-          onload="renderMathInElement(document.querySelector('.nj-quant-lab') || document.body, {
+    {% block extra_js %}
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+      integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+      crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+      integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"
+      onload="renderMathInElement(document.querySelector('.nj-quant-lab') || document.body, {
             delimiters: [
               {left: '\\[', right: '\\]', display: true},
               {left: '\\(', right: '\\)', display: false}
             ],
             throwOnError: false
           });"></script>
-  <script>
-    (function () {
-      const instrumentSel = document.getElementById('quant-lab-instrument');
-      if (instrumentSel) {
-        instrumentSel.addEventListener('change', () => {
-          const code = instrumentSel.value;
-          if (!code) {
-            window.location = "{% url 'journal:quant_lab_pricing' %}";
-            return;
-          }
-          window.location = "{% url 'journal:quant_lab_pricing' %}?instrument=" + encodeURIComponent(code);
-        });
-      }
-    })();
-  </script>
-  {% if show_crr_tree %}
-  <script>
-    (function () {
-      const el = document.getElementById('crr-tree-data');
-      const host = document.getElementById('crr-tree-svg');
-      if (!el || !host) return;
-      let data;
-      try { data = JSON.parse(el.textContent); } catch (e) { return; }
-      const nodes = data.nodes || [];
-      if (!nodes.length) return;
-
-      const n = data.n_steps | 0;
-      const colGap = 100;
-      const rowGap = 52;
-      const padX = 40;
-      const padY = 36;
-      const width = padX * 2 + n * colGap + 80;
-      const height = padY * 2 + (n + 1) * rowGap;
-      const midY = height / 2;
-
-      // Classic recombining layout: +ups goes up the page.
-      const pos = (step, ups) => ({
-        x: padX + step * colGap,
-        y: midY - (2 * ups - step) * (rowGap / 2),
-      });
-
-      const NS = 'http://www.w3.org/2000/svg';
-      const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-      svg.setAttribute('width', String(Math.min(width, 720)));
-      svg.setAttribute('height', String(height));
-
-      for (let step = 0; step < n; step++) {
-        for (let ups = 0; ups <= step; ups++) {
-          const a = pos(step, ups);
-          const up = pos(step + 1, ups + 1);
-          const dn = pos(step + 1, ups);
-          [[up], [dn]].forEach(([b]) => {
-            const line = document.createElementNS(NS, 'line');
-            line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
-            line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
-            line.setAttribute('class', 'link');
-            svg.appendChild(line);
+    <script>
+      (function () {
+        const instrumentSel = document.getElementById('quant-lab-instrument');
+        if (instrumentSel) {
+          instrumentSel.addEventListener('change', () => {
+            const code = instrumentSel.value;
+            if (!code) {
+              window.location = "{% url 'journal:quant_lab_pricing' %}";
+              return;
+            }
+            window.location = "{% url 'journal:quant_lab_pricing' %}?instrument=" + encodeURIComponent(code);
           });
         }
-      }
+      })();
+    </script>
+    {% if show_crr_tree %}
+    <script>
+      (function () {
+        const el = document.getElementById('crr-tree-data');
+        const host = document.getElementById('crr-tree-svg');
+        if (!el || !host) return;
+        let data;
+        try { data = JSON.parse(el.textContent); } catch (e) { return; }
+        const nodes = data.nodes || [];
+        if (!nodes.length) return;
 
-      const fmt = (v) => (Math.abs(v) >= 100 ? v.toFixed(2) : v.toFixed(3));
-      nodes.forEach((node) => {
-        const { x, y } = pos(node.step, node.up_moves);
-        const g = document.createElementNS(NS, 'g');
-        const disc = document.createElementNS(NS, 'circle');
-        disc.setAttribute('cx', x);
-        disc.setAttribute('cy', y);
-        disc.setAttribute('r', 18);
-        disc.setAttribute('class', 'node-disc' + (node.early_exercise ? ' ee' : ''));
-        g.appendChild(disc);
-        const t1 = document.createElementNS(NS, 'text');
-        t1.setAttribute('x', x);
-        t1.setAttribute('y', y - 2);
-        t1.setAttribute('class', 'node-label');
-        t1.textContent = 'V=' + fmt(node.value);
-        g.appendChild(t1);
-        const t2 = document.createElementNS(NS, 'text');
-        t2.setAttribute('x', x);
-        t2.setAttribute('y', y + 10);
-        t2.setAttribute('class', 'node-sub');
-        t2.textContent = 'S=' + fmt(node.spot);
-        g.appendChild(t2);
-        svg.appendChild(g);
-      });
+        const n = data.n_steps | 0;
+        const colGap = 100;
+        const rowGap = 52;
+        const padX = 40;
+        const padY = 36;
+        const width = padX * 2 + n * colGap + 80;
+        const height = padY * 2 + (n + 1) * rowGap;
+        const midY = height / 2;
 
-      host.appendChild(svg);
-    })();
-  </script>
-  {% endif %}
-  {% if show_charts and greeks_chart %}
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
-  <script>
-    (function () {
-      const errEl = document.getElementById('greeks-chart-error');
-      const showErr = (msg) => {
-        if (!errEl) return;
-        errEl.textContent = msg;
-        errEl.classList.remove('d-none');
-      };
-      if (typeof echarts === 'undefined') {
-        showErr('ECharts CDN failed to load — table below still works.');
-        return;
-      }
-      const raw = document.getElementById('greeks-lab-data');
-      if (!raw) return;
-      let payload;
-      try { payload = JSON.parse(raw.textContent); }
-      catch (e) { showErr('Bad chart payload.'); return; }
-
-      const mats = payload.maturities || [];
-      const panels = payload.panels || [];
-      const isCall = !!payload.is_call;
-      const strike = Number(payload.strike);
-      const refSpot = Number(payload.ref_spot);
-      const colors = ['#fbbf24', '#60a5fa', '#2dd4bf'];
-      if (!mats.length || !panels.length) return;
-
-      const marks = [
-        {
-          xAxis: strike,
-          lineStyle: { color: '#94a3b8', type: 'dashed', width: 1.1 },
-          label: { formatter: 'K', color: '#94a3b8', fontSize: 10, position: 'insideEndTop' },
-        },
-      ];
-      if (Number.isFinite(refSpot) && Math.abs(refSpot - strike) > 1e-9) {
-        marks.push({
-          xAxis: refSpot,
-          lineStyle: { color: '#e2e8f0', type: 'dotted', width: 1.1 },
-          label: { formatter: 'S', color: '#e2e8f0', fontSize: 10, position: 'insideEndTop' },
+        // Classic recombining layout: +ups goes up the page.
+        const pos = (step, ups) => ({
+          x: padX + step * colGap,
+          y: midY - (2 * ups - step) * (rowGap / 2),
         });
-      }
 
-      const yBounds = (key) => {
-        if (key === 'delta') {
-          return isCall ? { min: 0, max: 1, interval: 0.25 } : { min: -1, max: 0, interval: 0.25 };
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+        svg.setAttribute('width', String(Math.min(width, 720)));
+        svg.setAttribute('height', String(height));
+
+        for (let step = 0; step < n; step++) {
+          for (let ups = 0; ups <= step; ups++) {
+            const a = pos(step, ups);
+            const up = pos(step + 1, ups + 1);
+            const dn = pos(step + 1, ups);
+            [[up], [dn]].forEach(([b]) => {
+              const line = document.createElementNS(NS, 'line');
+              line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+              line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+              line.setAttribute('class', 'link');
+              svg.appendChild(line);
+            });
+          }
         }
-        return { scale: true };
-      };
 
-      const charts = [];
-      panels.forEach((panel) => {
-        const el = document.getElementById('greeks-chart-' + panel.key);
-        if (!el) return;
+        const fmt = (v) => (Math.abs(v) >= 100 ? v.toFixed(2) : v.toFixed(3));
+        nodes.forEach((node) => {
+          const { x, y } = pos(node.step, node.up_moves);
+          const g = document.createElementNS(NS, 'g');
+          const disc = document.createElementNS(NS, 'circle');
+          disc.setAttribute('cx', x);
+          disc.setAttribute('cy', y);
+          disc.setAttribute('r', 18);
+          disc.setAttribute('class', 'node-disc' + (node.early_exercise ? ' ee' : ''));
+          g.appendChild(disc);
+          const t1 = document.createElementNS(NS, 'text');
+          t1.setAttribute('x', x);
+          t1.setAttribute('y', y - 2);
+          t1.setAttribute('class', 'node-label');
+          t1.textContent = 'V=' + fmt(node.value);
+          g.appendChild(t1);
+          const t2 = document.createElementNS(NS, 'text');
+          t2.setAttribute('x', x);
+          t2.setAttribute('y', y + 10);
+          t2.setAttribute('class', 'node-sub');
+          t2.textContent = 'S=' + fmt(node.spot);
+          g.appendChild(t2);
+          svg.appendChild(g);
+        });
+
+        host.appendChild(svg);
+      })();
+    </script>
+    {% endif %}
+    {% if show_payoff_value or show_charts %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    {% endif %}
+    {% if show_payoff_value and payoff_value_chart %}
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+        const raw = document.getElementById('payoff-value-data');
+        const el = document.getElementById('payoff-value-chart');
+        if (!raw || !el) return;
+        let data;
+        try { data = JSON.parse(raw.textContent); } catch (e) { return; }
+        const spots = data.spots || [];
+        const payoff = data.payoff || [];
+        const value = data.value || [];
+        const tangent = data.tangent || [];
+        const markS = data.spot_mark;
+        const markPv = data.mark_pv;
+        const markDelta = data.mark_delta;
+        const strike = data.strike;
+        const hasTangent = tangent.length === spots.length && markPv != null && markDelta != null;
+        const legend = ['Payoff at T', 'PV today'];
+        if (hasTangent) legend.push('Δ-tangent', 'Price at S');
         const chart = echarts.init(el, null, { renderer: 'canvas' });
-        const yb = yBounds(panel.key);
+        const series = [
+          {
+            name: 'Payoff at T',
+            type: 'line',
+            showSymbol: false,
+            data: spots.map((s, i) => [s, payoff[i]]),
+            lineStyle: { width: 2, color: '#94a3b8' },
+            itemStyle: { color: '#94a3b8' },
+          },
+          {
+            name: 'PV today',
+            type: 'line',
+            showSymbol: false,
+            z: 3,
+            data: spots.map((s, i) => [s, value[i]]),
+            lineStyle: { width: 2.25, color: '#2dd4bf' },
+            itemStyle: { color: '#2dd4bf' },
+            markLine: {
+              symbol: 'none',
+              label: { color: '#cbd5e1', fontSize: 10 },
+              lineStyle: { type: 'dashed', color: 'rgba(148,163,184,0.55)' },
+              data: [
+                { xAxis: markS, name: 'S' },
+                { xAxis: strike, name: 'K' },
+              ],
+            },
+          },
+        ];
+        if (hasTangent) {
+          series.push({
+            name: 'Δ-tangent',
+            type: 'line',
+            showSymbol: false,
+            z: 2,
+            data: spots.map((s, i) => [s, tangent[i]]),
+            lineStyle: { width: 1.75, type: 'dashed', color: '#fbbf24' },
+            itemStyle: { color: '#fbbf24' },
+          });
+          series.push({
+            name: 'Price at S',
+            type: 'scatter',
+            z: 10,
+            symbolSize: 5,
+            data: [[markS, markPv]],
+            itemStyle: {
+              color: '#ef4444',
+              borderColor: '#fca5a5',
+              borderWidth: 1.25,
+            },
+            emphasis: { scale: 1.15 },
+          });
+        }
         chart.setOption({
-          animationDuration: 200,
+          animationDuration: 250,
           backgroundColor: 'transparent',
-          grid: { left: 40, right: 10, top: 18, bottom: 28 },
+          grid: { left: 52, right: 24, top: 36, bottom: 40 },
+          legend: {
+            top: 0,
+            textStyle: { color: '#94a3b8', fontSize: 11 },
+            data: legend,
+          },
           tooltip: {
             trigger: 'axis',
-            axisPointer: { type: 'cross', label: { backgroundColor: '#1e293b' } },
-            valueFormatter: (v) => (v == null || Number.isNaN(Number(v))
-              ? '—'
-              : Number(v).toFixed(panel.key === 'gamma' ? 6 : 4)),
+            valueFormatter: (v) => (v == null ? '—' : Number(v).toFixed(4)),
           },
-          legend: {
-            show: panel.key === 'delta',
-            top: 0,
-            right: 0,
-            data: mats.map((m) => m.label),
-            textStyle: { color: '#94a3b8', fontSize: 10 },
-          },
+          dataZoom: [
+            {
+              type: 'inside',
+              xAxisIndex: 0,
+              filterMode: 'none',
+              zoomOnMouseWheel: true,
+              moveOnMouseMove: true,
+              moveOnMouseWheel: false,
+            },
+            {
+              type: 'inside',
+              yAxisIndex: 0,
+              filterMode: 'none',
+              zoomOnMouseWheel: true,
+              moveOnMouseMove: true,
+              moveOnMouseWheel: false,
+            },
+          ],
           xAxis: {
             type: 'value',
-            min: payload.x_min,
-            max: payload.x_max,
-            axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (v) => Number(v).toFixed(0) },
-            axisLine: { lineStyle: { color: '#334155' } },
-            splitLine: { lineStyle: { color: '#1e293b' } },
+            name: 'S',
+            scale: true,
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+            splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } },
           },
           yAxis: {
             type: 'value',
-            name: panel.y_name,
-            min: yb.min,
-            max: yb.max,
-            interval: yb.interval,
-            scale: !!yb.scale,
-            axisLabel: {
-              color: '#94a3b8',
-              fontSize: 9,
-              formatter: (v) => {
-                const n = Number(v);
-                if (panel.key === 'gamma') return n.toExponential(1);
-                if (panel.key === 'delta') return n.toFixed(2);
-                return n.toFixed(3);
-              },
-            },
-            nameTextStyle: { color: '#94a3b8', fontSize: 10 },
-            splitLine: { lineStyle: { color: '#1e293b' } },
-            axisLine: { show: false },
+            name: 'value',
+            scale: true,
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+            splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } },
           },
-          series: mats.map((m, i) => ({
-            name: m.label,
-            type: 'line',
-            showSymbol: false,
-            smooth: 0.12,
-            lineStyle: { width: 2, color: colors[i % colors.length] },
-            itemStyle: { color: colors[i % colors.length] },
-            data: (m.x || []).map((x, j) => [x, (m[panel.key] || [])[j]]),
-            markLine: i === 0 ? { symbol: 'none', silent: true, data: marks } : undefined,
-          })),
+          series: series,
         });
-        charts.push(chart);
-      });
+        // Keep page from scrolling while zooming over the chart.
+        el.addEventListener('wheel', (e) => { e.preventDefault(); }, { passive: false });
+        window.addEventListener('resize', () => chart.resize());
+      })();
+    </script>
+    {% endif %}
+    {% if show_charts and greeks_chart %}
+    <script>
+      (function () {
+        const errEl = document.getElementById('greeks-chart-error');
+        const showErr = (msg) => {
+          if (!errEl) return;
+          errEl.textContent = msg;
+          errEl.classList.remove('d-none');
+        };
+        if (typeof echarts === 'undefined') {
+          showErr('ECharts CDN failed to load — table below still works.');
+          return;
+        }
+        const raw = document.getElementById('greeks-lab-data');
+        if (!raw) return;
+        let payload;
+        try { payload = JSON.parse(raw.textContent); }
+        catch (e) { showErr('Bad chart payload.'); return; }
 
-      const resizeAll = () => charts.forEach((c) => c.resize());
-      window.addEventListener('resize', resizeAll);
-      requestAnimationFrame(resizeAll);
-      setTimeout(resizeAll, 50);
-    })();
-  </script>
-  {% endif %}
-{% endblock %}
+        const mats = payload.maturities || [];
+        const panels = payload.panels || [];
+        const isCall = !!payload.is_call;
+        const strike = Number(payload.strike);
+        const refSpot = Number(payload.ref_spot);
+        const colors = ['#fbbf24', '#60a5fa', '#2dd4bf'];
+        if (!mats.length || !panels.length) return;
+
+        const marks = [
+          {
+            xAxis: strike,
+            lineStyle: { color: '#94a3b8', type: 'dashed', width: 1.1 },
+            label: { formatter: 'K', color: '#94a3b8', fontSize: 10, position: 'insideEndTop' },
+          },
+        ];
+        if (Number.isFinite(refSpot) && Math.abs(refSpot - strike) > 1e-9) {
+          marks.push({
+            xAxis: refSpot,
+            lineStyle: { color: '#e2e8f0', type: 'dotted', width: 1.1 },
+            label: { formatter: 'S', color: '#e2e8f0', fontSize: 10, position: 'insideEndTop' },
+          });
+        }
+
+        const yBounds = (key) => {
+          if (key === 'delta') {
+            return isCall ? { min: 0, max: 1, interval: 0.25 } : { min: -1, max: 0, interval: 0.25 };
+          }
+          return { scale: true };
+        };
+
+        const charts = [];
+        panels.forEach((panel) => {
+          const el = document.getElementById('greeks-chart-' + panel.key);
+          if (!el) return;
+          const chart = echarts.init(el, null, { renderer: 'canvas' });
+          const yb = yBounds(panel.key);
+          chart.setOption({
+            animationDuration: 200,
+            backgroundColor: 'transparent',
+            grid: { left: 40, right: 10, top: 18, bottom: 28 },
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross', label: { backgroundColor: '#1e293b' } },
+              valueFormatter: (v) => (v == null || Number.isNaN(Number(v))
+                ? '—'
+                : Number(v).toFixed(panel.key === 'gamma' ? 6 : 4)),
+            },
+            legend: {
+              show: panel.key === 'delta',
+              top: 0,
+              right: 0,
+              data: mats.map((m) => m.label),
+              textStyle: { color: '#94a3b8', fontSize: 10 },
+            },
+            xAxis: {
+              type: 'value',
+              min: payload.x_min,
+              max: payload.x_max,
+              axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (v) => Number(v).toFixed(0) },
+              axisLine: { lineStyle: { color: '#334155' } },
+              splitLine: { lineStyle: { color: '#1e293b' } },
+            },
+            yAxis: {
+              type: 'value',
+              name: panel.y_name,
+              min: yb.min,
+              max: yb.max,
+              interval: yb.interval,
+              scale: !!yb.scale,
+              axisLabel: {
+                color: '#94a3b8',
+                fontSize: 9,
+                formatter: (v) => {
+                  const n = Number(v);
+                  if (panel.key === 'gamma') return n.toExponential(1);
+                  if (panel.key === 'delta') return n.toFixed(2);
+                  return n.toFixed(3);
+                },
+              },
+              nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+              splitLine: { lineStyle: { color: '#1e293b' } },
+              axisLine: { show: false },
+            },
+            series: mats.map((m, i) => ({
+              name: m.label,
+              type: 'line',
+              showSymbol: false,
+              smooth: 0.12,
+              lineStyle: { width: 2, color: colors[i % colors.length] },
+              itemStyle: { color: colors[i % colors.length] },
+              data: (m.x || []).map((x, j) => [x, (m[panel.key] || [])[j]]),
+              markLine: i === 0 ? { symbol: 'none', silent: true, data: marks } : undefined,
+            })),
+          });
+          charts.push(chart);
+        });
+
+        const resizeAll = () => charts.forEach((c) => c.resize());
+        window.addEventListener('resize', resizeAll);
+        requestAnimationFrame(resizeAll);
+        setTimeout(resizeAll, 50);
+      })();
+    </script>
+    {% endif %}
+    {% endblock %}

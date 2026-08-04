@@ -1124,6 +1124,36 @@ body {
   font-size: 0.78em;
 }
 
+.nj-payoff-value-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1.25rem;
+  align-items: stretch;
+}
+
+.nj-payoff-value-chart {
+  height: 20rem;
+  min-height: 20rem;
+  width: 100%;
+}
+
+.nj-payoff-value-note {
+  min-width: 0;
+  align-self: start;
+  padding-top: 0.35rem;
+}
+
+@media (max-width: 900px) {
+  .nj-payoff-value-split {
+    grid-template-columns: 1fr;
+  }
+
+  .nj-payoff-value-chart {
+    height: 18rem;
+    min-height: 18rem;
+  }
+}
+
 .nj-quant-result-body {
   padding: 0.55rem 0.85rem !important;
 }
