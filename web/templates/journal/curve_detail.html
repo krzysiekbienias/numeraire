@@ -98,6 +98,33 @@
           <div id="curve-df-chart" class="nj-chart nj-chart-md"></div>
         </div>
       </div>
+
+      {% if snapshot.instruments %}
+        <div class="nj-curve-quotes mt-3">
+          <div class="nj-curve-quotes-head mb-2">
+            <strong>Source quotes</strong>
+            <span class="small text-secondary">
+              {% if snapshot.par_header %}
+                {{ snapshot.par_header.source }}
+                · par @ {{ snapshot.header.source_par_as_of|date:"Y-m-d" }}
+              {% else %}
+                bootstrap inputs
+              {% endif %}
+              · rates recovered from these instruments
+            </span>
+          </div>
+          <div class="nj-curve-quote-strip">
+            {% for row in snapshot.instruments %}
+              <div class="nj-curve-quote-chip" title="{{ row.fred_series_id }} · {{ row.instrument_type }} · {{ row.quote_style }}">
+                <span class="nj-curve-quote-tenor">{{ row.tenor }}</span>
+                <span class="nj-curve-quote-series"><code>{{ row.fred_series_id }}</code></span>
+                <span class="nj-curve-quote-type">{{ row.instrument_type }}</span>
+                <span class="nj-curve-quote-pct">{{ row.quoted_pct|floatformat:2 }}%</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 
@@ -124,6 +151,7 @@
                     <th>Type</th>
                     <th>Series</th>
                     <th class="nj-num">Quoted</th>
+                    <th class="nj-num">%</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -133,6 +161,7 @@
                       <td class="small">{{ row.instrument_type }}</td>
                       <td class="small"><code>{{ row.fred_series_id }}</code></td>
                       <td class="nj-num">{{ row.quoted_rate|floatformat:6 }}</td>
+                      <td class="nj-num">{{ row.quoted_pct|floatformat:2 }}%</td>
                     </tr>
                   {% endfor %}
                 </tbody>

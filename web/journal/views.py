@@ -110,11 +110,38 @@ class DashboardView(TemplateView):
             if as_of
             else VolSurfaceEod.objects.none()
         )
-        curves_qs = (
-            DiscountCurveEod.objects.filter(as_of=as_of).order_by('curve_id')
-            if as_of
-            else DiscountCurveEod.objects.none()
-        )
+        # Curves often lag the book MTM (provider delay). Prefer exact as_of;
+        # otherwise show the newest USD curve on or before the mark day.
+        curves: list = []
+        curves_meta = None
+        if as_of is not None:
+            exact = list(
+                DiscountCurveEod.objects.filter(as_of=as_of).order_by('curve_id')[:20]
+            )
+            if exact:
+                curves = exact
+                curves_meta = {
+                    'curve_as_of': as_of,
+                    'lag_days': 0,
+                    'stale': False,
+                }
+            else:
+                preferred = 'USD_TREASURY_PAR_FRED'
+                picked = nearest_curve_as_of(as_of, preferred)
+                if picked is None:
+                    picked = nearest_curve_as_of(as_of)
+                if picked is not None:
+                    _cid, curve_as_of = picked
+                    curves = list(
+                        DiscountCurveEod.objects.filter(as_of=curve_as_of)
+                        .order_by('curve_id')[:20]
+                    )
+                    lag_days = (as_of - curve_as_of).days
+                    curves_meta = {
+                        'curve_as_of': curve_as_of,
+                        'lag_days': lag_days,
+                        'stale': lag_days > 0,
+                    }
 
         return {
             'as_of': as_of,
@@ -143,7 +170,8 @@ class DashboardView(TemplateView):
                 paths=Max('num_paths'),
             ),
             'surfaces': list(surfaces_qs[:20]),
-            'curves': list(curves_qs[:20]),
+            'curves': curves,
+            'curves_meta': curves_meta,
         }
 
 

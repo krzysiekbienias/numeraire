@@ -190,9 +190,26 @@
     <div class="col-lg-6">
       <div class="nj-panel">
         <div class="nj-panel-head">
-          <h2>Discount curves @ as_of</h2>
+          <h2>Discount curves</h2>
+          <a class="small" href="{% url 'journal:curves' %}">open</a>
         </div>
         <div class="nj-panel-body tight">
+          {% if curves_meta %}
+            <div class="px-3 pt-2 pb-1 small text-secondary">
+              {% if curves_meta.stale %}
+                Latest available · curve as_of
+                <strong>{{ curves_meta.curve_as_of|date:"Y-m-d" }}</strong>
+                · <span class="text-warning">{{ curves_meta.lag_days }}d lag vs book MTM</span>
+                <span class="d-block mt-1 opacity-75">
+                  Provider often trails the mark date — showing the newest curve on or before
+                  {{ as_of|date:"Y-m-d" }}.
+                </span>
+              {% else %}
+                Curve as_of <strong>{{ curves_meta.curve_as_of|date:"Y-m-d" }}</strong>
+                · matches book MTM
+              {% endif %}
+            </div>
+          {% endif %}
           {% if curves %}
             <table class="table table-sm mb-0">
               <thead>
@@ -207,7 +224,11 @@
                 {% for c in curves %}
                   <tr>
                     <td>{{ c.as_of|date:"Y-m-d" }}</td>
-                    <td>{{ c.curve_id }}</td>
+                    <td>
+                      <a href="{% url 'journal:curves' %}?curve_id={{ c.curve_id }}&amp;as_of={{ c.as_of|date:'Y-m-d' }}">
+                        {{ c.curve_id }}
+                      </a>
+                    </td>
                     <td>{{ c.currency }}</td>
                     <td class="small text-secondary">{{ c.bootstrap_engine }}</td>
                   </tr>
@@ -215,7 +236,7 @@
               </tbody>
             </table>
           {% else %}
-            <div class="nj-empty">No curves for this as_of.</div>
+            <div class="nj-empty">No discount curves in the book yet.</div>
           {% endif %}
         </div>
       </div>

@@ -138,6 +138,9 @@ def load_curve_snapshot(curve_id: str, as_of: date) -> dict | None:
             'quote_style',
         )
     )
+    for row in instruments:
+        rate = row.get('quoted_rate')
+        row['quoted_pct'] = (float(rate) * 100.0) if rate is not None else None
     chart = [
         {
             'tenor': p['tenor'],
