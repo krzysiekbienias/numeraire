@@ -1,7 +1,8 @@
 """Root URL configuration.
 
-`LoginRequiredMiddleware` guards everything here; the auth views bundled under
-`django.contrib.auth.urls` carry their own exemption, so /accounts/login/ stays reachable.
+`LoginRequiredMiddleware` guards everything here; auth views under
+`django.contrib.auth.urls` are exempt, as are journal views marked
+`@login_not_required` (landing, about).
 """
 
 from django.contrib import admin

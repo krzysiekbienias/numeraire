@@ -68,7 +68,7 @@ MIDDLEWARE = [
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'journal:dashboard'
-LOGOUT_REDIRECT_URL = 'login'
+LOGOUT_REDIRECT_URL = 'journal:landing'
 
 ROOT_URLCONF = 'numeraire_web.urls'
 

@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_not_required
 from django.db import OperationalError
 from django.db.models import Count, Max, Prefetch, Sum
 from django.http import Http404
+from django.shortcuts import redirect
 from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, TemplateView
 
@@ -795,6 +796,18 @@ class InventoryView(TemplateView):
             context['catalog_count'] = 0
             context['book_product_count'] = 0
         return context
+
+
+@method_decorator(login_not_required, name='dispatch')
+class LandingView(TemplateView):
+    """Public marketing landing — Search Console / pre-auth entry."""
+
+    template_name = 'journal/landing.html'
+
+    def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('journal:dashboard')
+        return super().get(request, *args, **kwargs)
 
 
 @method_decorator(login_not_required, name='dispatch')

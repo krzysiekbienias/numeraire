@@ -6,8 +6,9 @@ from journal import views
 app_name = 'journal'
 
 urlpatterns = [
+    path('', views.LandingView.as_view(), name='landing'),
     path('about/', views.AboutView.as_view(), name='about'),
-    path('', views.DashboardView.as_view(), name='dashboard'),
+    path('overview/', views.DashboardView.as_view(), name='dashboard'),
     path('trades/', views.TradeListView.as_view(), name='trade_list'),
     path('trades/<str:trade_id>/', views.TradeDetailView.as_view(), name='trade_detail'),
     path('underliers/', views.UnderlierListView.as_view(), name='underlier_list'),

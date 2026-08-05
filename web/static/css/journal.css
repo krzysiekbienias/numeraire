@@ -312,6 +312,350 @@ body {
   font-size: 0.9rem;
 }
 
+/* --- Landing (public) ---------------------------------------------------- */
+
+.nj-landing-body {
+  margin: 0;
+}
+
+.nj-landing {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2.5rem 1.75rem 1.5rem;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.nj-landing-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.nj-landing-bg-image {
+  position: absolute;
+  inset: -4%;
+  background:
+    url("../img/login-bg.png") center / cover no-repeat,
+    #020617;
+  animation: nj-landing-bg-drift 18s ease-in-out infinite alternate;
+}
+
+.nj-landing-bg-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, rgba(2, 6, 23, 0.88) 0%, rgba(2, 6, 23, 0.55) 48%, rgba(2, 6, 23, 0.72) 100%),
+    radial-gradient(ellipse 55% 45% at 20% 30%, rgba(45, 212, 191, 0.12), transparent 60%);
+}
+
+.nj-landing-stage {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 36rem) minmax(16rem, 1fr);
+  align-items: center;
+  gap: 2rem 3rem;
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+}
+
+.nj-landing-hero {
+  position: relative;
+  max-width: 36rem;
+}
+
+.nj-landing-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.15rem;
+}
+
+.nj-landing-mark .nj-brand-mark {
+  width: 4.6rem;
+  height: 3.1rem;
+  color: var(--nj-accent);
+}
+
+.nj-landing-mark .nj-brand-mark svg {
+  width: 4.6rem;
+  height: 3.1rem;
+}
+
+.nj-landing-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.nj-landing-brand-text strong {
+  font-size: 1.85rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.nj-landing-brand-text span {
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--nj-accent) 75%, #fff);
+}
+
+.nj-landing-rule {
+  width: 3.25rem;
+  height: 2px;
+  margin: 0 0 1.35rem;
+  background: var(--nj-accent);
+  transform-origin: left center;
+  animation: nj-landing-rule 0.7s ease-out both;
+  animation-delay: var(--nj-delay, 0ms);
+}
+
+.nj-landing-hero h1 {
+  font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 0.85rem;
+  max-width: 22ch;
+}
+
+.nj-landing-lede {
+  margin: 0 0 1.75rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 34rem;
+}
+
+.nj-landing-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.nj-landing-cta .btn-outline-light {
+  --bs-btn-color: rgba(255, 255, 255, 0.88);
+  --bs-btn-border-color: rgba(255, 255, 255, 0.28);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: rgba(255, 255, 255, 0.08);
+  --bs-btn-hover-border-color: rgba(255, 255, 255, 0.45);
+}
+
+.nj-landing-orbit-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 22rem;
+}
+
+.nj-landing-orbit {
+  --nj-orbit-size: min(22rem, 72vw);
+  --nj-orbit-r: calc(var(--nj-orbit-size) * 0.38);
+  position: relative;
+  width: var(--nj-orbit-size);
+  height: var(--nj-orbit-size);
+}
+
+.nj-landing-orbit-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.nj-landing-orbit-center .nj-brand-mark {
+  width: 5.5rem;
+  height: 3.7rem;
+  color: var(--nj-accent);
+}
+
+.nj-landing-orbit-center .nj-brand-mark svg {
+  width: 5.5rem;
+  height: 3.7rem;
+}
+
+.nj-landing-orbit-ring {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  inset: 0;
+  animation: nj-landing-orbit-spin 42s linear infinite;
+}
+
+.nj-landing-orbit:hover .nj-landing-orbit-ring,
+.nj-landing-orbit:hover .nj-landing-orbit-item {
+  animation-play-state: paused;
+}
+
+.nj-landing-orbit-ring li {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform: rotate(calc(var(--i) * 60deg)) translateY(calc(-1 * var(--nj-orbit-r)));
+}
+
+.nj-landing-orbit-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, #020617 70%, transparent);
+  backdrop-filter: blur(6px);
+  transform: translate(-50%, -50%);
+  animation: nj-landing-orbit-spin-rev 42s linear infinite;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  cursor: default;
+}
+
+.nj-landing-orbit-item img {
+  display: block;
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.nj-landing-orbit-item:hover {
+  border-color: color-mix(in srgb, var(--nj-accent) 50%, transparent);
+  background: color-mix(in srgb, #042f2e 50%, #020617);
+  transform: translate(-50%, -50%) scale(1.14);
+  z-index: 3;
+}
+
+.nj-landing-foot {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding-top: 2rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.nj-landing-anim {
+  opacity: 0;
+  transform: translateY(0.7rem);
+  animation: nj-landing-rise 0.7s ease-out forwards;
+  animation-delay: var(--nj-delay, 0ms);
+}
+
+@keyframes nj-landing-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nj-landing-rule {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes nj-landing-bg-drift {
+  from {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.07) translate3d(-1.2%, 0.6%, 0);
+  }
+}
+
+@keyframes nj-landing-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nj-landing-orbit-spin-rev {
+  to {
+    transform: translate(-50%, -50%) rotate(-360deg);
+  }
+}
+
+@media (max-width: 960px) {
+  .nj-landing-stage {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .nj-landing-orbit-wrap {
+    order: -1;
+    width: 100%;
+    min-height: 16rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .nj-landing-orbit {
+    --nj-orbit-size: min(17rem, 78vw);
+  }
+
+  .nj-landing-orbit-center .nj-brand-mark,
+  .nj-landing-orbit-center .nj-brand-mark svg {
+    width: 4.2rem;
+    height: 2.85rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .nj-landing {
+    padding: 2rem 1.25rem 1.25rem;
+  }
+
+  .nj-landing-brand-text strong {
+    font-size: 1.5rem;
+  }
+
+  .nj-landing-mark .nj-brand-mark,
+  .nj-landing-mark .nj-brand-mark svg {
+    width: 3.6rem;
+    height: 2.4rem;
+  }
+
+  .nj-landing-cta .btn-lg {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nj-landing-anim,
+  .nj-landing-rule,
+  .nj-landing-bg-image,
+  .nj-landing-orbit-ring,
+  .nj-landing-orbit-item {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .nj-landing-orbit-ring li {
+    transform: rotate(calc(var(--i) * 60deg)) translateY(calc(-1 * var(--nj-orbit-r)));
+  }
+
+  .nj-landing-orbit-item {
+    transform: translate(-50%, -50%);
+  }
+}
+
 /* --- About (public) ------------------------------------------------------ */
 
 .nj-about {

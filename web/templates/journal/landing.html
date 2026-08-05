@@ -1,0 +1,100 @@
+{% load static journal_fmt %}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Numeraire Journal — built for people who price risk</title>
+  <meta name="description"
+    content="Monitor the book, drill into trades and curves, and run pricing experiments where quantitative finance meets solid engineering.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="{% static 'css/journal.css' %}?v=17" rel="stylesheet">
+</head>
+
+<body class="nj-landing-body">
+  <div class="nj-landing">
+    <div class="nj-landing-bg" aria-hidden="true">
+      <div class="nj-landing-bg-image"></div>
+      <div class="nj-landing-bg-scrim"></div>
+    </div>
+
+    <div class="nj-landing-stage">
+      <main class="nj-landing-hero">
+        <div class="nj-landing-brand nj-landing-anim" style="--nj-delay: 0ms">
+          <span class="nj-landing-mark">
+            {% include 'partials/brand_mark.html' %}
+          </span>
+          <span class="nj-landing-brand-text">
+            <strong>Numeraire</strong>
+            <span>Journal</span>
+          </span>
+        </div>
+        <div class="nj-landing-rule nj-landing-anim" style="--nj-delay: 80ms" aria-hidden="true"></div>
+
+        <h1 class="nj-landing-anim" style="--nj-delay: 140ms">
+          Built for people who price risk
+        </h1>
+        <p class="nj-landing-lede nj-landing-anim" style="--nj-delay: 240ms">
+          Monitor the book, drill into trades and curves, and run pricing
+          experiments where quantitative finance meets solid engineering.
+        </p>
+
+        <div class="nj-landing-cta nj-landing-anim" style="--nj-delay: 360ms">
+          <a class="btn btn-primary btn-lg" href="{% url 'login' %}">Sign in</a>
+          <a class="btn btn-outline-light btn-lg" href="{% url 'journal:about' %}">About the author</a>
+        </div>
+      </main>
+
+      <aside class="nj-landing-orbit-wrap nj-landing-anim" style="--nj-delay: 280ms" aria-label="Powered by">
+        <div class="nj-landing-orbit">
+          <div class="nj-landing-orbit-center" aria-hidden="true">
+            {% include 'partials/brand_mark.html' %}
+          </div>
+          <ul class="nj-landing-orbit-ring">
+            <li style="--i: 0">
+              <span class="nj-landing-orbit-item" title="C++">
+                <img src="https://cdn.simpleicons.org/cplusplus/7dd3fc" width="22" height="22" alt="C++">
+              </span>
+            </li>
+            <li style="--i: 1">
+              <span class="nj-landing-orbit-item" title="Python">
+                <img src="https://cdn.simpleicons.org/python/7dd3fc" width="22" height="22" alt="Python">
+              </span>
+            </li>
+            <li style="--i: 2">
+              <span class="nj-landing-orbit-item" title="Django">
+                <img src="https://cdn.simpleicons.org/django/34d399" width="22" height="22" alt="Django">
+              </span>
+            </li>
+            <li style="--i: 3">
+              <span class="nj-landing-orbit-item" title="SQLite">
+                <img src="https://cdn.simpleicons.org/sqlite/7dd3fc" width="22" height="22" alt="SQLite">
+              </span>
+            </li>
+            <li style="--i: 4">
+              <span class="nj-landing-orbit-item" title="Bootstrap">
+                <img src="https://cdn.simpleicons.org/bootstrap/a78bfa" width="22" height="22" alt="Bootstrap">
+              </span>
+            </li>
+            <li style="--i: 5">
+              <span class="nj-landing-orbit-item" title="Apache ECharts">
+                <img src="https://cdn.simpleicons.org/apacheecharts/fbbf24" width="22" height="22" alt="ECharts">
+              </span>
+            </li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="nj-landing-foot nj-landing-anim" style="--nj-delay: 500ms">
+      <span>© 2026 Numeraire Journal · v{% app_version %}</span>
+    </footer>
+  </div>
+</body>
+
+</html>

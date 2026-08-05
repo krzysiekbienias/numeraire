@@ -12,13 +12,13 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
     integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="{% static 'css/journal.css' %}?v=13" rel="stylesheet">
+  <link href="{% static 'css/journal.css' %}?v=14" rel="stylesheet">
 </head>
 
 <body>
   <div class="nj-about">
     <header class="nj-about-top">
-      <a class="nj-brand" href="{% url 'login' %}">
+      <a class="nj-brand" href="{% url 'journal:landing' %}">
         {% include 'partials/brand_mark.html' %}
         <span class="nj-brand-text">
           <strong>Numeraire</strong>
@@ -61,7 +61,7 @@
         <div class="nj-about-contact">
           <a href="mailto:krzysiek.bieniasnpz@gmail.com">
             <i class="bi bi-envelope"></i>
-            <span>krzysiek.bieniasnpz@gmail.com</span>
+            <span>krzysiek.bienias.kr@gmail.com</span>
           </a>
           <a href="tel:+48500317605">
             <i class="bi bi-telephone"></i>
@@ -81,7 +81,8 @@
 
     <footer class="nj-about-foot">
       <span>© 2026 Numeraire Journal <span class="nj-version">v{% app_version %}</span></span>
-      <a href="{% url 'login' %}">Back to sign in</a>
+      <a href="{% url 'journal:landing' %}">Home</a>
+      <a href="{% url 'login' %}">Sign in</a>
     </footer>
   </div>
 </body>
