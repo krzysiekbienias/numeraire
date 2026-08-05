@@ -18,7 +18,13 @@
     "pricing": {
         "default_currency": "USD",
         "monte_carlo": {
+            "_comment_": "Exposure simulation (`dev_main --simulate`, NUMERAIRE_MC_PATHS / NUMERAIRE_MC_SEED). Separate from monte_carlo_pricer below: full paths across the exposure grid, not a single step to maturity.",
             "default_paths": 1000,
+            "default_seed": 42
+        },
+        "monte_carlo_pricer": {
+            "_comment_": "MonteCarloGbmEuropeanPricer (NUMERAIRE_MC_PRICER_PATHS / NUMERAIRE_MC_PRICER_SEED). European payoffs are sampled at maturity in one exact GBM step, so paths only set the sampling error (~1/sqrt(paths), reported per mark in remarks). The fixed seed keeps a re-run of the same day reproducible.",
+            "default_paths": 10000,
             "default_seed": 42
         },
         "binomial": {

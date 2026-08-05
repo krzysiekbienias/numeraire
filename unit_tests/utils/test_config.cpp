@@ -52,6 +52,7 @@ TEST(ConfigTest, LoadsDefaultCommittedConfig) {
     EXPECT_EQ(rotation.at("max_files").get<int>(), 5);
     EXPECT_EQ(cfg.RequireAt("pricing.binomial.default_steps").get<int>(), 200);
     EXPECT_EQ(cfg.RequireAt("pricing.monte_carlo.default_paths").get<int>(), 1000);
+    EXPECT_EQ(cfg.RequireAt("pricing.monte_carlo_pricer.default_paths").get<int>(), 10000);
 }
 
 TEST(ConfigTest, RequireAtMissingPathThrows) {

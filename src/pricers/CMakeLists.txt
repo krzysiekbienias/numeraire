@@ -3,6 +3,7 @@ add_library(numeraire_pricers STATIC
         analytic_composite_pricer.cpp
         analytic_forward_pricer.cpp
         binomial_black_scholes_equity_pricer.cpp
+        monte_carlo_gbm_european_pricer.cpp
         pricer_factory.cpp
 )
 
@@ -16,5 +17,6 @@ target_link_libraries(numeraire_pricers
         numeraire_core
         numeraire_products
         numeraire_quant
+        numeraire_simulation_core
         numeraire_utils
 )

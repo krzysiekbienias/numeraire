@@ -30,6 +30,34 @@ void ApplySchemaPatches(SQLite::Database& db) {
             db.exec(std::string{"ALTER TABLE "} + table + " RENAME COLUMN pfe_97 TO pfe_975");
         }
     }
+    // Multi-engine marks: flag the one that feeds reporting, plus Monte Carlo inputs
+    // needed to reproduce a historical valuation. `CREATE TABLE IF NOT EXISTS` in
+    // schema_v1.sql cannot add these to databases that predate them.
+    for (const char* table : {"trade_leg_mtm_eod", "trade_leg_mtm_eod_archive"}) {
+        const std::string has_column_sql =
+                std::string{"SELECT 1 FROM pragma_table_info('"} + table + "') WHERE name = ?";
+
+        SQLite::Statement has_official(db, has_column_sql);
+        has_official.bind(1, "is_official");
+        if (!has_official.executeStep()) {
+            db.exec(std::string{"ALTER TABLE "} + table +
+                    " ADD COLUMN is_official INTEGER NOT NULL DEFAULT 0 CHECK (is_official IN (0, 1))");
+            // Every mark written before this patch came from the single analytic engine,
+            // so all of them were official. Runs once, in the same step that adds the column.
+            db.exec(std::string{"UPDATE "} + table + " SET is_official = 1");
+        }
+
+        for (const char* column : {"num_paths", "mc_seed"}) {
+            SQLite::Statement has_column(db, has_column_sql);
+            has_column.bind(1, column);
+            if (!has_column.executeStep()) {
+                db.exec(std::string{"ALTER TABLE "} + table + " ADD COLUMN " + column + " INTEGER");
+            }
+        }
+    }
+    // Only on the live table: the archive keeps every run, each with its own official mark.
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_official "
+            "ON trade_leg_mtm_eod (leg_id, as_of) WHERE is_official = 1");
 }
 
 [[nodiscard]] std::string ReadEntireFile(const std::filesystem::path& path) {

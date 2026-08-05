@@ -1,9 +1,11 @@
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <numeraire/core/imarket_data.hpp>
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/core/pricing_result.hpp>
@@ -39,7 +41,9 @@
 #include <numeraire/market_data_providers/polygon_ingest_common.hpp>
 #include <numeraire/market_data_providers/polygon_option_contract_fetch.hpp>
 #include <numeraire/market_data_providers/polygon_option_daily_price_eod_fetch.hpp>
+#include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
+#include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/config.hpp>
@@ -101,6 +105,21 @@ using numeraire::market_data_providers::polygon_ingest::LooksIsoDate;
 namespace {
 
 constexpr const char* kMtmPricingEngine = "analytic_black_scholes";
+constexpr const char* kMtmPricingEngineBinomial = "binomial_crr";
+constexpr const char* kMtmPricingEngineMonteCarlo = "monte_carlo_gbm";
+
+/// One pricer run over the book. Exactly one engine is official — its mark drives
+/// reporting; the others are written alongside for comparison only. Numerics (tree
+/// steps, MC paths) stay out of `name`, or changing them would fork the pnl_daily
+/// series, which `LookupPriorOfficialMark` keys on the engine string.
+struct MtmEngineRun {
+    std::unique_ptr<numeraire::core::IPricer> pricer;
+    const char* name;
+    bool is_official;
+    /// Sampling settings behind a stochastic mark, stored so it can be reproduced.
+    std::optional<std::int64_t> num_paths;
+    std::optional<std::int64_t> mc_seed;
+};
 
 [[nodiscard]] double EnvDouble(const char* key, const double default_value) noexcept {
     const char* raw = std::getenv(key);
@@ -329,11 +348,12 @@ struct PricingArgvScan {
 [[nodiscard]] double BookNpvAndPersistMtmForBundle(const TradeCatalogBundle& bundle,
                                                    const numeraire::core::IMarketData& mkt,
                                                    const MarketSnapshot& snap,
-                                                   const numeraire::core::IPricer& pricer,
+                                                   const MtmEngineRun& engine,
                                                    SqliteTradeLegMtmRepository* mtm_repo,
                                                    const DevMainMarketQuotesConfig& mq,
                                                    const std::string& batch_run_id,
                                                    const std::string& remarks) {
+    const numeraire::core::IPricer& pricer = *engine.pricer;
     double total_npv = 0.0;
     for (const auto& row : bundle.legs) {
         const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
@@ -344,7 +364,19 @@ struct PricingArgvScan {
         numeraire::database::RequirePositiveContractSize(contract_size, row.leg.leg_id);
         numeraire::database::RequirePositiveQuantity(row.leg.quantity, row.leg.leg_id);
 
-        numeraire::core::PricingResult result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
+        numeraire::core::PricingResult result;
+        try {
+            result = numeraire::core::PricingEngine::Price(*product, pricer, mkt);
+        } catch (const numeraire::ValidationError& e) {
+            // Comparison engines cover fewer products than the official one (the CRR
+            // tree takes vanillas only). Those legs simply get no second row; only the
+            // official mark is allowed to fail the batch.
+            if (engine.is_official) {
+                throw;
+            }
+            Logger::NumInfo("MTM comparison skipped leg_id={} engine={}: {}", row.leg.leg_id, engine.name, e.what());
+            continue;
+        }
 
         if (!result.Npv().has_value()) {
             throw numeraire::PersistenceError("Pricer returned no NPV for leg " + row.leg.leg_id);
@@ -372,8 +404,14 @@ struct PricingArgvScan {
         mtm.underlying_spot = spot_used;
         mtm.risk_free_rate = mkt.RiskFreeRateForTenor(years_to_maturity);
         mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
+        // A linear payoff never queries the surface, so storing a vol against it would
+        // claim an input the price never saw. Zero is the column's existing "not
+        // applicable" marker (it already covers expired legs). The surface itself stays
+        // ingested for the underlier — options written on it still need it.
+        const bool payoff_uses_volatility =
+                dynamic_cast<const numeraire::products::EquityForwardProduct*>(product.get()) == nullptr;
         const double strike = product->Strike();
-        if (years_to_maturity > 0.0 && strike > 0.0) {
+        if (payoff_uses_volatility && years_to_maturity > 0.0 && strike > 0.0) {
             mtm.implied_vol_used =
                     mkt.ImpliedVolatility(underlying, strike, years_to_maturity, product->OptionKind());
         } else {
@@ -407,12 +445,22 @@ struct PricingArgvScan {
                     numeraire::database::LegRhoTotal(row.leg.direction, row.leg.quantity, contract_size, rho_unit);
         }
 
-        mtm.pricing_engine = kMtmPricingEngine;
+        mtm.pricing_engine = engine.name;
+        mtm.is_official = engine.is_official;
+        mtm.num_paths = engine.num_paths;
+        mtm.mc_seed = engine.mc_seed;
         mtm.remarks = remarks;
+        // Numerics the engine chose (tree steps, MC paths and sampling error) travel
+        // with the mark, so a stored price stays interpretable after the config moves on.
+        if (result.Metadata().has_value() && result.Metadata()->diagnostics.has_value()) {
+            const std::string& diagnostics = *result.Metadata()->diagnostics;
+            if (!diagnostics.empty()) {
+                mtm.remarks = mtm.remarks.empty() ? diagnostics : mtm.remarks + "; " + diagnostics;
+            }
+        }
 
         const double booked_mark = numeraire::database::LegBookedMark(row);
-        const std::optional prior_official =
-                mtm_repo->LookupPriorOfficialMark(row.leg.leg_id, kMtmPricingEngine, mtm.as_of);
+        const std::optional prior_official = mtm_repo->LookupPriorOfficialMark(row.leg.leg_id, engine.name, mtm.as_of);
         const double pv_total_prev =
                 numeraire::database::ResolvePvTotalPrevForDaily(prior_official, booked_mark);
         const double commission = numeraire::database::LegCommissionOrZero(row.leg);
@@ -422,10 +470,12 @@ struct PricingArgvScan {
         mtm_repo->Upsert(mtm);
 
         Logger::NumInfo(
-                "MTM persisted leg_id={} as_of={} pv_unit={} pv_total={} pnl_daily={} pnl_inception={} "
-                "batch_run_id={} (official + archive).",
+                "MTM persisted leg_id={} as_of={} engine={} official={} pv_unit={} pv_total={} pnl_daily={} "
+                "pnl_inception={} batch_run_id={}.",
                 mtm.leg_id,
                 mtm.as_of,
+                mtm.pricing_engine,
+                mtm.is_official,
                 mtm.pv_unit,
                 mtm.pv_total,
                 *mtm.pnl_daily,
@@ -782,7 +832,6 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
 
     const MarketSnapshot snap_for_mtm = snap;
     const auto mkt_handle = CreateDevMainMarketData(mq, db_path.string(), std::move(snap));
-    auto pricer = PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes);
 
     const bool persist_mtm = ShouldPersistMtmEod(mq);
     std::optional<SqliteTradeLegMtmRepository> mtm_repo;
@@ -801,6 +850,31 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
 
     SqliteTradeLegMtmRepository* mtm_ptr = persist_mtm ? &*mtm_repo : nullptr;
 
+    std::vector<MtmEngineRun> engines;
+    engines.push_back(MtmEngineRun{
+            PricerFactory::Make(numeraire::PricingEngineType::kAnalytic, numeraire::ModelType::kBlackScholes),
+            kMtmPricingEngine,
+            true,
+            std::nullopt,
+            std::nullopt});
+    if (mtm_ptr != nullptr) {
+        // Comparison marks are only worth computing when there is a table to write them to.
+        engines.push_back(MtmEngineRun{
+                PricerFactory::Make(numeraire::PricingEngineType::kBinomialTree, numeraire::ModelType::kBlackScholes),
+                kMtmPricingEngineBinomial,
+                false,
+                std::nullopt,
+                std::nullopt});
+
+        // Built concretely rather than through the factory: the path count and seed
+        // must reach the stored row for the mark to be reproducible.
+        auto monte_carlo = std::make_unique<numeraire::pricers::MonteCarloGbmEuropeanPricer>();
+        const auto mc_paths = static_cast<std::int64_t>(monte_carlo->NumPaths());
+        const auto mc_seed = static_cast<std::int64_t>(monte_carlo->Seed());
+        engines.push_back(MtmEngineRun{
+                std::move(monte_carlo), kMtmPricingEngineMonteCarlo, false, mc_paths, mc_seed});
+    }
+
     for (size_t i = 0; i < trade_ids.size(); ++i) {
         const std::string& tid = trade_ids[i];
         const auto& bundle = bundles[i];
@@ -811,9 +885,13 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
                         bundle.legs.front().leg.product_id,
                         bundle.legs.front().equity.underlying_id);
 
-        const double total_npv = BookNpvAndPersistMtmForBundle(
-                bundle, *mkt_handle, snap_for_mtm, *pricer, mtm_ptr, mq, batch_run_id, mtm_remarks);
-        Logger::NumInfo("Book NPV (summed legs, Black–Scholes analytic) trade_id={} → {}.", tid, total_npv);
+        for (const MtmEngineRun& engine : engines) {
+            const double total_npv = BookNpvAndPersistMtmForBundle(
+                    bundle, *mkt_handle, snap_for_mtm, engine, mtm_ptr, mq, batch_run_id, mtm_remarks);
+            if (engine.is_official) {
+                Logger::NumInfo("Book NPV (summed legs, {}) trade_id={} → {}.", engine.name, tid, total_npv);
+            }
+        }
     }
 
     Logger::NumInfo("Priced {} trade(s).{}", trade_ids.size(), persist_mtm ? " MTM rows written." : "");

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -38,6 +39,12 @@ struct TradeLegMtmEodRow {
     double rho_total{};
 
     std::string pricing_engine;
+    /// The mark that feeds reporting. Exactly one engine per leg and day may set this
+    /// (enforced by `idx_trade_leg_mtm_eod_official`); the rest are informational.
+    bool is_official{false};
+    /// Monte Carlo reproducibility; left empty by deterministic engines.
+    std::optional<std::int64_t> num_paths;
+    std::optional<std::int64_t> mc_seed;
     /// Stored verbatim; if empty, repository substitutes UTC timestamp when upserting.
     std::string calculated_at;
     std::string remarks;

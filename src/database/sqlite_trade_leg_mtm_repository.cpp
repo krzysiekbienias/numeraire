@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -36,14 +37,14 @@ constexpr const char* kArchiveInsertSql =
         "numeraire_currency, pv_unit, pv_total, pnl_daily, pnl_inception, "
         "delta, delta_total, gamma, gamma_total, vega, vega_total, "
         "theta, theta_total, rho, rho_total, "
-        "pricing_engine, remarks"
+        "pricing_engine, is_official, num_paths, mc_seed, remarks"
         ") VALUES ("
         "?, ?, "
         "?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-        "?, ?"
+        "?, ?, ?, ?, ?"
         ")";
 
 constexpr const char* kUpsertSql =
@@ -53,13 +54,13 @@ constexpr const char* kUpsertSql =
         "numeraire_currency, pv_unit, pv_total, pnl_daily, pnl_inception, "
         "delta, delta_total, gamma, gamma_total, vega, vega_total, "
         "theta, theta_total, rho, rho_total, "
-        "pricing_engine, calculated_at, remarks"
+        "pricing_engine, is_official, num_paths, mc_seed, calculated_at, remarks"
         ") VALUES ("
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, "
         "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-        "?, ?, ?"
+        "?, ?, ?, ?, ?, ?"
         ")";
 
 void BindMarketAndPvFields(SQLite::Statement& st, int& i, const TradeLegMtmEodRow& row) {
@@ -94,6 +95,23 @@ void BindMarketAndPvFields(SQLite::Statement& st, int& i, const TradeLegMtmEodRo
     st.bind(i++, row.theta_total);
     st.bind(i++, row.rho);
     st.bind(i++, row.rho_total);
+}
+
+/// `pricing_engine` plus the columns describing how that engine was run. Both
+/// statements list them in the same order right after the engine name.
+void BindEngineFields(SQLite::Statement& st, int& i, const TradeLegMtmEodRow& row) {
+    st.bind(i++, row.pricing_engine);
+    st.bind(i++, row.is_official ? 1 : 0);
+    if (row.num_paths.has_value()) {
+        st.bind(i++, static_cast<std::int64_t>(*row.num_paths));
+    } else {
+        st.bind(i++);
+    }
+    if (row.mc_seed.has_value()) {
+        st.bind(i++, static_cast<std::int64_t>(*row.mc_seed));
+    } else {
+        st.bind(i++);
+    }
 }
 
 }  // namespace
@@ -145,7 +163,7 @@ void SqliteTradeLegMtmRepository::InsertArchive(const TradeLegMtmEodRow& row, co
         st.bind(i++, row.trade_id);
         st.bind(i++, row.leg_id);
         BindMarketAndPvFields(st, i, row);
-        st.bind(i++, row.pricing_engine);
+        BindEngineFields(st, i, row);
         st.bind(i++, row.remarks);
 
         st.exec();
@@ -184,8 +202,8 @@ void SqliteTradeLegMtmRepository::Upsert(const TradeLegMtmEodRow& row) const {
         }
 
         BindMarketAndPvFields(st, i, row);
+        BindEngineFields(st, i, row);
 
-        st.bind(i++, row.pricing_engine);
         st.bind(i++, calculated_at);
         st.bind(i++, row.remarks);
 

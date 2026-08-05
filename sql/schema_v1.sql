@@ -358,6 +358,11 @@ CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod (
     rho_total REAL NOT NULL,
     pricing_engine TEXT NOT NULL,
     -- e.g. analytic_black_scholes, monte_carlo_gbm_v1
+    -- The one mark that feeds reporting; other engines are informational only.
+    is_official INTEGER NOT NULL DEFAULT 0 CHECK (is_official IN (0, 1)),
+    -- Monte Carlo reproducibility; NULL for deterministic engines.
+    num_paths INTEGER,
+    mc_seed INTEGER,
     batch_run_id TEXT,
     calculated_at TEXT NOT NULL DEFAULT (datetime('now')),
     remarks TEXT NOT NULL DEFAULT '',
@@ -365,6 +370,9 @@ CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod (
     FOREIGN KEY (leg_id) REFERENCES trade_legs (leg_id) ON DELETE CASCADE,
     UNIQUE (leg_id, as_of, pricing_engine)
 );
+-- `idx_trade_leg_mtm_eod_official` (one official mark per leg and day) is created by
+-- ApplySchemaPatches, not here: this file also runs against databases predating
+-- `is_official`, where indexing that column would fail before the patch can add it.
 CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_leg_asof_engine ON trade_leg_mtm_eod (leg_id, as_of, pricing_engine);
 CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_asof ON trade_leg_mtm_eod (as_of);
 CREATE INDEX IF NOT EXISTS idx_trade_leg_mtm_eod_trade_asof ON trade_leg_mtm_eod (trade_id, as_of);
@@ -402,6 +410,12 @@ CREATE TABLE IF NOT EXISTS trade_leg_mtm_eod_archive (
     rho REAL NOT NULL,
     rho_total REAL NOT NULL,
     pricing_engine TEXT NOT NULL,
+    -- Whether this valuation was the official mark when the run produced it, so a
+    -- later change of default model cannot rewrite what history says.
+    is_official INTEGER NOT NULL DEFAULT 0 CHECK (is_official IN (0, 1)),
+    -- Monte Carlo reproducibility; NULL for deterministic engines.
+    num_paths INTEGER,
+    mc_seed INTEGER,
     remarks TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
     FOREIGN KEY (leg_id) REFERENCES trade_legs (leg_id) ON DELETE CASCADE

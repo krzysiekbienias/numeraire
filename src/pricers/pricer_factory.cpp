@@ -3,6 +3,7 @@
 #include <numeraire/pricers/analytic_composite_pricer.hpp>
 #include <numeraire/pricers/analytic_black_scholes_equity_pricer.hpp>
 #include <numeraire/pricers/binomial_black_scholes_equity_pricer.hpp>
+#include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/utils/exception.hpp>
 
 #include <memory>
@@ -38,6 +39,12 @@ std::unique_ptr<core::IPricer> PricerFactory::Make(const PricingEngineType engin
             ThrowUnsupported(engine, model);
         }
     case PricingEngineType::kMonteCarlo:
+        switch (model) {
+        case ModelType::kBlackScholes:
+            return std::make_unique<MonteCarloGbmEuropeanPricer>();
+        default:
+            ThrowUnsupported(engine, model);
+        }
     case PricingEngineType::kFiniteDifference:
     default:
         ThrowUnsupported(engine, model);
