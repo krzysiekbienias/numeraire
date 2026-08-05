@@ -1,13 +1,30 @@
 from datetime import date as date_cls
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
 from django.db import OperationalError
 from django.db.models import Count, Max, Prefetch, Sum
 from django.http import Http404
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
+from journal.booking import (
+    bookable_instruments,
+    build_bundle,
+    delete_preview,
+    get_instrument,
+    next_trade_id,
+    portfolio_suggestions,
+    run_delete,
+    run_import,
+    run_price_booking,
+    strategy_suggestions,
+    underlier_choices,
+    write_bundle,
+)
+from journal.forms import NewTradeForm
 from journal.curves import (
     curve_discount_for_maturity,
     discount_factor_from_zero,
@@ -244,6 +261,122 @@ class TradeListView(ListView):
         return context
 
 
+class TradeNewView(TemplateView):
+    """Book a single-leg trade by handing a bundle to `import_trade_bundle.py`.
+
+    The Journal never INSERTs into the catalog itself — see `journal.booking`.
+    """
+
+    template_name = 'journal/trade_new.html'
+
+    def _context(self, spec, form):
+        return {
+            'instruments': bookable_instruments(),
+            'spec': spec,
+            'form': form,
+            'preview_trade_id': next_trade_id() if spec is not None else None,
+            'portfolio_options': portfolio_suggestions(),
+            'strategy_options': strategy_suggestions(),
+        }
+
+    def get(self, request, *args, **kwargs):
+        spec = get_instrument(request.GET.get('instrument'))
+        form = None
+        if spec is not None:
+            form = NewTradeForm(
+                spec,
+                underlier_choices=underlier_choices(),
+                initial={'trade_date': date_cls.today()},
+            )
+        return self.render_to_response(self._context(spec, form))
+
+    def post(self, request, *args, **kwargs):
+        spec = get_instrument(request.POST.get('instrument'))
+        if spec is None:
+            messages.error(request, 'Pick an instrument type before booking.')
+            return redirect('journal:trade_new')
+
+        form = NewTradeForm(spec, request.POST, underlier_choices=underlier_choices())
+        if not form.is_valid():
+            return self.render_to_response(self._context(spec, form))
+
+        trade_id = next_trade_id()
+        bundle = build_bundle(
+            spec,
+            trade_id=trade_id,
+            product_id=form.product_id,
+            cleaned=form.cleaned_data,
+            booked_by=request.user.get_username(),
+        )
+        try:
+            bundle_path = write_bundle(trade_id, bundle)
+        except OSError as exc:
+            messages.error(request, f'Could not write the bundle file: {exc}')
+            return self.render_to_response(self._context(spec, form))
+
+        result = run_import(bundle_path)
+        if not result.ok:
+            # A rejected bundle is not a record of anything; keep `incoming/` clean
+            # so the trade id stays free for the next attempt.
+            bundle_path.unlink(missing_ok=True)
+            messages.error(request, result.message)
+            return self.render_to_response(self._context(spec, form))
+
+        messages.success(
+            request,
+            f'{trade_id} booked as PENDING from {bundle_path.name}. '
+            'Run the booking pricer to fill the execution price and promote it to LIVE.',
+        )
+        return redirect('journal:trade_detail', trade_id=trade_id)
+
+
+class TradePriceBookingView(View):
+    """Run `dev_main --price-booking` for one PENDING trade (POST only)."""
+
+    def post(self, request, trade_id, *args, **kwargs):
+        trade = get_object_or_404(Trade, pk=trade_id)
+        if trade.status != 'PENDING':
+            messages.error(
+                request,
+                f'{trade.trade_id} is {trade.status} — booking only runs on PENDING trades.',
+            )
+            return redirect('journal:trade_detail', trade_id=trade.trade_id)
+
+        result = run_price_booking(trade.trade_id)
+        if result.ok:
+            messages.success(request, result.message)
+        else:
+            messages.error(request, f'Booking failed — {result.message}')
+        return redirect('journal:trade_detail', trade_id=trade.trade_id)
+
+
+class TradeDeleteView(View):
+    """Run `delete_trade.py` for one trade (POST only).
+
+    Irreversible for the marks, so the typed id has to match; the bundle in
+    `trades/incoming/` survives and can be re-imported.
+    """
+
+    def post(self, request, trade_id, *args, **kwargs):
+        trade = get_object_or_404(Trade, pk=trade_id)
+
+        typed = (request.POST.get('confirm_trade_id') or '').strip()
+        if typed != trade.trade_id:
+            messages.error(
+                request,
+                f'Delete cancelled — type {trade.trade_id} exactly to confirm.',
+            )
+            return redirect('journal:trade_detail', trade_id=trade.trade_id)
+
+        result = run_delete(trade.trade_id)
+        if not result.ok:
+            messages.error(request, f'Delete failed — {result.message}')
+            return redirect('journal:trade_detail', trade_id=trade.trade_id)
+
+        messages.success(request, result.message)
+        return redirect('journal:trade_list')
+
+
 class TradeDetailView(DetailView):
     """One trade: definition, market inputs @ as_of, valuation, MTM history."""
 
@@ -452,6 +585,7 @@ class TradeDetailView(DetailView):
                 'as_of': as_of,
                 'available_as_of': available_as_of,
                 'latest_as_of': available_as_of[0] if available_as_of else None,
+                'delete_preview': delete_preview(trade.trade_id),
                 'leg_rows': market_rows,
                 'market_rows': market_rows,
                 'primary_market': primary,

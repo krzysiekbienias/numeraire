@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 
+from django.contrib.messages import constants as message_constants
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -69,6 +71,9 @@ MIDDLEWARE = [
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'journal:dashboard'
 LOGOUT_REDIRECT_URL = 'journal:landing'
+
+# base.html renders `alert-{{ message.tags }}`; Bootstrap spells the error level 'danger'.
+MESSAGE_TAGS = {message_constants.ERROR: 'danger'}
 
 ROOT_URLCONF = 'numeraire_web.urls'
 

@@ -1,0 +1,10 @@
+<div class="nj-form-field{% if field.errors %} has-error{% endif %}">
+  <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+  {{ field }}
+  {% for error in field.errors %}
+    <span class="nj-form-error">{{ error }}</span>
+  {% endfor %}
+  {% if field.help_text %}
+    <span class="nj-form-help">{{ field.help_text }}</span>
+  {% endif %}
+</div>

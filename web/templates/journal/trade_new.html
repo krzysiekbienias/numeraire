@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}New trade{% endblock %}
+{% block page_title %}New trade{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    Writes a bundle to <code>trades/incoming/</code> and runs
+    <code>import_trade_bundle.py</code> — the trade lands as <code>PENDING</code>
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'journal:trade_list' %}">
+    <i class="bi bi-arrow-left"></i> Trades
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="nj-booking-page">
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-body nj-booking-pick">
+      <form method="get" action="{% url 'journal:trade_new' %}" class="nj-booking-pick-form">
+        <label class="nj-quant-type">
+          <span>Instrument type</span>
+          <select class="form-select form-select-sm" name="instrument" onchange="this.form.submit()">
+            <option value="">— pick —</option>
+            {% for choice in instruments %}
+              <option value="{{ choice.code }}" {% if spec.code == choice.code %}selected{% endif %}>
+                {{ choice.label }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <noscript><button type="submit" class="btn btn-sm btn-outline-secondary">Show fields</button></noscript>
+      </form>
+      {% if spec %}
+        <span class="nj-booking-pick-tag">
+          <span class="nj-sym">{{ spec.code }}</span>
+          <code>{{ spec.instrument_type }}</code>
+        </span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not spec %}
+    <div class="nj-panel">
+      <div class="nj-panel-body">
+        <p class="mb-2">Pick an instrument type to show its fields.</p>
+        <p class="small text-secondary mb-0">
+          Only types the C++ <code>ProductFactory</code> can price are bookable here.
+          The full catalog is on the <a href="{% url 'journal:inventory' %}">Inventory</a> page.
+        </p>
+      </div>
+    </div>
+  {% else %}
+    <form method="post" action="{% url 'journal:trade_new' %}" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="instrument" value="{{ spec.code }}">
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger py-2 small">
+          {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="nj-panel mb-2">
+        <div class="nj-panel-head">
+          <h2>Instrument</h2>
+          <span class="small text-secondary">
+            product id is derived from these fields
+          </span>
+        </div>
+        <div class="nj-panel-body">
+          <div class="nj-form-grid">
+            {% include 'partials/form_field.html' with field=form.underlying_id %}
+            {% if form.option_type %}
+              {% include 'partials/form_field.html' with field=form.option_type %}
+            {% endif %}
+            {% include 'partials/form_field.html' with field=form.strike %}
+            {% include 'partials/form_field.html' with field=form.expiry_date %}
+            {% include 'partials/form_field.html' with field=form.settlement %}
+            {% include 'partials/form_field.html' with field=form.contract_size %}
+            {% include 'partials/form_field.html' with field=form.currency %}
+          </div>
+        </div>
+      </div>
+
+      <div class="nj-panel mb-2">
+        <div class="nj-panel-head">
+          <h2>Trade</h2>
+          {% if preview_trade_id %}
+            <span class="small text-secondary">next id <code>{{ preview_trade_id }}</code></span>
+          {% endif %}
+        </div>
+        <div class="nj-panel-body">
+          <div class="nj-form-grid">
+            {% include 'partials/form_field.html' with field=form.trade_date %}
+            {% include 'partials/form_field.html' with field=form.portfolio_id %}
+            {% include 'partials/form_field.html' with field=form.strategy_type %}
+          </div>
+        </div>
+      </div>
+
+      <div class="nj-panel mb-2">
+        <div class="nj-panel-head">
+          <h2>Leg</h2>
+          <span class="small text-secondary">single leg</span>
+        </div>
+        <div class="nj-panel-body">
+          <div class="nj-form-grid">
+            {% include 'partials/form_field.html' with field=form.direction %}
+            {% include 'partials/form_field.html' with field=form.quantity %}
+            {% include 'partials/form_field.html' with field=form.commission_per_contract %}
+          </div>
+        </div>
+      </div>
+
+      <div class="nj-booking-actions">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-plus-lg"></i> Book trade
+        </button>
+        <a class="btn btn-outline-secondary" href="{% url 'journal:trade_new' %}?instrument={{ spec.code }}">
+          Reset
+        </a>
+        <span class="small text-secondary">
+          Execution price stays empty until the booking pricer runs on the trade date.
+        </span>
+      </div>
+    </form>
+
+    <datalist id="nj-portfolio-options">
+      {% for option in portfolio_options %}<option value="{{ option }}"></option>{% endfor %}
+    </datalist>
+    <datalist id="nj-strategy-options">
+      {% for option in strategy_options %}<option value="{{ option }}"></option>{% endfor %}
+    </datalist>
+  {% endif %}
+</div>
+{% endblock %}

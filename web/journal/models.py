@@ -365,6 +365,37 @@ class ParCurvePointEod(models.Model):
         return f'{self.curve_id} @ {self.as_of} / {self.tenor}'
 
 
+class UniverseInstrument(models.Model):
+    """Controlled market-data universe — the underliers ingest actually covers."""
+
+    instrument_id = models.TextField(primary_key=True)
+    provider_symbol = models.TextField()
+    display_name = models.TextField(blank=True, null=True)
+    asset_class = models.TextField()
+    sector = models.TextField(blank=True, null=True)
+    industry = models.TextField(blank=True, null=True)
+    quote_currency = models.TextField()
+    session_calendar = models.TextField()
+    country = models.TextField(blank=True, null=True)
+    data_vendor = models.TextField()
+    is_active = models.IntegerField()
+    ingest_equity_eod = models.IntegerField()
+    ingest_index_eod = models.IntegerField()
+    ingest_priority = models.IntegerField()
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.TextField(blank=True, null=True)
+    updated_at = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'universe_instrument'
+        ordering = ['instrument_id']
+        verbose_name = 'Universe instrument'
+
+    def __str__(self):
+        return self.instrument_id
+
+
 class CatalogInstrumentType(models.Model):
     """Reference codes for equity instrument types (seed / UI inventory)."""
 

@@ -6,6 +6,12 @@
   <p class="muted">Catalog from <code>trades</code> / <code>trade_legs</code> — filter by lifecycle status</p>
 {% endblock %}
 
+{% block topbar_actions %}
+  <a class="btn btn-sm btn-primary" href="{% url 'journal:trade_new' %}">
+    <i class="bi bi-plus-lg"></i> New trade
+  </a>
+{% endblock %}
+
 {% block content %}
   <div class="nj-filters mb-3">
     <a class="nj-chip {% if status_filter == 'ALL' %}active{% endif %}"

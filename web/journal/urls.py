@@ -10,7 +10,18 @@ urlpatterns = [
     path('about/', views.AboutView.as_view(), name='about'),
     path('overview/', views.DashboardView.as_view(), name='dashboard'),
     path('trades/', views.TradeListView.as_view(), name='trade_list'),
+    path('trades/new/', views.TradeNewView.as_view(), name='trade_new'),
     path('trades/<str:trade_id>/', views.TradeDetailView.as_view(), name='trade_detail'),
+    path(
+        'trades/<str:trade_id>/price-booking/',
+        views.TradePriceBookingView.as_view(),
+        name='trade_price_booking',
+    ),
+    path(
+        'trades/<str:trade_id>/delete/',
+        views.TradeDeleteView.as_view(),
+        name='trade_delete',
+    ),
     path('underliers/', views.UnderlierListView.as_view(), name='underlier_list'),
     path('underliers/<str:ticker>/', views.UnderlierDetailView.as_view(), name='underlier_detail'),
     path('curves/', views.CurveView.as_view(), name='curves'),

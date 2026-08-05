@@ -27,6 +27,20 @@
       </select>
     </form>
   {% endif %}
+  {% if trade.status == 'PENDING' %}
+    <form method="post" action="{% url 'journal:trade_price_booking' trade.trade_id %}" class="m-0">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-primary"
+              title="Run dev_main --price-booking: prices each leg on the trade date and promotes the trade to LIVE">
+        <i class="bi bi-cash-coin"></i> Price booking
+      </button>
+    </form>
+  {% endif %}
+  <button type="button" class="btn btn-sm btn-outline-danger"
+          data-bs-toggle="modal" data-bs-target="#nj-delete-trade"
+          title="Delete this trade with its legs, marks and exposure history">
+    <i class="bi bi-trash"></i> Delete
+  </button>
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'journal:trade_list' %}">
     <i class="bi bi-arrow-left"></i> Trades
   </a>
@@ -34,6 +48,15 @@
 
 {% block content %}
 <div class="nj-trade-page">
+
+  {% if trade.status == 'PENDING' %}
+    <div class="alert alert-secondary py-2 small mb-2">
+      Booked but not priced. Legs carry no execution price and the trade is excluded
+      from EOD MTM until <code>Price booking</code> values it on
+      {% if trade.trade_date %}{{ trade.trade_date|date:"Y-m-d" }}{% else %}its trade date{% endif %}
+      and promotes it to <code>LIVE</code>.
+    </div>
+  {% endif %}
 
   {# Definition + valuation in one tight table #}
   <div class="nj-panel">
@@ -589,9 +612,79 @@
   </div>
 
 </div>
+
+<div class="modal fade" id="nj-delete-trade" tabindex="-1" aria-labelledby="nj-delete-trade-title"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'journal:trade_delete' trade.trade_id %}" class="modal-content">
+      {% csrf_token %}
+      <div class="modal-header">
+        <h5 class="modal-title" id="nj-delete-trade-title">Delete {{ trade.trade_id }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small mb-2">This removes from the book, permanently:</p>
+        <ul class="small mb-2">
+          <li><strong>{{ delete_preview.legs }}</strong> leg{{ delete_preview.legs|pluralize }}</li>
+          <li><strong>{{ delete_preview.marks }}</strong> daily mark{{ delete_preview.marks|pluralize }}
+            {% if delete_preview.marks %}<span class="text-body-secondary">(and their archive)</span>{% endif %}
+          </li>
+          <li><strong>{{ delete_preview.exposures }}</strong> exposure row{{ delete_preview.exposures|pluralize }}</li>
+        </ul>
+        {% if delete_preview.has_history %}
+          <div class="alert alert-warning py-2 small mb-2">
+            This trade already carries valuation history. Deleting it drops those marks for good —
+            nothing archives them elsewhere.
+          </div>
+        {% endif %}
+        {% if delete_preview.restorable %}
+          <p class="small text-body-secondary mb-2">
+            The product stays in the catalog and
+            <code>trades/incoming/{{ delete_preview.bundle_name }}</code> stays on disk,
+            so the importer can book this trade again under the same id.
+          </p>
+        {% else %}
+          <div class="alert alert-danger py-2 small mb-2">
+            No <code>{{ trade.trade_id }}.json</code> in <code>trades/incoming/</code> — there is
+            nothing to re-import from. Once deleted, this trade would have to be defined again by hand.
+          </div>
+        {% endif %}
+        <label class="form-label small mb-1" for="nj-delete-confirm">
+          Type <code>{{ trade.trade_id }}</code> to confirm
+        </label>
+        <input type="text" class="form-control form-control-sm" id="nj-delete-confirm"
+               name="confirm_trade_id" autocomplete="off" spellcheck="false"
+               data-expected="{{ trade.trade_id }}">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-sm btn-danger" id="nj-delete-submit" disabled>
+          <i class="bi bi-trash"></i> Delete trade
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
+  <script>
+    (function () {
+      const input = document.getElementById('nj-delete-confirm');
+      const submit = document.getElementById('nj-delete-submit');
+      if (!input || !submit) return;
+      const expected = input.dataset.expected;
+      const sync = () => { submit.disabled = input.value.trim() !== expected; };
+      input.addEventListener('input', sync);
+      const modal = document.getElementById('nj-delete-trade');
+      // Reopening keeps the previous text, which would leave the button live.
+      modal.addEventListener('shown.bs.modal', () => { input.value = ''; sync(); input.focus(); });
+      sync();
+    })();
+  </script>
+
   {% if whatif %}
     <script>
       (function () {
