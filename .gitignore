@@ -72,6 +72,9 @@ CHECKLIST_NOTES.md
 
 # --- DB---
 db.sqlite3
+# WAL/SHM companions and pre-migration backups sit next to it and are just as large.
+db.sqlite3.*
+db.sqlite3-*
 *.session.sql
 refactor.sql
 
