@@ -117,6 +117,11 @@ class TradeLegMtmEod(models.Model):
     rho = models.FloatField()
     rho_total = models.FloatField()
     pricing_engine = models.TextField()
+    # One official mark per leg and day; other engines are informational only, so
+    # every total and time series in the Journal filters on this.
+    is_official = models.BooleanField(default=False)
+    num_paths = models.IntegerField(blank=True, null=True)
+    mc_seed = models.IntegerField(blank=True, null=True)
     batch_run_id = models.TextField(blank=True, null=True)
     calculated_at = models.TextField()
     remarks = models.TextField()

@@ -1084,6 +1084,10 @@ body {
   padding: 0.35rem 0.65rem;
 }
 
+.nj-alt-marks .nj-alt-official > * {
+  font-weight: 600;
+}
+
 .nj-market-split {
   display: grid;
   grid-template-columns: minmax(11.5rem, 13.5rem) minmax(0, 1fr);

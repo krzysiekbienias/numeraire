@@ -154,10 +154,12 @@
               <dt>Spot</dt>
               <dd>{{ primary_market.mtm.underlying_spot|nj_num:4 }}</dd>
             </div>
-            <div>
-              <dt>IV</dt>
-              <dd>{{ primary_market.mtm.implied_vol_used|floatformat:4 }}</dd>
-            </div>
+            {% if not trade_is_linear %}
+              <div>
+                <dt>IV</dt>
+                <dd>{{ primary_market.mtm.implied_vol_used|floatformat:4 }}</dd>
+              </div>
+            {% endif %}
             <div>
               <dt>r</dt>
               <dd>{{ primary_market.mtm.risk_free_rate|floatformat:6 }}</dd>
@@ -217,6 +219,58 @@
             {% endif %}
           </div>
         </div>
+
+        {% if primary_market.alt_marks %}
+          <div class="nj-alt-marks mt-3">
+            <div class="nj-chart-label mb-1">
+              <span>Alternative pricing</span>
+              <span class="text-secondary">
+                informational · official is <code>{{ primary_market.mtm.pricing_engine }}</code>
+              </span>
+            </div>
+            <table class="table table-sm mb-0 nj-compact-table">
+              <thead>
+                <tr>
+                  <th>Engine</th>
+                  <th class="nj-num">PV unit</th>
+                  <th class="nj-num">PV</th>
+                  <th class="nj-num" title="Sampling error of a stochastic engine; deterministic engines have none.">Std err</th>
+                  <th class="nj-num">vs official</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="nj-alt-official">
+                  <td><code>{{ primary_market.mtm.pricing_engine }}</code> <span class="text-secondary small">official</span></td>
+                  <td class="nj-num">{{ primary_market.mtm.pv_unit|nj_num:4 }}</td>
+                  <td class="nj-num">{{ primary_market.mtm.pv_total|nj_num:2 }}</td>
+                  <td class="nj-num text-secondary">—</td>
+                  <td class="nj-num text-secondary">—</td>
+                </tr>
+                {% for alt in primary_market.alt_marks %}
+                  <tr>
+                    <td>
+                      <code>{{ alt.mtm.pricing_engine }}</code>
+                      {% if alt.mtm.num_paths %}
+                        <span class="text-secondary small">{{ alt.mtm.num_paths }} paths · seed {{ alt.mtm.mc_seed }}</span>
+                      {% endif %}
+                    </td>
+                    <td class="nj-num">{{ alt.mtm.pv_unit|nj_num:4 }}</td>
+                    <td class="nj-num">{{ alt.mtm.pv_total|nj_num:2 }}</td>
+                    <td class="nj-num">
+                      {% if alt.std_err != None %}±{{ alt.std_err|floatformat:4 }}{% else %}—{% endif %}
+                    </td>
+                    <td class="nj-num">
+                      {% if alt.diff_pct != None %}{{ alt.diff_pct|floatformat:3 }}%{% else %}—{% endif %}
+                      {% if alt.diff_sigma != None %}
+                        <span class="text-secondary small">{{ alt.diff_sigma|floatformat:2 }}σ</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
 
         {% if curve_chart %}
           {{ curve_chart|json_script:"trade-curve-chart" }}
@@ -326,7 +380,7 @@
                 <tr>
                   <th>Leg</th>
                   <th class="nj-num">Spot</th>
-                  <th class="nj-num">IV</th>
+                  {% if not trade_is_linear %}<th class="nj-num">IV</th>{% endif %}
                   <th class="nj-num">r</th>
                   <th class="nj-num">τ</th>
                   <th class="nj-num">DF</th>
@@ -338,7 +392,9 @@
                     <td>{{ row.leg.leg_id }}</td>
                     {% if row.mtm %}
                       <td class="nj-num">{{ row.mtm.underlying_spot|nj_num:4 }}</td>
-                      <td class="nj-num">{{ row.mtm.implied_vol_used|floatformat:4 }}</td>
+                      {% if not trade_is_linear %}
+                        <td class="nj-num">{{ row.mtm.implied_vol_used|floatformat:4 }}</td>
+                      {% endif %}
                       <td class="nj-num">{{ row.mtm.risk_free_rate|floatformat:6 }}</td>
                       <td class="nj-num">{{ row.mtm.years_to_maturity|floatformat:4 }}</td>
                       <td class="nj-num">
@@ -347,7 +403,7 @@
                         {% else %}—{% endif %}
                       </td>
                     {% else %}
-                      <td colspan="5" class="text-secondary">—</td>
+                      <td colspan="{% if trade_is_linear %}4{% else %}5{% endif %}" class="text-secondary">—</td>
                     {% endif %}
                   </tr>
                 {% endfor %}

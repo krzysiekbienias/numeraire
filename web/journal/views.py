@@ -1,3 +1,4 @@
+import re
 from datetime import date as date_cls
 
 from django.contrib import messages
@@ -92,6 +93,33 @@ def _remark_flags(remarks: str | None) -> list[str]:
     return [part.strip() for part in remarks.split(';') if part.strip()]
 
 
+def _mc_std_err(remarks: str | None) -> float | None:
+    """Sampling error a stochastic engine recorded for this mark.
+
+    A Monte Carlo price is only readable next to it: a gap to the official mark
+    means something once it is large relative to the noise, not before.
+    """
+    if not remarks:
+        return None
+    match = re.search(r'mc_std_err=([0-9.eE+-]+)', remarks)
+    if match is None:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def official_mtm():
+    """Marks that drive reporting.
+
+    A leg can carry several marks for one day — one per pricing engine — but only
+    the official one may be summed or charted. Comparison engines are shown per
+    leg on the trade page and nowhere else.
+    """
+    return TradeLegMtmEod.objects.filter(is_official=True)
+
+
 class DashboardView(TemplateView):
     """Landing page: book snapshot for a selected (or latest) as_of date."""
 
@@ -109,7 +137,8 @@ class DashboardView(TemplateView):
 
     def _batch_summary(self):
         available_as_of = list(
-            TradeLegMtmEod.objects.order_by()
+            official_mtm()
+            .order_by()
             .values_list('as_of', flat=True)
             .distinct()
             .order_by('-as_of')
@@ -120,7 +149,7 @@ class DashboardView(TemplateView):
         if as_of is None and available_as_of:
             as_of = available_as_of[0]
 
-        mtm = TradeLegMtmEod.objects.filter(as_of=as_of) if as_of else None
+        mtm = official_mtm().filter(as_of=as_of) if as_of else None
 
         exposure_qs = TradeLegExposureEod.objects.filter(as_of=as_of) if as_of else TradeLegExposureEod.objects.none()
         surfaces_qs = (
@@ -400,7 +429,8 @@ class TradeDetailView(DetailView):
         legs = list(trade.legs.all())
 
         available_as_of = list(
-            TradeLegMtmEod.objects.filter(trade=trade)
+            official_mtm()
+            .filter(trade=trade)
             .order_by()
             .values_list('as_of', flat=True)
             .distinct()
@@ -412,8 +442,27 @@ class TradeDetailView(DetailView):
 
         mtm_by_leg = {}
         if as_of is not None:
-            for row in TradeLegMtmEod.objects.filter(trade=trade, as_of=as_of):
+            for row in official_mtm().filter(trade=trade, as_of=as_of):
                 mtm_by_leg[row.leg_id] = row
+
+        # Engines that priced the same leg for comparison only. Products covered by a
+        # single engine produce nothing here, and the template then skips the panel.
+        alt_marks_by_leg: dict[str, list] = {}
+        if as_of is not None:
+            for row in TradeLegMtmEod.objects.filter(
+                trade=trade, as_of=as_of, is_official=False
+            ).order_by('pricing_engine'):
+                official = mtm_by_leg.get(row.leg_id)
+                diff_pct = None
+                diff_sigma = None
+                std_err = _mc_std_err(row.remarks)
+                if official is not None and official.pv_unit:
+                    diff_pct = 100.0 * (row.pv_unit - official.pv_unit) / official.pv_unit
+                if official is not None and std_err:
+                    diff_sigma = (row.pv_unit - official.pv_unit) / std_err
+                alt_marks_by_leg.setdefault(row.leg_id, []).append(
+                    {'mtm': row, 'diff_pct': diff_pct, 'std_err': std_err, 'diff_sigma': diff_sigma}
+                )
 
         market_rows = []
         for leg in legs:
@@ -430,6 +479,7 @@ class TradeDetailView(DetailView):
                     'leg': leg,
                     'equity': equity,
                     'mtm': mtm,
+                    'alt_marks': alt_marks_by_leg.get(leg.leg_id, []),
                     'underlier': underlier,
                     'underlier_url_ticker': underlier,
                     'remark_flags': _remark_flags(getattr(mtm, 'remarks', None)),
@@ -438,10 +488,18 @@ class TradeDetailView(DetailView):
                 }
             )
 
+        trade_caps = merge_trade_capabilities(
+            [capabilities_for_equity(row['equity']) for row in market_rows]
+        )
+        # Only a payoff that is linear in spot is vol-free. Anything we cannot classify
+        # (digitals today) keeps the surface: they do depend on vol, they merely lack a
+        # what-if engine.
+        trade_is_linear = trade_caps.kind == 'linear'
+
         valuation = {}
         if as_of is not None and mtm_by_leg:
             valuation = (
-                TradeLegMtmEod.objects.filter(trade=trade, as_of=as_of).aggregate(
+                official_mtm().filter(trade=trade, as_of=as_of).aggregate(
                     pv_total=Sum('pv_total'),
                     pnl_daily=Sum('pnl_daily'),
                     pnl_inception=Sum('pnl_inception'),
@@ -452,7 +510,8 @@ class TradeDetailView(DetailView):
             )
 
         mtm_history = list(
-            TradeLegMtmEod.objects.filter(trade=trade)
+            official_mtm()
+            .filter(trade=trade)
             .values('as_of')
             .annotate(
                 legs=Count('pk'),
@@ -528,7 +587,7 @@ class TradeDetailView(DetailView):
         # Vol surface 3D for the primary underlier (nearest surface day ≤ mark).
         vol_chart = []
         vol_meta = None
-        if primary is not None and as_of is not None:
+        if primary is not None and as_of is not None and not trade_is_linear:
             und = primary['underlier']
             surf_as_of = nearest_surface_as_of(und, as_of)
             if surf_as_of is not None:
@@ -557,9 +616,6 @@ class TradeDetailView(DetailView):
         if primary is not None and primary.get('mtm') is not None:
             baseline = baseline_inputs_from_mtm(primary['mtm'])
             if baseline is not None:
-                trade_caps = merge_trade_capabilities(
-                    [capabilities_for_equity(row['equity']) for row in market_rows]
-                )
                 shocked = parse_whatif_inputs(
                     self.request.GET, baseline, caps=trade_caps
                 )
@@ -589,6 +645,7 @@ class TradeDetailView(DetailView):
                 'leg_rows': market_rows,
                 'market_rows': market_rows,
                 'primary_market': primary,
+                'trade_is_linear': trade_is_linear,
                 'valuation': valuation,
                 'mtm_history': mtm_history,
                 'underlier_chart': underlier_chart,
@@ -720,7 +777,8 @@ class CurveView(TemplateView):
             snapshot = load_curve_snapshot(curve_id, as_of) if curve_id and as_of else None
 
             latest_mtm = (
-                TradeLegMtmEod.objects.order_by()
+                official_mtm()
+                .order_by()
                 .values_list('as_of', flat=True)
                 .distinct()
                 .order_by('-as_of')
@@ -788,7 +846,8 @@ class ExposureView(TemplateView):
             )
 
             latest_mtm = (
-                TradeLegMtmEod.objects.order_by()
+                official_mtm()
+                .order_by()
                 .values_list('as_of', flat=True)
                 .distinct()
                 .order_by('-as_of')
