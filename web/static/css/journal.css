@@ -537,6 +537,34 @@ body {
   z-index: 3;
 }
 
+.nj-landing-about {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 40rem;
+  margin: 2.5rem auto 0;
+  padding: 1.5rem 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nj-landing-about h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.nj-landing-about p {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.nj-landing-about p:last-child {
+  margin-bottom: 0;
+}
+
 .nj-landing-foot {
   position: relative;
   z-index: 1;
