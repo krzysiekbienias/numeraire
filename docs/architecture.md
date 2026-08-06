@@ -483,8 +483,10 @@ flowchart TB
     PF --> COMP[AnalyticCompositePricer]
     COMP --> BS[AnalyticBlackScholesEquityPricer]
     COMP --> FWD[AnalyticForwardPricer]
-    BS --> OPT[Vanilla + AON + CON]
+    BS --> Q[quant black_scholes_vanilla]
+    Q --> OPT[Vanilla + AON + CON formulas]
     FWD --> EQF[EquityForwardProduct]
+    IV[ImpliedVolEuropeanVanilla] --> Q
 ```
 
 | Product (`ProductFactory`) | Pricer | Uses `ImpliedVolatility`? | NPV / greeks |
@@ -494,11 +496,13 @@ flowchart TB
 | `EquityCashOrNothingProduct` | same | yes | NPV only (v1) |
 | `EquityForwardProduct` | `[AnalyticForwardPricer](../include/numeraire/pricers/analytic_forward_pricer.hpp)` | **no** | NPV only (v1) |
 
+**`quant` holds the formulas; pricers are adapters.** Closed-form Black–Scholes (vanilla price/greeks, asset-or-nothing, cash-or-nothing) lives in [`quant/black_scholes_vanilla`](../include/numeraire/quant/black_scholes_vanilla.hpp). The equity analytic pricer resolves market inputs, converts dates to \(\tau\), enforces European exercise, and packs `PricingResult` — it does not re-implement \(N(d_1)\). The same `quant` entry points feed [`ImpliedVolEuropeanVanilla`](../include/numeraire/quant/implied_vol_european.hpp) / the vol-surface builder, so calibration and official MTM cannot silently diverge. Boundary rules: `quant` stays a leaf (links `enums` only; returns PODs / status enums, never `core::` types); solvers and root-finders call `quant` with bare doubles and **never** go through `IPricer` (no booked product exists on the market-quote path). See [`mathematical_background.md`](mathematical_background.md).
+
 **Catalog routing** — `[ProductFactory`](../include/numeraire/products/product_factory.hpp) maps `products_equity.instrument_type` (e.g. `plain_vanilla_european_option`, `asset_or_nothing` / `AssetOrNothingOption`, `binary_cash_or_nothing` / `CashOrNothingOption`, `equity_forward`) to the concrete `IProduct` type. See [`trades/incoming/incomming_trades.md`](../trades/incoming/incomming_trades.md) for JSON import examples.
 
 **MTM `pricing_engine` column** — Every leg in a batch run is persisted with `pricing_engine = analytic_black_scholes` ([`dev_main`](../app/dev_main.cpp) constant), including forwards priced via `AnalyticForwardPricer`. The stored `implied_vol_used` snapshot field is still populated from env for all legs even when the pricer ignores vol (forwards). A per-product engine id is future work.
 
-Unit tests: vanilla NPV/greeks vs `QuantLib::BlackCalculator` in [`test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp); forwards in [`test_analytic_forward_pricer.cpp`](../unit_tests/pricers/test_analytic_forward_pricer.cpp); routing in [`test_analytic_composite_pricer.cpp`](../unit_tests/pricers/test_analytic_composite_pricer.cpp).
+Unit tests: closed forms vs `QuantLib::BlackCalculator` (including digital payoffs) in [`test_black_scholes_vanilla.cpp`](../unit_tests/quant/test_black_scholes_vanilla.cpp); adapter + QuantLib + quant↔pricer cross-check in [`test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp); forwards in [`test_analytic_forward_pricer.cpp`](../unit_tests/pricers/test_analytic_forward_pricer.cpp); routing in [`test_analytic_composite_pricer.cpp`](../unit_tests/pricers/test_analytic_composite_pricer.cpp).
 
 ### Trade lifecycle: import → booking → MTM
 
@@ -609,7 +613,7 @@ There is **no** automatic “previous US trading session” calendar — if MTM 
 
 **Sign check (LONG, quantity = 1, contract_size = 100):** if `execution_price = 5`, `pv_unit = 6` → `booked_mark = +500`, `pv_total = +600` → `pnl_inception = +100 - commission`. **SHORT** with the same numbers → `booked_mark = -500`, `pv_total = -600` → `pnl_inception = -100 - commission` (option rose → loss on short).
 
-**Greek conventions (vanilla only)** — `[AnalyticBlackScholesEquityPricer](../src/pricers/analytic_black_scholes_equity_pricer.cpp)` for European vanilla, benchmarked vs `QuantLib::BlackCalculator` in unit tests: sensitivities are w.r.t. **spot S**, **absolute volatility \(\sigma\)**, and **rate r** on the same T as NPV. `vega` is \(\partial V / \partial \sigma\) (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time. Asset-or-nothing, cash-or-nothing, and equity forward pricers return **NPV only** in v1 (MTM greek columns are zero-filled).
+**Greek conventions (vanilla only)** — computed in [`quant::EuropeanVanillaAllGreeks`](../include/numeraire/quant/black_scholes_vanilla.hpp) and mapped by the equity analytic pricer onto `core::PricingGreeks`; benchmarked vs `QuantLib::BlackCalculator`. Sensitivities are w.r.t. **spot S**, **absolute volatility \(\sigma\)**, and **rate r** on the same T as NPV. `vega` is \(\partial V / \partial \sigma\) (not “per 1% vol”). `theta` is time decay **per calendar year** (not per day). Position totals inherit these definitions; they are not re-normalized at persist time. Asset-or-nothing, cash-or-nothing, and equity forward pricers return **NPV only** in v1 (MTM greek columns are zero-filled).
 
 A fully SQLite-backed `IMarketDataProvider` (vol/rate surfaces from DB, no env shim) remains future work.
 

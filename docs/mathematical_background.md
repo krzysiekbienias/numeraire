@@ -27,7 +27,7 @@ $$S,\ K,\ r,\ q,\ \sigma,\ \tau,\ \Phi(\cdot),\ \phi(\cdot),\ d_1,\ d_2,\ M,\ E_
 | see above | Dividend yield (continuous) | `market.DividendYield()`, `NUMERAIRE_DEV_DIV_YIELD` |
 | see above | Implied vol (absolute, not %) | `market.ImpliedVolatility()`, `NUMERAIRE_DEV_VOL` |
 | see above | Time to expiry (Act/365 year fraction) | `Act365FixedYearFraction(ValuationDate, ExpiryDate)` |
-| see above | Standard normal CDF / PDF | `NormCdf`, `NormPdf` in [`analytic_black_scholes_equity_pricer.cpp`](../src/pricers/analytic_black_scholes_equity_pricer.cpp) |
+| see above | Standard normal CDF / PDF | `NormCdf`, `NormPdf` in [`black_scholes_vanilla.cpp`](../src/quant/black_scholes_vanilla.cpp) (private helpers; not part of the public API) |
 
 Position multiplier (same as [`LegPvTotal`](../include/numeraire/database/leg_pv.hpp)):
 
@@ -39,7 +39,7 @@ Subscripts \(d_1\), \(d_2\) are the usual Black–Scholes auxiliary variables, n
 
 ## Black–Scholes–Merton (European vanilla on equity)
 
-**Scope in repo:** [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) — European calls and puts; flat \(r\), \(q\), \(\sigma\) over \(\tau\); no American exercise. Invoked via [`AnalyticCompositePricer`](../include/numeraire/pricers/analytic_composite_pricer.hpp) for vanilla legs (same factory entry as binaries below).
+**Scope in repo:** closed forms live in [`quant/black_scholes_vanilla`](../include/numeraire/quant/black_scholes_vanilla.hpp) (`EuropeanVanillaPrice`, `EuropeanVanillaAllGreeks`, …). [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) is the booked-leg adapter (resolves `IMarketData`, enforces European exercise, packs `PricingResult`). Flat \(r\), \(q\), \(\sigma\) over \(\tau\); no American exercise. Invoked via [`AnalyticCompositePricer`](../include/numeraire/pricers/analytic_composite_pricer.hpp) for vanilla legs (same factory entry as binaries below). The same `quant` formulas feed the IV solver used by the vol-surface builder — calibration and official MTM share one implementation.
 
 ### Auxiliary terms
 
@@ -90,7 +90,7 @@ Pre-checks reject impossible or unstable points before solve (invalid inputs, be
 
 ## Greeks (vanilla only; same conventions as persisted MTM)
 
-**Scope:** [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp) for European vanilla only. Asset-or-nothing, cash-or-nothing, and equity forward pricers return **NPV only** in v1 (MTM greek columns are zero-filled).
+**Scope:** [`quant::EuropeanVanillaAllGreeks`](../include/numeraire/quant/black_scholes_vanilla.hpp) for European vanilla only (pricer maps the POD onto `core::PricingGreeks`). Asset-or-nothing, cash-or-nothing, and equity forward paths return **NPV only** in v1 (MTM greek columns are zero-filled).
 
 Sensitivities are w.r.t. **absolute** \(\sigma\) and **calendar** time; `theta` is **per year** (not per day). Unit greeks are **per share**; position totals multiply by \(M\) — see [`architecture.md`](architecture.md) § *EOD MTM — unit vs position columns*.
 
@@ -134,7 +134,7 @@ PnL conventions (position-level): [`architecture.md`](architecture.md) § *EOD M
 
 ## Asset-or-nothing (European, equity)
 
-**Scope in repo:** [`EquityAssetOrNothingProduct`](../include/numeraire/products/equity_asset_or_nothing_product.hpp) priced by [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp). Pays **spot at expiry** \(S_T\) if the option finishes in the money (catalog family **AON**).
+**Scope in repo:** formula [`quant::AssetOrNothingPrice`](../include/numeraire/quant/black_scholes_vanilla.hpp); product [`EquityAssetOrNothingProduct`](../include/numeraire/products/equity_asset_or_nothing_product.hpp) priced via [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp). Pays **spot at expiry** \(S_T\) if the option finishes in the money (catalog family **AON**).
 
 Use the same \(d_1\) as vanilla Black–Scholes.
 
@@ -155,7 +155,7 @@ $$V_{\mathrm{AON,put}} = S\,e^{-q\tau}\,\Phi(-d_1)$$
 
 ## Cash-or-nothing (European, equity)
 
-**Scope in repo:** [`EquityCashOrNothingProduct`](../include/numeraire/products/equity_cash_or_nothing_product.hpp) priced by [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.cpp). Pays fixed cash **\(Q\)** per share if ITM (`structured_params.cash_payout_per_share` in JSON import; catalog family **BIN** / `binary_cash_or_nothing`).
+**Scope in repo:** formula [`quant::CashOrNothingPrice`](../include/numeraire/quant/black_scholes_vanilla.hpp); product [`EquityCashOrNothingProduct`](../include/numeraire/products/equity_cash_or_nothing_product.hpp) priced via [`AnalyticBlackScholesEquityPricer`](../include/numeraire/pricers/analytic_black_scholes_equity_pricer.hpp). Pays fixed cash **\(Q\)** per share if ITM (`structured_params.cash_payout_per_share` in JSON import; catalog family **BIN** / `binary_cash_or_nothing`).
 
 Use the same \(d_1\), \(d_2\) as vanilla.
 
