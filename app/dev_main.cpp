@@ -44,6 +44,7 @@
 #include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
+#include <numeraire/products/equity_spot_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/config.hpp>
@@ -394,7 +395,14 @@ struct PricingArgvScan {
         const std::string& underlying = row.equity.underlying_id;
         const double spot_used = mkt.Spot(underlying);
 
-        const double years_to_maturity = Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate());
+        const bool is_spot =
+                dynamic_cast<const numeraire::products::EquitySpotProduct*>(product.get()) != nullptr;
+        const bool is_forward =
+                dynamic_cast<const numeraire::products::EquityForwardProduct*>(product.get()) != nullptr;
+        // Spot has no maturity; keep the column at 0 rather than a negative τ from
+        // ExpiryDate() == TradeDate().
+        const double years_to_maturity =
+                is_spot ? 0.0 : Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate());
 
         TradeLegMtmEodRow mtm{};
         mtm.as_of = mq.as_of_iso;
@@ -402,14 +410,13 @@ struct PricingArgvScan {
         mtm.leg_id = row.leg.leg_id;
         mtm.batch_run_id = batch_run_id;
         mtm.underlying_spot = spot_used;
-        mtm.risk_free_rate = mkt.RiskFreeRateForTenor(years_to_maturity);
+        mtm.risk_free_rate = mkt.RiskFreeRateForTenor(years_to_maturity > 0.0 ? years_to_maturity : 0.0);
         mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
-        // A linear payoff never queries the surface, so storing a vol against it would
-        // claim an input the price never saw. Zero is the column's existing "not
+        // Linear / spot payoffs never query the surface, so storing a vol against them
+        // would claim an input the price never saw. Zero is the column's existing "not
         // applicable" marker (it already covers expired legs). The surface itself stays
         // ingested for the underlier — options written on it still need it.
-        const bool payoff_uses_volatility =
-                dynamic_cast<const numeraire::products::EquityForwardProduct*>(product.get()) == nullptr;
+        const bool payoff_uses_volatility = !is_spot && !is_forward;
         const double strike = product->Strike();
         if (payoff_uses_volatility && years_to_maturity > 0.0 && strike > 0.0) {
             mtm.implied_vol_used =

@@ -3,12 +3,14 @@
 #include <numeraire/core/ipricer.hpp>
 #include <numeraire/pricers/analytic_black_scholes_equity_pricer.hpp>
 #include <numeraire/pricers/analytic_forward_pricer.hpp>
+#include <numeraire/pricers/analytic_spot_pricer.hpp>
 
 namespace numeraire::pricers {
 
 /// Routes `IProduct` instances to specialized analytic pricers. Default analytic
 /// engine returned by `PricerFactory` for `dev_main` booking / MTM.
 /// — equity options (vanilla, binaries) → `AnalyticBlackScholesEquityPricer`
+/// — equity / index spot → `AnalyticSpotPricer`
 /// — equity forwards → `AnalyticForwardPricer`
 class AnalyticCompositePricer final : public core::IPricer {
    public:
@@ -19,6 +21,7 @@ class AnalyticCompositePricer final : public core::IPricer {
 
    private:
     AnalyticBlackScholesEquityPricer equity_options_{};
+    AnalyticSpotPricer spots_{};
     AnalyticForwardPricer forwards_{};
 };
 

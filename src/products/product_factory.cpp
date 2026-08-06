@@ -4,6 +4,7 @@
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
+#include <numeraire/products/equity_spot_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -23,6 +24,8 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     kAssetOrNothing,
     kCashOrNothing,
     kEquityForward,
+    kEquitySpot,
+    kIndexSpot,
 };
 
 [[nodiscard]] std::string NormalizeInstrumentTypeKey(std::string t) {
@@ -62,6 +65,12 @@ enum class EquityCatalogInstrumentKind : std::uint8_t {
     }
     if (key == "equityforward" || key == "forward") {
         return EquityCatalogInstrumentKind::kEquityForward;
+    }
+    if (key == "equityspot" || key == "spot" || key == "equityshare" || key == "cashequity") {
+        return EquityCatalogInstrumentKind::kEquitySpot;
+    }
+    if (key == "indexspot" || key == "spotindex") {
+        return EquityCatalogInstrumentKind::kIndexSpot;
     }
     std::ostringstream oss;
     oss << "unsupported instrument_type: \"" << key << "\"";
@@ -139,6 +148,18 @@ void EnsureEquityKind(const std::string& asset_kind) {
     }
 }
 
+void EnsureSpotAssetKind(const std::string& asset_kind, const EquityCatalogInstrumentKind kind) {
+    const std::string k = numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(asset_kind));
+    if (kind == EquityCatalogInstrumentKind::kEquitySpot && k == "equity") {
+        return;
+    }
+    if (kind == EquityCatalogInstrumentKind::kIndexSpot && k == "index") {
+        return;
+    }
+    throw numeraire::ValidationError(
+            "ProductFactory: equity_spot requires asset_kind EQUITY; index_spot requires INDEX");
+}
+
 [[nodiscard]] double ParseCashPayoutPerShare(const std::string& attributes_json) {
     const std::string trimmed = numeraire::utils::TrimCopy(attributes_json);
     if (trimmed.empty() || trimmed == "{}") {
@@ -176,9 +197,20 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
         const database::ProductEquityDto& equity,
         const database::TradeHeaderDto* trade_header) {
     EnsureMatchingProductIds(product.product_id, equity.product_id);
-    EnsureEquityKind(equity.asset_kind);
     const EquityCatalogInstrumentKind kind =
             ResolveEquityInstrumentKind(product.catalog_instrument_type, product.attributes_json);
+
+    if (kind == EquityCatalogInstrumentKind::kEquitySpot ||
+        kind == EquityCatalogInstrumentKind::kIndexSpot) {
+        EnsureSpotAssetKind(equity.asset_kind, kind);
+        if (trade_header == nullptr || numeraire::utils::TrimCopy(trade_header->trade_date).empty()) {
+            throw ValidationError("spot catalog product requires trades.trade_date");
+        }
+        const schedule::Date trade_date = schedule::ParseIsoDate(trade_header->trade_date);
+        return std::make_unique<EquitySpotProduct>(equity.underlying_id, trade_date);
+    }
+
+    EnsureEquityKind(equity.asset_kind);
     const ExerciseStyle exercise = ResolveCatalogExerciseStyle(product.catalog_exercise_style);
 
     if (!equity.expiry_date.has_value() || numeraire::utils::TrimCopy(*equity.expiry_date).empty()) {
@@ -238,6 +270,9 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
             }
             break;
         }
+        case EquityCatalogInstrumentKind::kEquitySpot:
+        case EquityCatalogInstrumentKind::kIndexSpot:
+            break;
     }
     throw ValidationError("internal: unhandled equity instrument kind");
 }

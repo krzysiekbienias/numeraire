@@ -2,6 +2,7 @@ add_library(numeraire_products STATIC
         equity_asset_or_nothing_product.cpp
         equity_cash_or_nothing_product.cpp
         equity_forward_product.cpp
+        equity_spot_product.cpp
         product_factory.cpp
         vanilla_equity_option_product.cpp
 )

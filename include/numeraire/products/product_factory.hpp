@@ -13,7 +13,8 @@ namespace numeraire::products {
 /// before. Omit / vanilla ⇒ `VanillaEquityOptionProduct`; AoN synonyms ⇒
 /// `EquityAssetOrNothingProduct`; CoN / digital ⇒ `EquityCashOrNothingProduct`
 /// (`structured_params.cash_payout_per_share` required); `equity_forward` ⇒
-/// `EquityForwardProduct`. `catalog_exercise_style` defaults to european.
+/// `EquityForwardProduct`; `equity_spot` / `index_spot` ⇒ `EquitySpotProduct`
+/// (`asset_kind` EQUITY / INDEX). `catalog_exercise_style` defaults to european.
 class ProductFactory {
    public:
     [[nodiscard]] static std::unique_ptr<core::IProduct> MakeFromEquityCatalog(

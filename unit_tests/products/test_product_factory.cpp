@@ -6,6 +6,7 @@
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
+#include <numeraire/products/equity_spot_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
 #include <numeraire/utils/exception.hpp>
@@ -277,6 +278,102 @@ TEST(ProductFactoryTest, ExpiryBeforeTradeDateThrows) {
 
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &header)),
+                 numeraire::ValidationError);
+}
+
+TEST(ProductFactoryTest, EquitySpotCatalogBuildsDedicatedProductType) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "SPOT_EQS_AAPL";
+    product.catalog_instrument_type = "equity_spot";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "SPOT_EQS_AAPL";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+
+    numeraire::database::TradeHeaderDto header{};
+    header.trade_id = "TRD_SPOT_EQ";
+    header.trade_date = "2026-05-11";
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &header);
+
+    ASSERT_NE(instrument, nullptr);
+    const auto* spot = dynamic_cast<numeraire::products::EquitySpotProduct*>(instrument.get());
+    ASSERT_NE(spot, nullptr);
+    EXPECT_EQ(spot->UnderlyingId(), "AAPL");
+    EXPECT_EQ(spot->TradeDate().year, 2026);
+    EXPECT_EQ(spot->TradeDate().month, 5);
+    EXPECT_EQ(spot->TradeDate().day, 11);
+    EXPECT_EQ(spot->ExpiryDate().year, spot->TradeDate().year);
+    EXPECT_EQ(spot->ExpiryDate().month, spot->TradeDate().month);
+    EXPECT_EQ(spot->ExpiryDate().day, spot->TradeDate().day);
+}
+
+TEST(ProductFactoryTest, IndexSpotCatalogBuildsSameProductType) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "SPOT_IXS_NDX";
+    product.catalog_instrument_type = "index_spot";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "SPOT_IXS_NDX";
+    equity.asset_kind = "INDEX";
+    equity.underlying_id = "NDX";
+
+    numeraire::database::TradeHeaderDto header{};
+    header.trade_id = "TRD_SPOT_IX";
+    header.trade_date = "2026-06-01";
+
+    const auto instrument =
+            numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, &header);
+
+    ASSERT_NE(instrument, nullptr);
+    EXPECT_NE(dynamic_cast<numeraire::products::EquitySpotProduct*>(instrument.get()), nullptr);
+    EXPECT_EQ(instrument->UnderlyingId(), "NDX");
+}
+
+TEST(ProductFactoryTest, EquitySpotRequiresEquityAssetKind) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "SPOT_EQS_BAD";
+    product.catalog_instrument_type = "equity_spot";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "SPOT_EQS_BAD";
+    equity.asset_kind = "INDEX";
+    equity.underlying_id = "NDX";
+
+    EXPECT_THROW(static_cast<void>(
+                         numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
+                 numeraire::ValidationError);
+}
+
+TEST(ProductFactoryTest, IndexSpotRequiresIndexAssetKind) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "SPOT_IXS_BAD";
+    product.catalog_instrument_type = "index_spot";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "SPOT_IXS_BAD";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+
+    EXPECT_THROW(static_cast<void>(
+                         numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
+                 numeraire::ValidationError);
+}
+
+TEST(ProductFactoryTest, SpotRequiresTradeDate) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "SPOT_EQS_AAPL";
+    product.catalog_instrument_type = "equity_spot";
+
+    numeraire::database::ProductEquityDto equity{};
+    equity.product_id = "SPOT_EQS_AAPL";
+    equity.asset_kind = "EQUITY";
+    equity.underlying_id = "AAPL";
+
+    EXPECT_THROW(static_cast<void>(
+                         numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
                  numeraire::ValidationError);
 }
 
