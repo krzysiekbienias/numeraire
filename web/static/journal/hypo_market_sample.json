@@ -1,0 +1,15 @@
+{
+  "_comment": "Hypo portfolio market scenario — only market path (1..10 steps). t1 starts at τ = 1 year. Shorter paths are fine. Trade legs stay in the UI.",
+  "steps": [
+    {"t": "t1", "spot": 100.0, "vol": 0.20, "rate": 0.04, "div": 0.0, "tau": 1.0},
+    {"t": "t2", "spot": 101.5, "vol": 0.21, "rate": 0.04, "div": 0.0, "tau": 0.9},
+    {"t": "t3", "spot": 99.0, "vol": 0.22, "rate": 0.04, "div": 0.0, "tau": 0.8},
+    {"t": "t4", "spot": 102.0, "vol": 0.20, "rate": 0.04, "div": 0.0, "tau": 0.7},
+    {"t": "t5", "spot": 103.5, "vol": 0.19, "rate": 0.04, "div": 0.0, "tau": 0.6},
+    {"t": "t6", "spot": 102.8, "vol": 0.195, "rate": 0.04, "div": 0.0, "tau": 0.5},
+    {"t": "t7", "spot": 104.0, "vol": 0.18, "rate": 0.04, "div": 0.0, "tau": 0.4},
+    {"t": "t8", "spot": 105.2, "vol": 0.185, "rate": 0.04, "div": 0.0, "tau": 0.3},
+    {"t": "t9", "spot": 104.5, "vol": 0.19, "rate": 0.04, "div": 0.0, "tau": 0.2},
+    {"t": "t10", "spot": 106.0, "vol": 0.17, "rate": 0.04, "div": 0.0, "tau": 0.1}
+  ]
+}

@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import date as date_cls
 
@@ -5,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
 from django.db import OperationalError
 from django.db.models import Count, Max, Prefetch, Sum
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -40,6 +41,7 @@ from journal.exposure import (
     portfolio_exposure_profile,
     trade_exposure_profile,
 )
+from journal.hypo_portfolio import build_hypo_lab_context, parse_instruments, parse_market_scenario, price_hypo_run
 from journal.quant_lab import build_quant_lab
 from journal.simulation_lab import build_simulation_lab
 from journal.inventory import is_priceable, pricing_notes
@@ -1029,6 +1031,45 @@ class QuantLabView(TemplateView):
         context = super().get_context_data(**kwargs)
         context.update(build_quant_lab(self.request.GET))
         return context
+
+
+class HypoPortfolioView(TemplateView):
+    """Hypo portfolio sandbox — market path × toy legs; state in browser localStorage."""
+
+    template_name = 'journal/hypo_portfolio.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['hypo'] = build_hypo_lab_context()
+        return context
+
+
+class HypoPortfolioPriceView(View):
+    """POST JSON → price hypo run (no DB writes)."""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            payload = json.loads(request.body.decode('utf-8') or '{}')
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return JsonResponse({'ok': False, 'error': f'invalid JSON body: {exc}'}, status=400)
+
+        try:
+            market_raw = payload.get('market')
+            if market_raw is None:
+                market_raw = payload.get('steps')
+            market = parse_market_scenario(market_raw if isinstance(market_raw, list) else payload)
+            instruments = parse_instruments(payload.get('instruments'))
+            result = price_hypo_run(
+                run_id=str(payload.get('run_id') or 'HYPO_PORTFOLIO_1'),
+                market_steps=market,
+                instruments=instruments,
+            )
+        except ValueError as exc:
+            return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+        except Exception as exc:  # noqa: BLE001 — surface to lab UI
+            return JsonResponse({'ok': False, 'error': f'pricing error: {exc}'}, status=500)
+
+        return JsonResponse(result)
 
 
 class SimulationLabView(TemplateView):

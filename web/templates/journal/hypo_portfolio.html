@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Hypo portfolio · Quant Lab{% endblock %}
+{% block page_title %}Hypo portfolio{% endblock %}
+{% block page_subtitle %}
+<p class="muted">
+  <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+  · browser <code>localStorage</code>
+  · C++ pricers · qty per leg
+</p>
+{% endblock %}
+
+{% block content %}
+{{ hypo|json_script:"hypo-lab-boot" }}
+{% csrf_token %}
+
+<div class="nj-hypo" id="hypo-root"
+  data-price-url="{% url 'journal:hypo_portfolio_price' %}"
+  data-sample-url="{% static 'journal/hypo_market_sample.json' %}">
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-body">
+      <div class="nj-hypo-toolbar">
+        <label class="nj-hypo-run">
+          <span>Run id</span>
+          <input class="form-control form-control-sm" type="text" id="hypo-run-id"
+            value="HYPO_PORTFOLIO_1" maxlength="64" autocomplete="off">
+        </label>
+        <div class="nj-hypo-actions">
+          <button type="button" class="btn btn-sm btn-primary" id="hypo-price">Price</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="hypo-next-step">Next step</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="hypo-load-sample">Download sample</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="hypo-toggle-scenario">Load scenario</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="hypo-delete-run">Delete run</button>
+        </div>
+      </div>
+      <p class="small text-secondary mb-0 mt-2">
+        Start at <strong>t1</strong> · Next step up to <strong>t{{ hypo.max_steps }}</strong>
+        · up to {{ hypo.max_instruments }} legs (PVE / PVA / EQS / EQF)
+        · hedge with qty + <em>from</em> step. Results stay in this browser.
+      </p>
+    </div>
+  </div>
+
+  <div class="nj-panel mb-2 d-none" id="hypo-scenario-panel">
+    <div class="nj-panel-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="small">Market scenario JSON</strong>
+        <button type="button" class="btn btn-sm btn-primary" id="hypo-apply-scenario">Apply</button>
+      </div>
+      <textarea class="form-control form-control-sm font-monospace" id="hypo-scenario-text" rows="10"
+        spellcheck="false"></textarea>
+      <p class="small text-secondary mb-0 mt-2">Market only (1…{{ hypo.max_steps }} steps) — does not change trade legs.</p>
+      <div class="alert alert-warning py-2 small mt-2 d-none mb-0" id="hypo-scenario-error"></div>
+    </div>
+  </div>
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="small">Market path</strong>
+        <span class="small text-secondary">You are the market</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm nj-hypo-table mb-0" id="hypo-market-table">
+          <thead>
+            <tr>
+              <th>t</th>
+              <th>S</th>
+              <th>σ</th>
+              <th>r</th>
+              <th>q</th>
+              <th>τ (y)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="small">Instruments <span class="text-secondary">(max {{ hypo.max_instruments }})</span></strong>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="hypo-add-leg">+ Add</button>
+      </div>
+      <div id="hypo-legs" class="nj-hypo-legs"></div>
+    </div>
+  </div>
+
+  <div class="alert alert-danger py-2 small d-none" id="hypo-error"></div>
+
+  <div class="nj-panel mb-2 d-none" id="hypo-results-panel">
+    <div class="nj-panel-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="small">Results</strong>
+        <span class="small text-secondary" id="hypo-results-meta"></span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm nj-hypo-table mb-0" id="hypo-results-table">
+          <thead>
+            <tr>
+              <th>t</th>
+              <th>Leg</th>
+              <th>NPV</th>
+              <th>ΔNPV</th>
+              <th>Δ</th>
+              <th>Γ</th>
+              <th>ν</th>
+              <th>Θ/d</th>
+              <th>ρ</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'journal/hypo_portfolio.js' %}?v=3"></script>
+{% endblock %}

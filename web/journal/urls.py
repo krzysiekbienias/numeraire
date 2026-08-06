@@ -30,6 +30,8 @@ urlpatterns = [
     path('inventory/', views.InventoryView.as_view(), name='inventory'),
     path('lab/', views.QuantLabHubView.as_view(), name='quant_lab'),
     path('lab/pricing/', views.QuantLabView.as_view(), name='quant_lab_pricing'),
+    path('lab/hypo/', views.HypoPortfolioView.as_view(), name='hypo_portfolio'),
+    path('lab/hypo/price/', views.HypoPortfolioPriceView.as_view(), name='hypo_portfolio_price'),
     path('lab/simulation/', views.SimulationLabView.as_view(), name='simulation_lab'),
     path(
         'simulation/',

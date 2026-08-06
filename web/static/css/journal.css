@@ -1461,9 +1461,15 @@ body {
 /* Quant Lab hub — workspaces */
 .nj-lab-hub {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
   min-height: min(62vh, 28rem);
+}
+
+@media (min-width: 1400px) {
+  .nj-lab-hub {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 @media (max-width: 1100px) {
@@ -1581,6 +1587,95 @@ body {
 
 .nj-lab-hub-note code {
   font-size: 0.78em;
+}
+
+/* Hypo portfolio lab */
+.nj-hypo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.nj-hypo-run {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 14rem;
+  flex: 1 1 14rem;
+}
+
+.nj-hypo-run span,
+.nj-hypo-leg-fields label > span {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.nj-hypo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.nj-hypo-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+
+.nj-hypo-table td {
+  vertical-align: middle;
+}
+
+.nj-hypo-table input.form-control-sm {
+  min-width: 5.5rem;
+}
+
+.nj-hypo-legs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.nj-hypo-leg {
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 85%, transparent);
+  border-radius: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--bs-body-bg) 92%, var(--bs-secondary-bg));
+}
+
+.nj-hypo-leg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.nj-hypo-leg-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+}
+
+.nj-hypo-leg-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 6.5rem;
+}
+
+.nj-hypo-port-row td {
+  border-top: 1px solid color-mix(in srgb, var(--nj-accent) 35%, var(--bs-border-color));
+  background: color-mix(in srgb, var(--nj-accent) 8%, transparent);
+}
+
+.nj-hypo-inactive td {
+  opacity: 0.45;
 }
 
 .nj-payoff-value-split {
