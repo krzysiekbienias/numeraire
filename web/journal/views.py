@@ -314,7 +314,7 @@ class TradeNewView(TemplateView):
         if spec is not None:
             form = NewTradeForm(
                 spec,
-                underlier_choices=underlier_choices(),
+                underlier_choices=underlier_choices(spec.underlier_asset_class),
                 initial={'trade_date': date_cls.today()},
             )
         return self.render_to_response(self._context(spec, form))
@@ -325,7 +325,11 @@ class TradeNewView(TemplateView):
             messages.error(request, 'Pick an instrument type before booking.')
             return redirect('journal:trade_new')
 
-        form = NewTradeForm(spec, request.POST, underlier_choices=underlier_choices())
+        form = NewTradeForm(
+            spec,
+            request.POST,
+            underlier_choices=underlier_choices(spec.underlier_asset_class),
+        )
         if not form.is_valid():
             return self.render_to_response(self._context(spec, form))
 

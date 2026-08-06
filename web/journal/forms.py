@@ -95,12 +95,17 @@ class NewTradeForm(forms.Form):
         self.product_id: str | None = None
 
         self.fields['underlying_id'].choices = underlier_choices or []
-        self.fields['strike'].label = spec.strike_label
-        self.fields['strike'].help_text = spec.strike_help
+        if spec.has_strike:
+            self.fields['strike'].label = spec.strike_label
+            self.fields['strike'].help_text = spec.strike_help
         self.fields['contract_size'].help_text = spec.contract_size_help
 
         if not spec.has_option_type:
             del self.fields['option_type']
+        if not spec.has_strike:
+            del self.fields['strike']
+        if not spec.has_expiry:
+            del self.fields['expiry_date']
 
         self.fields['contract_size'].initial = spec.default_contract_size
         self.fields['settlement'].initial = spec.default_settlement
@@ -146,7 +151,12 @@ class NewTradeForm(forms.Form):
         trade_date = cleaned.get('trade_date')
         expiry_date = cleaned.get('expiry_date')
 
-        if trade_date and expiry_date and expiry_date < trade_date:
+        if (
+            self.spec.has_expiry
+            and trade_date
+            and expiry_date
+            and expiry_date < trade_date
+        ):
             self.add_error(
                 'expiry_date',
                 f'Expiry {expiry_date:%Y-%m-%d} is before the trade date '
@@ -154,15 +164,19 @@ class NewTradeForm(forms.Form):
             )
             return cleaned
 
-        required = ('underlying_id', 'strike', 'expiry_date', 'settlement', 'contract_size')
+        required = ['underlying_id', 'settlement', 'contract_size']
+        if self.spec.has_strike:
+            required.append('strike')
+        if self.spec.has_expiry:
+            required.append('expiry_date')
         if any(cleaned.get(name) is None for name in required):
             return cleaned
 
         self.product_id = build_product_id(
             self.spec,
             underlying_id=cleaned['underlying_id'],
-            expiry_date=cleaned['expiry_date'],
-            strike=cleaned['strike'],
+            expiry_date=cleaned.get('expiry_date'),
+            strike=cleaned.get('strike'),
             option_type=cleaned.get('option_type'),
         )
         conflicts = product_conflicts(
@@ -170,11 +184,11 @@ class NewTradeForm(forms.Form):
             spec=self.spec,
             terms={
                 'underlying_id': cleaned['underlying_id'],
-                'expiry_date': cleaned['expiry_date'],
+                'expiry_date': cleaned.get('expiry_date'),
                 'settlement': cleaned['settlement'],
                 'currency': cleaned.get('currency', 'USD'),
                 'contract_size': cleaned['contract_size'],
-                'strike': cleaned['strike'],
+                'strike': cleaned.get('strike'),
                 'option_type': cleaned.get('option_type'),
             },
         )

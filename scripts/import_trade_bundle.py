@@ -104,6 +104,13 @@ def _is_equity_forward_instrument(raw: Any) -> bool:
     return key in ("equityforward", "forward")
 
 
+def _is_spot_instrument(raw: Any) -> bool:
+    if raw is None:
+        return False
+    key = _normalize_instrument_type_key(str(raw))
+    return key in ("equityspot", "spot", "equityshare", "cashequity", "indexspot", "spotindex")
+
+
 def _structured_params_to_text(raw: Any) -> str:
     if raw is None:
         return "{}"
@@ -353,9 +360,11 @@ def _parse_settlement(raw: Any, label: str) -> str:
     return settlement
 
 
-def _parse_strike(raw: Any) -> float:
+def _parse_strike(raw: Any, *, required: bool) -> float | None:
     if _is_blank(raw):
-        _die('equity.strike: required number (see _strike_comment in bundle template)')
+        if required:
+            _die('equity.strike: required number (see _strike_comment in bundle template)')
+        return None
     try:
         strike = float(raw)
     except (TypeError, ValueError):
@@ -406,15 +415,34 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
     exercise_style = equity.get("exercise_style", "european")
     structured_params = _structured_params_to_text(equity.get("structured_params"))
 
-    strike = _parse_strike(equity.get("strike", None))
+    is_spot = _is_spot_instrument(instrument_type)
+    is_forward = _is_equity_forward_instrument(instrument_type)
+
+    strike = _parse_strike(equity.get("strike", None), required=not is_spot)
 
     option_type = _normalize_option_type(equity.get("option_type", None))
-    if option_type is None and not _is_equity_forward_instrument(instrument_type):
-        _die('equity.option_type: required — "call" or "put" (null allowed for equity_forward only)')
+    if option_type is None and not is_forward and not is_spot:
+        _die(
+            'equity.option_type: required — "call" or "put" '
+            "(null allowed for equity_forward / equity_spot / index_spot only)"
+        )
 
-    expiry_date = _require_non_blank_str(product, "expiry_date", "product")
     trade_date = _require_non_blank_str(trade, "trade_date", "trade")
-    _require_expiry_on_or_after_trade_date(expiry_date, trade_date, pid)
+    if is_spot:
+        # Spot has no maturity; allow blank / null expiry in the catalog row.
+        expiry_raw = product.get("expiry_date", None)
+        expiry_date = None if _is_blank(expiry_raw) else str(expiry_raw).strip()
+    else:
+        expiry_date = _require_non_blank_str(product, "expiry_date", "product")
+        _require_expiry_on_or_after_trade_date(expiry_date, trade_date, pid)
+
+    asset_kind = str(product["asset_kind"]).strip().upper()
+    if is_spot:
+        itype_key = _normalize_instrument_type_key(str(instrument_type))
+        if itype_key in ("indexspot", "spotindex") and asset_kind != "INDEX":
+            _die("product.asset_kind: index_spot requires INDEX")
+        if itype_key in ("equityspot", "spot", "equityshare", "cashequity") and asset_kind != "EQUITY":
+            _die("product.asset_kind: equity_spot requires EQUITY")
 
     currency = str(product.get("currency", "USD"))
     contract_size_raw = product.get("contract_size", 100.0)
@@ -435,7 +463,7 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
         """,
         (
             pid,
-            str(product["asset_kind"]),
+            asset_kind,
             str(product["underlying_id"]),
             expiry_date,
             settlement,

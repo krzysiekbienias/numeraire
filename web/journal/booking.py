@@ -6,8 +6,8 @@ and shells out to that script — it stays the only code that INSERTs into
 `products` / `trades` / `trade_legs`. New trades land as `PENDING`; the C++
 `dev_main --price-booking` fills `execution_price` and promotes them to `LIVE`.
 
-Only the instrument types wired here can be booked (PVE, EQF); everything else in
-`catalog_instrument_type` stays read-only inventory.
+Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS); everything
+else in `catalog_instrument_type` stays read-only inventory.
 
 Deletion follows the same rule: `scripts/delete_trade.py` does the DELETE, the
 Journal only asks for it. The bundle stays in `trades/incoming/`, so a deleted trade
@@ -57,6 +57,9 @@ class BookableInstrument:
     product_prefix: str
     asset_kind: str
     has_option_type: bool
+    has_strike: bool
+    has_expiry: bool
+    underlier_asset_class: str  # filter universe_instrument.asset_class
     strike_label: str
     strike_help: str
     default_contract_size: float
@@ -72,6 +75,9 @@ PLAIN_VANILLA_EUROPEAN = BookableInstrument(
     product_prefix='OPT_PVE',
     asset_kind='EQUITY',
     has_option_type=True,
+    has_strike=True,
+    has_expiry=True,
+    underlier_asset_class='EQUITY',
     strike_label='Strike',
     strike_help='Option strike per share.',
     default_contract_size=100.0,
@@ -87,6 +93,9 @@ EQUITY_FORWARD = BookableInstrument(
     product_prefix='FWD_EQF',
     asset_kind='EQUITY',
     has_option_type=False,
+    has_strike=True,
+    has_expiry=True,
+    underlier_asset_class='EQUITY',
     strike_label='Forward price',
     strike_help='Agreed delivery price K per share (no call / put on a forward).',
     default_contract_size=1.0,
@@ -94,7 +103,43 @@ EQUITY_FORWARD = BookableInstrument(
     contract_size_help='OTC forward: 1 = quantity counts shares.',
 )
 
-BOOKABLE = (PLAIN_VANILLA_EUROPEAN, EQUITY_FORWARD)
+EQUITY_SPOT = BookableInstrument(
+    code='EQS',
+    label='EQS — Equity Spot (shares)',
+    instrument_type='equity_spot',
+    strategy_type='EQUITY_SPOT',
+    product_prefix='SPOT_EQS',
+    asset_kind='EQUITY',
+    has_option_type=False,
+    has_strike=False,
+    has_expiry=False,
+    underlier_asset_class='EQUITY',
+    strike_label='Strike',
+    strike_help='',
+    default_contract_size=1.0,
+    default_settlement='PHYSICAL',
+    contract_size_help='1 = quantity counts shares. Hedge ≈ option qty × contract_size × Δ.',
+)
+
+INDEX_SPOT = BookableInstrument(
+    code='IXS',
+    label='IXS — Index Spot',
+    instrument_type='index_spot',
+    strategy_type='INDEX_SPOT',
+    product_prefix='SPOT_IXS',
+    asset_kind='INDEX',
+    has_option_type=False,
+    has_strike=False,
+    has_expiry=False,
+    underlier_asset_class='INDEX',
+    strike_label='Strike',
+    strike_help='',
+    default_contract_size=1.0,
+    default_settlement='CASH',
+    contract_size_help='1 = quantity counts index units (hedge vs index options).',
+)
+
+BOOKABLE = (PLAIN_VANILLA_EUROPEAN, EQUITY_FORWARD, EQUITY_SPOT, INDEX_SPOT)
 
 
 def bookable_instruments() -> list[BookableInstrument]:
@@ -118,11 +163,13 @@ def _db_path() -> str:
     return str(settings.DATABASES['numeraire']['NAME'])
 
 
-def underlier_choices() -> list[tuple[str, str]]:
+def underlier_choices(asset_class: str | None = None) -> list[tuple[str, str]]:
     """Underliers whose EOD data the ingest actually covers, so pricing can resolve a spot."""
     rows = UniverseInstrument.objects.filter(is_active=1).exclude(
         ingest_equity_eod=0, ingest_index_eod=0
     )
+    if asset_class:
+        rows = rows.filter(asset_class=asset_class.strip().upper())
     choices = []
     for row in rows.order_by('asset_class', 'instrument_id'):
         name = (row.display_name or '').strip()
@@ -179,16 +226,17 @@ def build_product_id(
     spec: BookableInstrument,
     *,
     underlying_id: str,
-    expiry_date: date,
-    strike: float,
+    expiry_date: date | None,
+    strike: float | None,
     option_type: str | None,
 ) -> str:
     """Deterministic id following the conventions in `trades/incoming/*.sample.json`."""
     parts = [spec.product_prefix, underlying_id.strip().upper()]
     if spec.has_option_type:
         parts.append('C' if (option_type or '').lower() == 'call' else 'P')
-        parts.append(_fmt_id_number(strike))
-    parts.append(expiry_date.strftime('%Y%m%d'))
+        parts.append(_fmt_id_number(float(strike or 0.0)))
+    if spec.has_expiry and expiry_date is not None:
+        parts.append(expiry_date.strftime('%Y%m%d'))
     return '_'.join(parts)
 
 
@@ -211,7 +259,9 @@ def product_conflicts(product_id: str, *, spec: BookableInstrument, terms: dict)
             diffs.append(f'{label}: book has {existing!r}, form says {wanted!r}')
 
     compare('underlying_id', product.underlying_id, terms['underlying_id'])
-    compare('expiry_date', product.expiry_date, terms['expiry_date'])
+    compare('asset_kind', product.asset_kind, spec.asset_kind)
+    if spec.has_expiry:
+        compare('expiry_date', product.expiry_date, terms['expiry_date'])
     compare('settlement', product.settlement, terms['settlement'])
     compare('currency', product.currency, terms['currency'])
     if not math.isclose(
@@ -224,10 +274,11 @@ def product_conflicts(product_id: str, *, spec: BookableInstrument, terms: dict)
     equity = getattr(product, 'equity', None)
     if equity is not None:
         compare('instrument_type', equity.instrument_type, spec.instrument_type)
-        if equity.strike is not None and not math.isclose(
-            float(equity.strike), float(terms['strike']), rel_tol=1e-9, abs_tol=1e-9
-        ):
-            diffs.append(f'strike: book has {equity.strike!r}, form says {terms["strike"]!r}')
+        if spec.has_strike and equity.strike is not None and terms.get('strike') is not None:
+            if not math.isclose(
+                float(equity.strike), float(terms['strike']), rel_tol=1e-9, abs_tol=1e-9
+            ):
+                diffs.append(f'strike: book has {equity.strike!r}, form says {terms["strike"]!r}')
         if spec.has_option_type:
             compare('option_type', equity.option_type, terms['option_type'])
     return diffs
@@ -260,7 +311,11 @@ def build_bundle(
             'product_id': product_id,
             'asset_kind': spec.asset_kind,
             'underlying_id': cleaned['underlying_id'],
-            'expiry_date': cleaned['expiry_date'].isoformat(),
+            'expiry_date': (
+                cleaned['expiry_date'].isoformat()
+                if spec.has_expiry and cleaned.get('expiry_date') is not None
+                else None
+            ),
             'settlement': cleaned['settlement'],
             'currency': cleaned['currency'],
             'contract_size': cleaned['contract_size'],
@@ -270,7 +325,7 @@ def build_bundle(
         'equity': {
             'instrument_type': spec.instrument_type,
             'option_type': cleaned.get('option_type') if spec.has_option_type else None,
-            'strike': cleaned['strike'],
+            'strike': cleaned.get('strike') if spec.has_strike else None,
             'exercise_style': 'european',
             'structured_params': {},
         },
