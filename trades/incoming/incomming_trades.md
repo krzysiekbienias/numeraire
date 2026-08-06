@@ -76,6 +76,20 @@ All three use **`trade_date` = 2026-05-11**.
 python3 scripts/import_trade_bundle.py TRD_10009 TRD_10010 TRD_10011
 ```
 
+## Equity / index spot (catalog EQS / IXS)
+
+Cash underlier positions for **delta hedging** (same `portfolio_id` as the option).
+
+| Code | `instrument_type` | `asset_kind` | Product id | Sizing |
+|------|-------------------|--------------|------------|--------|
+| **EQS** | `equity_spot` | `EQUITY` | `SPOT_EQS_{UNDERLYING}` | `contract_size = 1`, `quantity` = shares |
+| **IXS** | `index_spot` | `INDEX` | `SPOT_IXS_{UNDERLYING}` | `contract_size = 1`, `quantity` = index units |
+
+- `option_type` / `strike` / `expiry_date`: **null** (no maturity).
+- Rebalances = **additional** spot trades (do not rewrite the first hedge leg).
+- Templates: [`trade_bundle_equity_spot.sample.json`](trade_bundle_equity_spot.sample.json), [`trade_bundle_index_spot.sample.json`](trade_bundle_index_spot.sample.json).
+- Spot resolves from `equity_daily_eod` or `index_daily_eod` (e.g. NDX → `I:NDX`) when `NUMERAIRE_DEV_SPOT_SOURCE=db`.
+
 ## Pipeline
 
 Import (always **`PENDING`** in `trades`, even if JSON says `LIVE`) → `dev_main --price-booking <trade_id>` → `LIVE` when all legs `execution_price > 0` → `dev_main --as-of …` MTM. See [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle*.

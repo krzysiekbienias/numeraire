@@ -483,9 +483,11 @@ flowchart TB
     PF --> COMP[AnalyticCompositePricer]
     COMP --> BS[AnalyticBlackScholesEquityPricer]
     COMP --> FWD[AnalyticForwardPricer]
+    COMP --> SPT[AnalyticSpotPricer]
     BS --> Q[quant black_scholes_vanilla]
     Q --> OPT[Vanilla + AON + CON formulas]
     FWD --> EQF[EquityForwardProduct]
+    SPT --> EQS[EquitySpotProduct]
     IV[ImpliedVolEuropeanVanilla] --> Q
 ```
 
@@ -495,14 +497,15 @@ flowchart TB
 | `EquityAssetOrNothingProduct` | same | yes | NPV only (v1) |
 | `EquityCashOrNothingProduct` | same | yes | NPV only (v1) |
 | `EquityForwardProduct` | `[AnalyticForwardPricer](../include/numeraire/pricers/analytic_forward_pricer.hpp)` | **no** | NPV only (v1) |
+| `EquitySpotProduct` (`equity_spot` / `index_spot`) | `[AnalyticSpotPricer](../include/numeraire/pricers/analytic_spot_pricer.hpp)` | **no** | NPV = spot; δ = 1 |
 
 **`quant` holds the formulas; pricers are adapters.** Closed-form Black–Scholes (vanilla price/greeks, asset-or-nothing, cash-or-nothing) lives in [`quant/black_scholes_vanilla`](../include/numeraire/quant/black_scholes_vanilla.hpp). The equity analytic pricer resolves market inputs, converts dates to \(\tau\), enforces European exercise, and packs `PricingResult` — it does not re-implement \(N(d_1)\). The same `quant` entry points feed [`ImpliedVolEuropeanVanilla`](../include/numeraire/quant/implied_vol_european.hpp) / the vol-surface builder, so calibration and official MTM cannot silently diverge. Boundary rules: `quant` stays a leaf (links `enums` only; returns PODs / status enums, never `core::` types); solvers and root-finders call `quant` with bare doubles and **never** go through `IPricer` (no booked product exists on the market-quote path). See [`mathematical_background.md`](mathematical_background.md).
 
-**Catalog routing** — `[ProductFactory`](../include/numeraire/products/product_factory.hpp) maps `products_equity.instrument_type` (e.g. `plain_vanilla_european_option`, `asset_or_nothing` / `AssetOrNothingOption`, `binary_cash_or_nothing` / `CashOrNothingOption`, `equity_forward`) to the concrete `IProduct` type. See [`trades/incoming/incomming_trades.md`](../trades/incoming/incomming_trades.md) for JSON import examples.
+**Catalog routing** — `[ProductFactory`](../include/numeraire/products/product_factory.hpp) maps `products_equity.instrument_type` (e.g. `plain_vanilla_european_option`, `asset_or_nothing` / `AssetOrNothingOption`, `binary_cash_or_nothing` / `CashOrNothingOption`, `equity_forward`, `equity_spot`, `index_spot`) to the concrete `IProduct` type. Spot catalog kinds share one C++ type (`EquitySpotProduct`); **EQS vs IXS** is distinguished by `instrument_type` + `asset_kind` (`EQUITY` / `INDEX`). See [`trades/incoming/incomming_trades.md`](../trades/incoming/incomming_trades.md) for JSON import examples.
 
-**MTM `pricing_engine` column** — Every leg in a batch run is persisted with `pricing_engine = analytic_black_scholes` ([`dev_main`](../app/dev_main.cpp) constant), including forwards priced via `AnalyticForwardPricer`. The stored `implied_vol_used` snapshot field is still populated from env for all legs even when the pricer ignores vol (forwards). A per-product engine id is future work.
+**MTM `pricing_engine` column** — Every leg in a batch run is persisted with `pricing_engine = analytic_black_scholes` ([`dev_main`](../app/dev_main.cpp) constant), including forwards/spot priced via dedicated pricers. The stored `implied_vol_used` snapshot field is still populated from env for all legs even when the pricer ignores vol (forwards, spot). A per-product engine id is future work.
 
-Unit tests: closed forms vs `QuantLib::BlackCalculator` (including digital payoffs) in [`test_black_scholes_vanilla.cpp`](../unit_tests/quant/test_black_scholes_vanilla.cpp); adapter + QuantLib + quant↔pricer cross-check in [`test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp); forwards in [`test_analytic_forward_pricer.cpp`](../unit_tests/pricers/test_analytic_forward_pricer.cpp); routing in [`test_analytic_composite_pricer.cpp`](../unit_tests/pricers/test_analytic_composite_pricer.cpp).
+Unit tests: closed forms vs `QuantLib::BlackCalculator` (including digital payoffs) in [`test_black_scholes_vanilla.cpp`](../unit_tests/quant/test_black_scholes_vanilla.cpp); adapter + QuantLib + quant↔pricer cross-check in [`test_analytic_black_scholes_equity_pricer.cpp`](../unit_tests/pricers/test_analytic_black_scholes_equity_pricer.cpp); forwards in [`test_analytic_forward_pricer.cpp`](../unit_tests/pricers/test_analytic_forward_pricer.cpp); spot in [`test_analytic_spot_pricer.cpp`](../unit_tests/pricers/test_analytic_spot_pricer.cpp); routing in [`test_analytic_composite_pricer.cpp`](../unit_tests/pricers/test_analytic_composite_pricer.cpp).
 
 ### Trade lifecycle: import → booking → MTM
 
