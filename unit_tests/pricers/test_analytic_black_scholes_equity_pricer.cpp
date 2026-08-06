@@ -10,12 +10,14 @@
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
+#include <numeraire/quant/black_scholes_vanilla.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <numeraire/utils/quantlib_bridge.hpp>
 #include <string>
 #include <unordered_map>
 
+#include <ql/instruments/payoffs.hpp>
 #include <ql/pricingengines/blackcalculator.hpp>
 
 namespace {
@@ -99,6 +101,8 @@ private:
             numeraire::utils::quantlib_bridge::ToQuantLib(kind), strike, forward, std_dev, discount);
 }
 
+/// Binaries are benchmarked against QuantLib's own digital payoffs rather than a local
+/// re-derivation, so the expectation is independent of the formula under test.
 [[nodiscard]] double BenchAssetOrNothingNpv(const numeraire::OptionType kind,
                                             const double spot,
                                             const double strike,
@@ -106,13 +110,11 @@ private:
                                             const double q,
                                             const double vol,
                                             const double tau) {
-    const double srt = vol * std::sqrt(tau);
-    const double d1 = (std::log(spot / strike) + ((r - q) + 0.5 * vol * vol) * tau) / srt;
-    const double eqt = std::exp(-q * tau);
-    if (kind == numeraire::OptionType::kCall) {
-        return spot * eqt * 0.5 * (1.0 + std::erf(d1 / std::sqrt(2.0)));
-    }
-    return spot * eqt * 0.5 * (1.0 + std::erf(-d1 / std::sqrt(2.0)));
+    const auto payoff = QuantLib::ext::make_shared<QuantLib::AssetOrNothingPayoff>(
+            numeraire::utils::quantlib_bridge::ToQuantLib(kind), strike);
+    return QuantLib::BlackCalculator(payoff, spot * std::exp((r - q) * tau), vol * std::sqrt(tau),
+                                     std::exp(-r * tau))
+            .value();
 }
 
 [[nodiscard]] double BenchCashOrNothingNpv(const numeraire::OptionType kind,
@@ -123,14 +125,11 @@ private:
                                            const double q,
                                            const double vol,
                                            const double tau) {
-    const double srt = vol * std::sqrt(tau);
-    const double d1 = (std::log(spot / strike) + ((r - q) + 0.5 * vol * vol) * tau) / srt;
-    const double d2 = d1 - srt;
-    const double discount = std::exp(-r * tau);
-    if (kind == numeraire::OptionType::kCall) {
-        return cash_payout * discount * 0.5 * (1.0 + std::erf(d2 / std::sqrt(2.0)));
-    }
-    return cash_payout * discount * 0.5 * (1.0 + std::erf(-d2 / std::sqrt(2.0)));
+    const auto payoff = QuantLib::ext::make_shared<QuantLib::CashOrNothingPayoff>(
+            numeraire::utils::quantlib_bridge::ToQuantLib(kind), strike, cash_payout);
+    return QuantLib::BlackCalculator(payoff, spot * std::exp((r - q) * tau), vol * std::sqrt(tau),
+                                     std::exp(-r * tau))
+            .value();
 }
 
 }  // namespace
@@ -470,4 +469,50 @@ TEST(AnalyticBlackScholesEquityPricerTest, WrongProductTypeThrows) {
 TEST(AnalyticBlackScholesEquityPricerTest, EngineKindIsAnalytic) {
     const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
     EXPECT_EQ(pricer.EngineKind(), numeraire::PricingEngineType::kAnalytic);
+}
+
+/// Safety net for the quant ↔ pricer split: the adapter must forward bit-for-bit to the
+/// closed forms that also feed the IV solver. Both sides are already pinned to QuantLib;
+/// this test pins them to each other so a future local re-introduction of formulas fails.
+TEST(AnalyticBlackScholesEquityPricerTest, VanillaPathAgreesWithQuantClosedForm) {
+    const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};
+    const numeraire::schedule::Date expiry{.year = 2026, .month = 1, .day = 1};
+    const double tau = numeraire::schedule::Act365FixedYearFraction(trade, expiry);
+
+    constexpr double kSpot = 100.0;
+    constexpr double kRate = 0.05;
+    constexpr double kDiv = 0.02;
+    const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
+
+    for (const numeraire::OptionType kind :
+         {numeraire::OptionType::kCall, numeraire::OptionType::kPut}) {
+        for (const double strike : {90.0, 100.0, 110.0}) {
+            for (const double vol : {0.15, 0.25, 0.40}) {
+                MapMarket m;
+                m.SetValuationDate(trade);
+                m.SetSpot("SPX", kSpot);
+                m.SetRate(kRate);
+                m.SetDivYield(kDiv);
+                m.SetVol(vol);
+
+                const numeraire::products::VanillaEquityOptionProduct opt(
+                        "SPX", kind, numeraire::ExerciseStyle::kEuropean, strike, trade, expiry);
+                const numeraire::core::PricingResult out = pricer.Price(opt, m);
+
+                const double expected_npv = numeraire::quant::EuropeanVanillaPrice(
+                        kind, kSpot, strike, kRate, kDiv, vol, tau);
+                ASSERT_TRUE(out.Npv().has_value()) << "strike=" << strike << " vol=" << vol;
+                EXPECT_NEAR(*out.Npv(), expected_npv, 1.0e-12) << "strike=" << strike << " vol=" << vol;
+
+                const auto expected_greeks = numeraire::quant::EuropeanVanillaAllGreeks(
+                        kind, kSpot, strike, kRate, kDiv, vol, tau);
+                ASSERT_TRUE(out.Greeks().has_value());
+                EXPECT_NEAR(*out.Greeks()->delta, expected_greeks.delta, 1.0e-12);
+                EXPECT_NEAR(*out.Greeks()->gamma, expected_greeks.gamma, 1.0e-12);
+                EXPECT_NEAR(*out.Greeks()->vega, expected_greeks.vega, 1.0e-12);
+                EXPECT_NEAR(*out.Greeks()->theta, expected_greeks.theta, 1.0e-12);
+                EXPECT_NEAR(*out.Greeks()->rho, expected_greeks.rho, 1.0e-12);
+            }
+        }
+    }
 }
