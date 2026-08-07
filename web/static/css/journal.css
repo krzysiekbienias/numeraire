@@ -1240,6 +1240,12 @@ body {
   max-width: 6.5rem;
 }
 
+.nj-quant-params .nj-tau-months {
+  color: #64748b;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
 .nj-quant-params input.form-control,
 .nj-quant-params select.form-select {
   min-width: 5.25rem;
@@ -1754,11 +1760,37 @@ body {
 .nj-quant-charts-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.35rem 1rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.45rem;
   font-size: 0.85rem;
+}
+
+.nj-greeks-shared-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 1.1rem;
+}
+
+.nj-greeks-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.nj-greeks-legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
 }
 
 .nj-quant-lab .nj-greeks-lab-body {

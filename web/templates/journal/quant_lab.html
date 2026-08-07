@@ -66,10 +66,16 @@
           {% else %}
           <label
             title="{% for sym, name, desc in legend %}{% if sym == f.sym %}{{ name }} — {{ desc }}{% endif %}{% endfor %}">
-            <span>{% if f.sym %}<span class="nj-sym">{{ f.sym }}</span>{% endif %}{{ f.label }}</span>
+            <span>
+              {% if f.sym %}<span class="nj-sym">{{ f.sym }}</span>{% endif %}{{ f.label }}
+              {% if f.name == 'tau' %}
+              <span class="nj-tau-months" id="quant-tau-months">{% if tau_months %}({{ tau_months }}){% endif %}</span>
+              {% endif %}
+            </span>
             <input class="form-control form-control-sm" type="number" step="{{ f.step|default:'any' }}"
               name="{{ f.name }}"
-              value="{% if f.name == 'tau' %}{{ tau }}{% elif f.name == 'spot' %}{{ params.spot }}{% elif f.name == 'strike' %}{{ params.strike }}{% elif f.name == 'vol' %}{{ params.vol }}{% elif f.name == 'rate' %}{{ params.rate }}{% elif f.name == 'div' %}{{ params.div }}{% elif f.name == 'cash_payout' %}{{ meta.cash_payout }}{% elif f.name == 'n_steps' %}{{ meta.n_steps }}{% endif %}">
+              {% if f.name == 'tau' %}id="quant-lab-tau"{% endif %}
+              value="{% if f.name == 'tau' %}{{ tau|floatformat:-4 }}{% elif f.name == 'spot' %}{{ params.spot|floatformat:-4 }}{% elif f.name == 'strike' %}{{ params.strike|floatformat:-4 }}{% elif f.name == 'vol' %}{{ params.vol|floatformat:-4 }}{% elif f.name == 'rate' %}{{ params.rate|floatformat:-4 }}{% elif f.name == 'div' %}{{ params.div|floatformat:-4 }}{% elif f.name == 'cash_payout' %}{{ meta.cash_payout|floatformat:-4 }}{% elif f.name == 'n_steps' %}{{ meta.n_steps }}{% endif %}">
           </label>
           {% endif %}
           {% endfor %}
@@ -335,9 +341,9 @@
         <div class="nj-panel-body nj-greeks-lab-body">
           <div class="nj-quant-charts-head">
             <strong>Greeks vs spot</strong>
+            <div class="nj-greeks-shared-legend" id="greeks-shared-legend" aria-label="Tenor legend"></div>
             <span class="small text-secondary">
-              5D · 1M · 2M
-              · {% if params.is_call %}call{% else %}put{% endif %}
+              {% if params.is_call %}call{% else %}put{% endif %}
               · K={{ params.strike|nj_num:2 }}
             </span>
           </div>
@@ -413,6 +419,28 @@
             }
             window.location = "{% url 'journal:quant_lab_pricing' %}?instrument=" + encodeURIComponent(code);
           });
+        }
+
+        const tauInput = document.getElementById('quant-lab-tau');
+        const tauHint = document.getElementById('quant-tau-months');
+        function updateTauMonthsHint() {
+          if (!tauInput || !tauHint) return;
+          const v = parseFloat(tauInput.value);
+          if (!Number.isFinite(v) || v < 0) {
+            tauHint.textContent = '';
+            return;
+          }
+          const months = v * 12;
+          const nearest = Math.round(months);
+          if (nearest >= 1 && Math.abs(months - nearest) <= 1e-4) {
+            tauHint.textContent = '(' + nearest + 'M)';
+          } else {
+            tauHint.textContent = '';
+          }
+        }
+        if (tauInput) {
+          tauInput.addEventListener('input', updateTauMonthsHint);
+          updateTauMonthsHint();
         }
       })();
     </script>
@@ -647,7 +675,7 @@
         const isCall = !!payload.is_call;
         const strike = Number(payload.strike);
         const refSpot = Number(payload.ref_spot);
-        const colors = ['#fbbf24', '#60a5fa', '#2dd4bf'];
+        const colors = ['#fbbf24', '#60a5fa', '#2dd4bf', '#c084fc'];
         if (!mats.length || !panels.length) return;
 
         const marks = [
@@ -672,6 +700,19 @@
           return { scale: true };
         };
 
+        const sharedLegend = document.getElementById('greeks-shared-legend');
+        if (sharedLegend) {
+          sharedLegend.innerHTML = mats.map((m, i) => {
+            const c = colors[i % colors.length];
+            return (
+              '<span class="nj-greeks-legend-item">' +
+              '<span class="nj-greeks-legend-swatch" style="background:' + c + '"></span>' +
+              m.label +
+              '</span>'
+            );
+          }).join('');
+        }
+
         const charts = [];
         panels.forEach((panel) => {
           const el = document.getElementById('greeks-chart-' + panel.key);
@@ -681,7 +722,7 @@
           chart.setOption({
             animationDuration: 200,
             backgroundColor: 'transparent',
-            grid: { left: 40, right: 10, top: 18, bottom: 28 },
+            grid: { left: 40, right: 10, top: 12, bottom: 28 },
             tooltip: {
               trigger: 'axis',
               axisPointer: { type: 'cross', label: { backgroundColor: '#1e293b' } },
@@ -689,13 +730,7 @@
                 ? '—'
                 : Number(v).toFixed(panel.key === 'gamma' ? 6 : 4)),
             },
-            legend: {
-              show: panel.key === 'delta',
-              top: 0,
-              right: 0,
-              data: mats.map((m) => m.label),
-              textStyle: { color: '#94a3b8', fontSize: 10 },
-            },
+            legend: { show: false },
             xAxis: {
               type: 'value',
               min: payload.x_min,

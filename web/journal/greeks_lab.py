@@ -10,14 +10,15 @@ from journal.black_scholes import black_scholes
 MATURITIES = (
     ('5D', 5),
     ('1M', 30),
-    ('2M', 60),
+    ('3M', 91),
+    ('6M', 182),
 )
 
 DAYS_PER_YEAR = 365.0
 # Spot grid: ±30% around strike (classic moneyness window).
 SPOT_RANGE_FRAC = 0.30
 
-# Chart panels: row1 Δ|Γ, row2 ν|Θ/day — same spot bump, three τ.
+# Chart panels: row1 Δ|Γ, row2 ν|Θ/day — same spot bump, four τ.
 PANELS = (
     {'key': 'delta', 'title': 'Delta', 'y_name': 'Δ'},
     {'key': 'gamma', 'title': 'Gamma', 'y_name': 'Γ'},

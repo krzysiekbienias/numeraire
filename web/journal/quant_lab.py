@@ -85,7 +85,8 @@ _FIELD_TAU = {
     'sym': 'τ',
     'label': 'Tenor (y)',
     'kind': 'number',
-    'step': '0.1',
+    # Free-form years (1Y, 6M=0.5, …). Fixed step rejects values like 1 after 30/365 defaults.
+    'step': 'any',
 }
 _FIELD_SIDE = {
     'name': 'side',
@@ -328,7 +329,7 @@ def defaults_from_instrument(code: str) -> dict:
         'side': 'call',
         'cash_payout': 1.0,
         'n_steps': _CRR_LAB_TREE_DEFAULT if exercise == 'american' else _CRR_DEFAULT_STEPS,
-        'tau': 30.0 / DAYS_PER_YEAR,
+        'tau': 1.0,
         'exercise': exercise if exercise != 'n/a' else 'european',
         'instrument_code': code_u,
         'instrument_title': _title_from_maps_to(maps),
@@ -348,6 +349,23 @@ def _parse_tau(get, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return max(v, 0.0)
+
+
+def tau_month_label(tau: float) -> str | None:
+    """If τ is (near) an integer number of months, return e.g. '12M'; else None."""
+    try:
+        t = float(tau)
+    except (TypeError, ValueError):
+        return None
+    if t < 0.0:
+        return None
+    months = t * 12.0
+    nearest = int(round(months))
+    if nearest < 1:
+        return None
+    if abs(months - nearest) <= 1e-4:
+        return f'{nearest}M'
+    return None
 
 
 def _parse_cash_payout(get, default: float = 1.0) -> float:
@@ -387,7 +405,7 @@ def resolve_lab_params(get) -> tuple[GreeksLabParams | None, float, dict]:
         }
 
     params = params_from_get(get, defaults=instrument_defaults)
-    tau = _parse_tau(get, float(instrument_defaults.get('tau', 30.0 / DAYS_PER_YEAR)))
+    tau = _parse_tau(get, float(instrument_defaults.get('tau', 1.0)))
     kind = str(instrument_defaults.get('param_kind') or 'unsupported')
     maps = str(instrument_defaults.get('maps_to') or '')
     product = str(instrument_defaults.get('lab_product') or _lab_product(code, maps, kind))
@@ -829,6 +847,7 @@ def build_quant_lab(get) -> dict:
         'params': params,
         'meta': meta,
         'tau': tau,
+        'tau_months': tau_month_label(tau),
         'quote': quote,
         'lab': charts,
         'greeks_chart': charts['chart'] if charts else None,
