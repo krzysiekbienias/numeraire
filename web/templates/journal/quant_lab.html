@@ -35,7 +35,7 @@
           <select class="form-select form-select-sm" id="quant-lab-instrument" aria-label="Instrument type">
             <option value="">— pick —</option>
             {% for c in choices %}
-            <option value="{{ c.code }}" {% if meta.instrument_code==c.code %}selected{% endif %}>
+            <option value="{{ c.code }}" {% if meta.instrument_code == c.code %}selected{% endif %}>
               {{ c.label }}
             </option>
             {% endfor %}
@@ -73,7 +73,8 @@
               {% endif %}
             </span>
             <input class="form-control form-control-sm" type="number" step="{{ f.step|default:'any' }}"
-              name="{{ f.name }}" {% if f.name=='tau' %}id="quant-lab-tau" {% endif %}
+              name="{{ f.name }}"
+              {% if f.name == 'tau' %}id="quant-lab-tau"{% endif %}
               value="{% if f.name == 'tau' %}{{ tau|floatformat:-4 }}{% elif f.name == 'spot' %}{{ params.spot|floatformat:-4 }}{% elif f.name == 'strike' %}{{ params.strike|floatformat:-4 }}{% elif f.name == 'vol' %}{{ params.vol|floatformat:-4 }}{% elif f.name == 'rate' %}{{ params.rate|floatformat:-4 }}{% elif f.name == 'div' %}{{ params.div|floatformat:-4 }}{% elif f.name == 'cash_payout' %}{{ meta.cash_payout|floatformat:-4 }}{% elif f.name == 'n_steps' %}{{ meta.n_steps }}{% endif %}">
           </label>
           {% endif %}
