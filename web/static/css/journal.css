@@ -1628,6 +1628,13 @@ body {
   white-space: nowrap;
 }
 
+/* Keep KaTeX symbols lowercase (σ, r, q, τ) — uppercase would turn them into Σ/R/Q/T. */
+.nj-hypo-table th .katex,
+.nj-panel table th .katex {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .nj-hypo-table td {
   vertical-align: middle;
 }
