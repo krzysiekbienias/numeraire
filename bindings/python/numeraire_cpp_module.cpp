@@ -14,6 +14,7 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
 #include <numeraire/pricers/binomial_black_scholes_equity_pricer.hpp>
+#include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
@@ -107,6 +108,9 @@ struct LabDates {
             out["rho"] = *g.rho;
         }
     }
+    if (result.Metadata().has_value() && result.Metadata()->diagnostics.has_value()) {
+        out["diagnostics"] = *result.Metadata()->diagnostics;
+    }
     return out;
 }
 
@@ -195,6 +199,95 @@ void RequireNonNegVol(const double vol) {
         }
     }
     return PriceWithAnalytic(product, market, dates, "c++_analytic_bs");
+}
+
+[[nodiscard]] py::dict PriceVanillaBinomial(const double spot,
+                                            const double strike,
+                                            const double vol,
+                                            const double rate,
+                                            const double div,
+                                            const double tau_years,
+                                            const bool is_call,
+                                            const std::string& exercise,
+                                            const std::size_t n_steps) {
+    RequirePositiveSpotStrike(spot, strike);
+    RequireNonNegVol(vol);
+
+    const std::string ex = [&] {
+        std::string s = exercise;
+        std::transform(
+                s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    }();
+
+    numeraire::ExerciseStyle style = numeraire::ExerciseStyle::kEuropean;
+    if (ex == "american") {
+        style = numeraire::ExerciseStyle::kAmerican;
+    } else if (ex != "european" && !ex.empty()) {
+        throw py::value_error("exercise must be 'european' or 'american'");
+    }
+
+    const LabDates dates = MakeLabDates(tau_years);
+    const numeraire::products::VanillaEquityOptionProduct product(
+            "LAB",
+            is_call ? numeraire::OptionType::kCall : numeraire::OptionType::kPut,
+            style,
+            strike,
+            dates.valuation,
+            dates.expiry);
+    const FlatMarket market(dates.valuation, spot, rate, div, vol);
+
+    try {
+        const std::size_t steps =
+                n_steps == 0 ? numeraire::pricers::BinomialBlackScholesEquityPricer::kFallbackSteps : n_steps;
+        const auto pricer = std::make_unique<numeraire::pricers::BinomialBlackScholesEquityPricer>(steps);
+        py::dict out = ResultToDict(pricer->Price(product, market), "c++_binomial_crr", dates);
+        out["n_steps"] = static_cast<int>(pricer->NSteps());
+        return out;
+    } catch (const numeraire::ValidationError& e) {
+        throw py::value_error(e.what());
+    } catch (const numeraire::NumeraireException& e) {
+        throw std::runtime_error(e.what());
+    }
+}
+
+[[nodiscard]] py::dict PriceVanillaMonteCarlo(const double spot,
+                                              const double strike,
+                                              const double vol,
+                                              const double rate,
+                                              const double div,
+                                              const double tau_years,
+                                              const bool is_call,
+                                              const std::size_t num_paths,
+                                              const std::uint64_t seed) {
+    RequirePositiveSpotStrike(spot, strike);
+    RequireNonNegVol(vol);
+    if (num_paths == 0) {
+        throw py::value_error("num_paths must be positive");
+    }
+
+    const LabDates dates = MakeLabDates(tau_years);
+    const numeraire::products::VanillaEquityOptionProduct product(
+            "LAB",
+            is_call ? numeraire::OptionType::kCall : numeraire::OptionType::kPut,
+            numeraire::ExerciseStyle::kEuropean,
+            strike,
+            dates.valuation,
+            dates.expiry);
+    const FlatMarket market(dates.valuation, spot, rate, div, vol);
+
+    try {
+        const auto pricer =
+                std::make_unique<numeraire::pricers::MonteCarloGbmEuropeanPricer>(num_paths, seed);
+        py::dict out = ResultToDict(pricer->Price(product, market), "c++_monte_carlo_gbm", dates);
+        out["mc_paths"] = static_cast<int>(pricer->NumPaths());
+        out["mc_seed"] = static_cast<long long>(pricer->Seed());
+        return out;
+    } catch (const numeraire::ValidationError& e) {
+        throw py::value_error(e.what());
+    } catch (const numeraire::NumeraireException& e) {
+        throw std::runtime_error(e.what());
+    }
 }
 
 /// Soft cap for lab / audit tree drawing (full node list grows as O(n²)).
@@ -472,6 +565,38 @@ PYBIND11_MODULE(numeraire_cpp, m) {
 Price a vanilla equity option with the production C++ pricers.
 
 European → analytic Black–Scholes. American → CRR binomial.
+)pbdoc");
+    m.def("price_vanilla_binomial",
+          &PriceVanillaBinomial,
+          py::arg("spot"),
+          py::arg("strike"),
+          py::arg("vol"),
+          py::arg("rate"),
+          py::arg("div"),
+          py::arg("tau_years"),
+          py::arg("is_call") = true,
+          py::arg("exercise") = "european",
+          py::arg("n_steps") = 200,
+          R"pbdoc(
+Price a vanilla equity option with the C++ Cox–Ross–Rubinstein tree.
+
+Works for European and American exercise (Quant Lab comparison engine).
+)pbdoc");
+    m.def("price_vanilla_mc",
+          &PriceVanillaMonteCarlo,
+          py::arg("spot"),
+          py::arg("strike"),
+          py::arg("vol"),
+          py::arg("rate"),
+          py::arg("div"),
+          py::arg("tau_years"),
+          py::arg("is_call") = true,
+          py::arg("num_paths") = 10000,
+          py::arg("seed") = 42,
+          R"pbdoc(
+European vanilla via Monte Carlo GBM (single exact step to T).
+
+Returns NPV and diagnostics (mc_paths, mc_seed, mc_std_err). No greeks.
 )pbdoc");
     m.def("price_asset_or_nothing",
           &PriceAssetOrNothing,
