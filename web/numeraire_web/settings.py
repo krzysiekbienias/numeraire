@@ -40,7 +40,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Product version shown in the Journal footer (semver, leading 0 = pre-1.0).
-APP_VERSION = os.environ.get('NUMERAIRE_APP_VERSION', '0.5.2')
+APP_VERSION = os.environ.get('NUMERAIRE_APP_VERSION', '0.5.3')
 
 
 # Application definition

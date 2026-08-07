@@ -63,6 +63,15 @@
               <option value="put" {% if not params.is_call %}selected{% endif %}>put</option>
             </select>
           </label>
+          {% elif f.kind == 'mc_paths' %}
+          <label title="Monte Carlo sample size">
+            <span>{{ f.label }}</span>
+            <select class="form-select form-select-sm" name="mc_paths">
+              {% for n in mc_path_choices %}
+              <option value="{{ n }}" {% if meta.mc_paths == n %}selected{% endif %}>{{ n|floatformat:0 }}</option>
+              {% endfor %}
+            </select>
+          </label>
           {% else %}
           <label
             title="{% for sym, name, desc in legend %}{% if sym == f.sym %}{{ name }} — {{ desc }}{% endif %}{% endfor %}">
@@ -96,7 +105,7 @@
   <div class="nj-panel nj-quant-edu mb-2">
     <div class="nj-panel-body nj-quant-edu-body">
       <div class="nj-quant-edu-head">
-        <strong>Formulas</strong>
+        <strong>{% if is_eu_vanilla %}Analytic formulas{% else %}Formulas{% endif %}</strong>
         <span class="small text-secondary">
           {% if meta.lab_product == 'forward' %}
           long equity forward
@@ -221,6 +230,233 @@
       </div>
       {% endif %}
 
+      {% if instrument_selected and quote %}
+      <div class="nj-panel nj-quant-result mb-2">
+        <div class="nj-panel-body nj-quant-result-body">
+          {% if quote.ok %}
+          <div class="nj-quant-result-row">
+            <div class="nj-quant-pv">
+              <span class="label">
+                {% if is_eu_vanilla %}Analytic NPV / unit{% else %}NPV / unit{% endif %}
+                · <code>{{ quote.engine_label }}</code>
+                {% if quote.n_steps and not is_eu_vanilla %}· N={{ quote.n_steps }}{% endif %}
+              </span>
+              <span class="value">{{ quote.pv_unit|nj_num:4 }}</span>
+            </div>
+            {% if show_quote_greeks %}
+            <div class="nj-quant-greeks">
+              <div><span class="nj-sym">Δ</span> {{ quote.delta|floatformat:4 }}</div>
+              <div><span class="nj-sym">Γ</span> {{ quote.gamma|floatformat:6 }}</div>
+              <div><span class="nj-sym">ν</span> {{ quote.vega|floatformat:4 }}</div>
+              <div><span class="nj-sym">Θ/d</span> {{ quote.theta_day|floatformat:4 }}</div>
+              <div><span class="nj-sym">ρ</span> {{ quote.rho|floatformat:4 }}</div>
+            </div>
+            {% elif meta.lab_product == 'vanilla' and meta.exercise == 'american' %}
+            <p class="small text-secondary mb-0 align-self-center">
+              CRR bump greeks · set Steps ≤ {{ crr_tree_max_steps }} to draw the tree
+            </p>
+            {% elif not is_eu_vanilla %}
+            <p class="small text-secondary mb-0 align-self-center">NPV only (no analytic greeks for this product)</p>
+            {% endif %}
+          </div>
+          {% else %}
+          <p class="small text-secondary mb-0">{{ quote.message }}</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if is_eu_vanilla and params %}
+      <div class="nj-panel nj-quant-edu mb-2">
+        <div class="nj-panel-body nj-quant-edu-body">
+          <div class="nj-quant-edu-head">
+            <strong>Monte Carlo</strong>
+            <span class="small text-secondary">GBM · single step to \(T\) · educational reminder</span>
+          </div>
+          <div class="nj-quant-edu-grid">
+            <div class="nj-quant-edu-block nj-quant-edu-block-wide">
+              <span class="nj-quant-edu-label">Terminal spot under \(\mathbb{Q}\)</span>
+              <div class="nj-quant-edu-math">\[
+                S_T = S_0\exp\!\Bigl(\bigl(r-q-\tfrac12\sigma^2\bigr)\tau + \sigma\sqrt{\tau}\,Z\Bigr),
+                \quad Z\sim N(0,1)
+                \]</div>
+              <p class="nj-quant-edu-note mb-0">
+                Exact GBM transition — no time discretisation bias for a European payoff that only sees \(S_T\).
+              </p>
+            </div>
+            <div class="nj-quant-edu-block nj-quant-edu-block-wide">
+              <span class="nj-quant-edu-label">MC price estimator</span>
+              <div class="nj-quant-edu-math">\[
+                \hat V = e^{-r\tau}\frac{1}{M}\sum_{i=1}^{M}\mathrm{payoff}\bigl(S_T^{(i)}\bigr)
+                \]</div>
+              <p class="nj-quant-edu-note mb-0">
+                Sampling noise only · report standard error \(\mathrm{SE}(\hat V)\) with the price
+                (<code>c++_monte_carlo_gbm</code>)
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="nj-panel nj-quant-result mb-2">
+        <div class="nj-panel-body nj-quant-result-body">
+          {% if quote_mc and quote_mc.ok %}
+          <div class="nj-quant-result-row">
+            <div class="nj-quant-pv">
+              <span class="label">
+                MC NPV / unit · <code>{{ quote_mc.engine_label }}</code>
+                · M={{ quote_mc.mc_paths }}
+                · seed={{ quote_mc.mc_seed }}
+              </span>
+              <span class="value">{{ quote_mc.pv_unit|nj_num:4 }}</span>
+            </div>
+            <div class="nj-quant-greeks nj-quant-engine-meta">
+              <div>
+                <span class="nj-sym">SE</span>
+                {% if quote_mc.mc_std_err != None %}{{ quote_mc.mc_std_err|floatformat:4 }}{% else %}—{% endif %}
+              </div>
+              <div>
+                <span class="nj-sym">vs BS</span>
+                {% if mc_minus_bs != None %}{{ mc_minus_bs|nj_num:4 }}{% else %}—{% endif %}
+              </div>
+            </div>
+          </div>
+          {% elif quote_mc %}
+          <p class="small text-secondary mb-0">{{ quote_mc.message }}</p>
+          {% else %}
+          <p class="small text-secondary mb-0">
+            Monte Carlo needs <code>numeraire_cpp</code> with <code>price_vanilla_mc</code>
+            (rebuild with <code>NUMERAIRE_BUILD_PYTHON=ON</code>).
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="nj-panel nj-quant-edu mb-2">
+        <div class="nj-panel-body nj-quant-edu-body">
+          <div class="nj-quant-edu-head">
+            <strong>Binomial tree (European)</strong>
+            <span class="small text-secondary">Cox–Ross–Rubinstein · no early exercise</span>
+          </div>
+          <div class="nj-quant-edu-grid">
+            <div class="nj-quant-edu-block nj-quant-edu-block-wide">
+              <span class="nj-quant-edu-label">CRR parameters</span>
+              <div class="nj-quant-edu-math">\[
+                \Delta t = \dfrac{\tau}{N},\quad
+                u = e^{\sigma\sqrt{\Delta t}},\quad
+                d = \dfrac{1}{u}
+                \]</div>
+              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                p = \dfrac{e^{(r-q)\Delta t} - d}{u - d},\quad
+                q = 1 - p
+                \]</div>
+              <div class="nj-quant-edu-math nj-quant-edu-math-sub">\[
+                V = e^{-r\Delta t}\bigl(p\,V_u + q\,V_d\bigr)
+                \]</div>
+              <p class="nj-quant-edu-note mb-0">
+                Same \(u,d,p\) as American CRR, but European nodes never take the early-exercise max
+                (<code>c++_binomial_crr</code>). Price uses production \(N\) (form field);
+                <em>Draw CRR tree</em> dumps a small educational tree (\(N={{ crr_tree_draw_min }}\ldots{{ crr_tree_draw_max }}\)).
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="nj-panel nj-quant-result mb-2">
+        <div class="nj-panel-body nj-quant-result-body">
+          {% if quote_crr and quote_crr.ok %}
+          <div class="nj-quant-result-row">
+            <div class="nj-quant-pv">
+              <span class="label">
+                CRR NPV / unit · <code>{{ quote_crr.engine_label }}</code>
+                · N={{ quote_crr.n_steps }}
+              </span>
+              <span class="value">{{ quote_crr.pv_unit|nj_num:4 }}</span>
+            </div>
+            <div class="nj-quant-greeks nj-quant-engine-meta">
+              <div>
+                <span class="nj-sym">vs BS</span>
+                {% if crr_minus_bs != None %}{{ crr_minus_bs|nj_num:4 }}{% else %}—{% endif %}
+              </div>
+              <div class="nj-quant-crr-draw">
+                <label class="nj-quant-tree-steps" title="Time steps for the educational tree dump only">
+                  <span>tree N</span>
+                  <input class="form-control form-control-sm" type="number"
+                    form="quant-lab-params-form" name="tree_steps"
+                    min="{{ crr_tree_draw_min }}" max="{{ crr_tree_draw_max }}" step="1"
+                    value="{{ meta.tree_steps|default:crr_tree_draw_default }}">
+                </label>
+                <button type="submit" form="quant-lab-params-form" name="draw_tree" value="1"
+                  class="btn btn-sm btn-outline-secondary"
+                  title="Draw European CRR tree with tree N steps ({{ crr_tree_draw_min }}–{{ crr_tree_draw_max }})">
+                  Draw CRR tree
+                </button>
+              </div>
+            </div>
+          </div>
+          {% elif quote_crr %}
+          <p class="small text-secondary mb-0">{{ quote_crr.message }}</p>
+          {% else %}
+          <p class="small text-secondary mb-0">
+            European CRR needs <code>numeraire_cpp</code> with <code>price_vanilla_binomial</code>.
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if show_crr_tree and crr_tree and is_eu_vanilla %}
+      {{ crr_tree|json_script:"crr-tree-data" }}
+      <div class="nj-panel nj-quant-crr mb-2">
+        <div class="nj-panel-body nj-quant-crr-body">
+          <div class="nj-quant-edu-head">
+            <strong>CRR tree</strong>
+            <span class="small text-secondary">
+              N={{ crr_tree.n_steps }}
+              · u={{ crr_tree.u|floatformat:4 }}
+              · d={{ crr_tree.d|floatformat:4 }}
+              · p={{ crr_tree.p_up|floatformat:4 }}
+              · European (no early exercise)
+            </span>
+          </div>
+          <p class="nj-quant-edu-note nj-crr-tree-note mb-2">
+            <strong>Note:</strong> The CRR NPV above uses the production step count from the form
+            (e.g. N={% if quote_crr and quote_crr.n_steps %}{{ quote_crr.n_steps }}{% else %}200{% endif %})
+            and is close to Black–Scholes. This tree is an educational dump with a small
+            <strong>tree N</strong> ({{ crr_tree_draw_min }}–{{ crr_tree_draw_max }}).
+            Its root value is the CRR price <em>for that small N only</em>, so it will usually
+            differ from the production NPV — coarser trees have larger discretisation error.
+          </p>
+          <div id="crr-tree-svg" class="nj-crr-tree" aria-label="Cox-Ross-Rubinstein pricing tree"></div>
+          <table class="table table-sm mb-0 nj-compact-table nj-crr-table">
+            <thead>
+              <tr>
+                <th>step</th>
+                <th>ups</th>
+                <th class="nj-num">S</th>
+                <th class="nj-num">exercise</th>
+                <th class="nj-num">continue</th>
+                <th class="nj-num">V</th>
+                <th>EE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for n in crr_tree.nodes %}
+              <tr class="{% if n.early_exercise %}nj-crr-ee{% endif %}">
+                <td>{{ n.step }}</td>
+                <td>{{ n.up_moves }}</td>
+                <td class="nj-num">{{ n.spot|floatformat:4 }}</td>
+                <td class="nj-num">{{ n.intrinsic|floatformat:4 }}</td>
+                <td class="nj-num">{{ n.continuation|floatformat:4 }}</td>
+                <td class="nj-num">{{ n.value|floatformat:4 }}</td>
+                <td>{% if n.early_exercise %}yes{% else %}—{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
+
       {% if show_payoff_value and payoff_value_chart %}
       {{ payoff_value_chart|json_script:"payoff-value-data" }}
       <div class="nj-panel nj-quant-payoff-value mb-2">
@@ -257,19 +493,13 @@
       </div>
       {% endif %}
 
-      {% if instrument_selected and quote %}
+      {% if show_greeks_panel and quote and quote.ok %}
       <div class="nj-panel nj-quant-result mb-2">
         <div class="nj-panel-body nj-quant-result-body">
-          {% if quote.ok %}
           <div class="nj-quant-result-row">
             <div class="nj-quant-pv">
-              <span class="label">
-                NPV / unit · {{ quote.engine_label }}
-                {% if quote.n_steps %}· N={{ quote.n_steps }}{% endif %}
-              </span>
-              <span class="value">{{ quote.pv_unit|nj_num:4 }}</span>
+              <span class="label">Analytic greeks · <code>{{ quote.engine_label }}</code></span>
             </div>
-            {% if show_quote_greeks %}
             <div class="nj-quant-greeks">
               <div><span class="nj-sym">Δ</span> {{ quote.delta|floatformat:4 }}</div>
               <div><span class="nj-sym">Γ</span> {{ quote.gamma|floatformat:6 }}</div>
@@ -277,22 +507,12 @@
               <div><span class="nj-sym">Θ/d</span> {{ quote.theta_day|floatformat:4 }}</div>
               <div><span class="nj-sym">ρ</span> {{ quote.rho|floatformat:4 }}</div>
             </div>
-            {% elif meta.lab_product == 'vanilla' and meta.exercise == 'american' %}
-            <p class="small text-secondary mb-0 align-self-center">
-              CRR bump greeks · set Steps ≤ {{ crr_tree_max_steps }} to draw the tree
-            </p>
-            {% else %}
-            <p class="small text-secondary mb-0 align-self-center">NPV only (no analytic greeks for this product)</p>
-            {% endif %}
           </div>
-          {% else %}
-          <p class="small text-secondary mb-0">{{ quote.message }}</p>
-          {% endif %}
         </div>
       </div>
       {% endif %}
 
-      {% if show_crr_tree and crr_tree %}
+      {% if show_crr_tree and crr_tree and not is_eu_vanilla %}
       {{ crr_tree|json_script:"crr-tree-data" }}
       <div class="nj-panel nj-quant-crr mb-2">
         <div class="nj-panel-body nj-quant-crr-body">

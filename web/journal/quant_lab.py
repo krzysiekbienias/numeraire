@@ -7,6 +7,7 @@ shapes for vanillas only.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from journal.black_scholes import BsResult, black_scholes
@@ -104,9 +105,15 @@ _FIELD_CASH = {
 _FIELD_STEPS = {
     'name': 'n_steps',
     'sym': 'N',
-    'label': 'Steps',
+    'label': 'CRR steps',
     'kind': 'number',
     'step': '1',
+}
+_FIELD_MC_PATHS = {
+    'name': 'mc_paths',
+    'sym': '',
+    'label': 'MC paths',
+    'kind': 'mc_paths',
 }
 
 _OPTION_FIELDS = (
@@ -116,6 +123,17 @@ _OPTION_FIELDS = (
     _FIELD_RATE,
     _FIELD_DIV,
     _FIELD_TAU,
+    _FIELD_SIDE,
+)
+_EUROPEAN_VANILLA_FIELDS = (
+    _FIELD_SPOT,
+    _FIELD_STRIKE,
+    _FIELD_VOL,
+    _FIELD_RATE,
+    _FIELD_DIV,
+    _FIELD_TAU,
+    _FIELD_STEPS,
+    _FIELD_MC_PATHS,
     _FIELD_SIDE,
 )
 _AMERICAN_VANILLA_FIELDS = (
@@ -130,9 +148,16 @@ _AMERICAN_VANILLA_FIELDS = (
 )
 
 # Draw full CRR tree in the lab only for small N (O(n²) nodes).
+# Pricing CRR uses _CRR_DEFAULT_STEPS (batch); tree dump is a separate 2..10 control.
 _CRR_TREE_MAX_STEPS = 8
 _CRR_DEFAULT_STEPS = 200
 _CRR_LAB_TREE_DEFAULT = 3
+_MC_PATH_CHOICES = (10_000, 50_000, 100_000)
+_MC_DEFAULT_PATHS = 10_000
+_MC_DEFAULT_SEED = 42
+_CRR_TREE_DRAW_MIN = 2
+_CRR_TREE_DRAW_MAX = 10
+_CRR_TREE_DRAW_DEFAULT = 3
 _CON_FIELDS = (
     _FIELD_SPOT,
     _FIELD_STRIKE,
@@ -180,6 +205,10 @@ class QuantLabQuote:
     theta_day: float | None = None
     rho: float | None = None
     n_steps: int | None = None
+    mc_paths: int | None = None
+    mc_seed: int | None = None
+    mc_std_err: float | None = None
+    diagnostics: str | None = None
 
 
 def _title_from_maps_to(maps_to: str) -> str:
@@ -258,6 +287,8 @@ def fields_for_kind(
         return [dict(f) for f in _FORWARD_FIELDS]
     if product == 'vanilla' and ex == 'american':
         return [dict(f) for f in _AMERICAN_VANILLA_FIELDS]
+    if product == 'vanilla' and ex == 'european':
+        return [dict(f) for f in _EUROPEAN_VANILLA_FIELDS]
     if product in {'vanilla', 'aon'} or param_kind == 'option':
         return [dict(f) for f in _OPTION_FIELDS]
     return []
@@ -390,6 +421,43 @@ def _parse_n_steps(get, default: int = _CRR_DEFAULT_STEPS) -> int:
     return max(1, min(v, 2000))
 
 
+def _parse_mc_paths(get, default: int = _MC_DEFAULT_PATHS) -> int:
+    raw = get.get('mc_paths')
+    if raw is None or str(raw).strip() == '':
+        return default
+    try:
+        v = int(float(raw))
+    except (TypeError, ValueError):
+        return default
+    if v in _MC_PATH_CHOICES:
+        return v
+    # Snap to nearest allowed choice.
+    return min(_MC_PATH_CHOICES, key=lambda c: abs(c - v))
+
+
+def _parse_tree_steps(get, default: int = _CRR_TREE_DRAW_DEFAULT) -> int:
+    raw = get.get('tree_steps')
+    if raw is None or str(raw).strip() == '':
+        return default
+    try:
+        v = int(float(raw))
+    except (TypeError, ValueError):
+        return default
+    return max(_CRR_TREE_DRAW_MIN, min(v, _CRR_TREE_DRAW_MAX))
+
+
+def _parse_mc_std_err(diagnostics: str | None) -> float | None:
+    if not diagnostics:
+        return None
+    match = re.search(r'mc_std_err=([0-9.eE+-]+)', diagnostics)
+    if match is None:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
 def resolve_lab_params(get) -> tuple[GreeksLabParams | None, float, dict]:
     """Returns (chart params or None, τ years, meta)."""
     code = (get.get('instrument') or get.get('code') or '').strip().upper()
@@ -419,6 +487,7 @@ def resolve_lab_params(get) -> tuple[GreeksLabParams | None, float, dict]:
             _CRR_LAB_TREE_DEFAULT if exercise == 'american' else _CRR_DEFAULT_STEPS,
         )
     )
+    draw_tree = str(get.get('draw_tree') or '').strip().lower() in {'1', 'true', 'yes'}
     meta = {
         'instrument_code': code,
         'instrument_title': instrument_defaults.get('instrument_title') or '',
@@ -429,6 +498,10 @@ def resolve_lab_params(get) -> tuple[GreeksLabParams | None, float, dict]:
         'lab_product': product,
         'cash_payout': _parse_cash_payout(get, cash_default),
         'n_steps': _parse_n_steps(get, steps_default),
+        'mc_paths': _parse_mc_paths(get, _MC_DEFAULT_PATHS),
+        'mc_seed': _MC_DEFAULT_SEED,
+        'tree_steps': _parse_tree_steps(get, _CRR_TREE_DRAW_DEFAULT),
+        'draw_tree': draw_tree,
         'tau': tau,
     }
     return params, tau, meta
@@ -446,6 +519,10 @@ def _try_import_cpp():
 def _quote_from_raw(raw: dict) -> QuantLabQuote:
     theta = raw.get('theta')
     n_steps = raw.get('n_steps')
+    diagnostics = raw.get('diagnostics')
+    diag_s = str(diagnostics) if diagnostics is not None else None
+    mc_paths = raw.get('mc_paths')
+    mc_seed = raw.get('mc_seed')
     return QuantLabQuote(
         ok=True,
         engine_label=str(raw.get('engine') or 'c++_pricer'),
@@ -458,6 +535,10 @@ def _quote_from_raw(raw: dict) -> QuantLabQuote:
         theta_day=(float(theta) / DAYS_PER_YEAR) if theta is not None else None,
         rho=float(raw['rho']) if raw.get('rho') is not None else None,
         n_steps=int(n_steps) if n_steps is not None else None,
+        mc_paths=int(mc_paths) if mc_paths is not None else None,
+        mc_seed=int(mc_seed) if mc_seed is not None else None,
+        mc_std_err=_parse_mc_std_err(diag_s),
+        diagnostics=diag_s,
     )
 
 
@@ -498,6 +579,69 @@ def _quote_from_cpp_vanilla(
     return _quote_from_raw(raw)
 
 
+def _quote_from_cpp_vanilla_binomial(
+    params: GreeksLabParams,
+    tau: float,
+    exercise: str,
+    *,
+    n_steps: int = _CRR_DEFAULT_STEPS,
+) -> QuantLabQuote | None:
+    mod = _try_import_cpp()
+    if mod is None or not hasattr(mod, 'price_vanilla_binomial'):
+        return None
+    ex = (exercise or 'european').strip().lower()
+    try:
+        raw = mod.price_vanilla_binomial(
+            float(params.spot),
+            float(params.strike),
+            float(params.vol),
+            float(params.rate),
+            float(params.div),
+            float(tau),
+            bool(params.is_call),
+            ex,
+            int(n_steps),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _cpp_error(exc)
+    return _quote_from_raw(raw)
+
+
+def _quote_from_cpp_vanilla_mc(
+    params: GreeksLabParams,
+    tau: float,
+    *,
+    num_paths: int = _MC_DEFAULT_PATHS,
+    seed: int = _MC_DEFAULT_SEED,
+) -> QuantLabQuote | None:
+    mod = _try_import_cpp()
+    if mod is None or not hasattr(mod, 'price_vanilla_mc'):
+        return None
+    try:
+        raw = mod.price_vanilla_mc(
+            float(params.spot),
+            float(params.strike),
+            float(params.vol),
+            float(params.rate),
+            float(params.div),
+            float(tau),
+            bool(params.is_call),
+            int(num_paths),
+            int(seed),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _cpp_error(exc)
+    return _quote_from_raw(raw)
+
+
+def _pv_diff(a: QuantLabQuote | None, b: QuantLabQuote | None) -> float | None:
+    if not a or not b or not a.ok or not b.ok:
+        return None
+    if a.pv_unit is None or b.pv_unit is None:
+        return None
+    return float(a.pv_unit) - float(b.pv_unit)
+
+
 def _dump_crr_tree(
     params: GreeksLabParams,
     tau: float,
@@ -505,7 +649,7 @@ def _dump_crr_tree(
     n_steps: int,
 ) -> dict | None:
     """Return CRR node dump for small N, or None if unavailable / too large."""
-    if n_steps < 1 or n_steps > _CRR_TREE_MAX_STEPS:
+    if n_steps < _CRR_TREE_DRAW_MIN or n_steps > _CRR_TREE_DRAW_MAX:
         return None
     mod = _try_import_cpp()
     if mod is None or not hasattr(mod, 'dump_crr_tree'):
@@ -808,10 +952,17 @@ def build_quant_lab(get) -> dict:
     )
 
     quote: QuantLabQuote | None = None
+    quote_mc: QuantLabQuote | None = None
+    quote_crr: QuantLabQuote | None = None
     charts = None
     crr_tree = None
     payoff_value_chart = None
     n_steps = int(meta.get('n_steps') or _CRR_DEFAULT_STEPS)
+    mc_paths = int(meta.get('mc_paths') or _MC_DEFAULT_PATHS)
+    mc_seed = int(meta.get('mc_seed') or _MC_DEFAULT_SEED)
+    is_eu_vanilla = product == 'vanilla' and exercise == 'european'
+    is_am_vanilla = product == 'vanilla' and exercise == 'american'
+
     if selected and params is not None and product in {'vanilla', 'aon', 'con', 'forward'}:
         quote = price_sandbox(
             params,
@@ -821,19 +972,30 @@ def build_quant_lab(get) -> dict:
             cash_payout=float(meta.get('cash_payout') or 1.0),
             n_steps=n_steps,
         )
-        # Educational greeks-vs-spot shapes only for European vanillas (Python BS).
-        if product == 'vanilla' and exercise != 'american':
+        if is_eu_vanilla:
+            quote_mc = _quote_from_cpp_vanilla_mc(
+                params, tau, num_paths=mc_paths, seed=mc_seed
+            )
+            quote_crr = _quote_from_cpp_vanilla_binomial(
+                params, tau, 'european', n_steps=n_steps
+            )
             charts = build_greeks_vs_spot(params)
             payoff_value_chart = build_payoff_value_chart(params, tau)
-        if product == 'vanilla' and exercise == 'american' and quote and quote.ok:
+            if meta.get('draw_tree'):
+                tree_steps = int(meta.get('tree_steps') or _CRR_TREE_DRAW_DEFAULT)
+                crr_tree = _dump_crr_tree(params, tau, 'european', tree_steps)
+        if is_am_vanilla and quote and quote.ok:
             steps_used = quote.n_steps if quote.n_steps is not None else n_steps
-            crr_tree = _dump_crr_tree(params, tau, exercise, steps_used)
+            if _CRR_TREE_DRAW_MIN <= steps_used <= _CRR_TREE_MAX_STEPS:
+                crr_tree = _dump_crr_tree(params, tau, exercise, steps_used)
 
     has_greeks = bool(
         quote
         and quote.ok
         and any(x is not None for x in (quote.delta, quote.gamma, quote.vega, quote.theta, quote.rho))
     )
+    # For European PVE, greeks sit in their own section before the charts — not beside NPV.
+    show_quote_greeks = has_greeks and not is_eu_vanilla
     legend = (
         legend_for_fields(fields, include_greeks=charts is not None or has_greeks)
         if selected
@@ -849,11 +1011,21 @@ def build_quant_lab(get) -> dict:
         'tau': tau,
         'tau_months': tau_month_label(tau),
         'quote': quote,
+        'quote_mc': quote_mc,
+        'quote_crr': quote_crr,
+        'mc_minus_bs': _pv_diff(quote_mc, quote),
+        'crr_minus_bs': _pv_diff(quote_crr, quote),
+        'is_eu_vanilla': is_eu_vanilla,
+        'mc_path_choices': _MC_PATH_CHOICES,
+        'crr_tree_draw_min': _CRR_TREE_DRAW_MIN,
+        'crr_tree_draw_max': _CRR_TREE_DRAW_MAX,
+        'crr_tree_draw_default': _CRR_TREE_DRAW_DEFAULT,
         'lab': charts,
         'greeks_chart': charts['chart'] if charts else None,
         'legend': legend,
         'show_charts': charts is not None,
-        'show_quote_greeks': has_greeks,
+        'show_quote_greeks': show_quote_greeks,
+        'show_greeks_panel': is_eu_vanilla and has_greeks,
         'show_formulas': selected and product in {'vanilla', 'aon', 'con', 'forward'},
         'crr_tree': crr_tree,
         'show_crr_tree': bool(crr_tree and crr_tree.get('nodes')),
