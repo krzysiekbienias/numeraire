@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Insert product + products_equity + trade header + trade_legs from one JSON bundle.
+"""Insert product + (products_equity | products_commodity) + trade + trade_legs.
 
-Uses only the Python standard library. Expects schema from sql/refactor.sql
+Uses only the Python standard library. Expects schema from sql/schema_v1.sql
 (tables must exist — apply the schema manually or via your bootstrap).
 
 Validates `product.expiry_date >= trade.trade_date` before any INSERT (rejects
 expired-at-trade-date instruments with a clear error).
+
+Bundle shape: exactly one of `equity` or `commodity` extension objects.
 
 Examples:
   NUMERAIRE_DB_PATH=db.sqlite3 python3 scripts/import_trade_bundle.py trades/incoming/my_trade.json
@@ -111,14 +113,21 @@ def _is_spot_instrument(raw: Any) -> bool:
     return key in ("equityspot", "spot", "equityshare", "cashequity", "indexspot", "spotindex")
 
 
-def _structured_params_to_text(raw: Any) -> str:
+def _is_commodity_futures_outright(raw: Any) -> bool:
+    if raw is None:
+        return False
+    key = _normalize_instrument_type_key(str(raw))
+    return key in ("commodityfuturesoutright", "futuresoutright", "commodityoutright")
+
+
+def _structured_params_to_text(raw: Any, *, label: str = "structured_params") -> str:
     if raw is None:
         return "{}"
     if isinstance(raw, str):
         return raw if raw.strip() else "{}"
     if isinstance(raw, Mapping):
         return json.dumps(raw, separators=(",", ":"), sort_keys=True)
-    _die(f"equity.structured_params: expected object or string, got {type(raw).__name__}")
+    _die(f"{label}: expected object or string, got {type(raw).__name__}")
 
 
 def default_db_path() -> str:
@@ -161,7 +170,8 @@ def _resolve_product_id_field(
 
 def normalize_bundle(
     product: dict[str, Any],
-    equity: dict[str, Any],
+    extension: dict[str, Any],
+    extension_label: str,
     trade: dict[str, Any],
 ) -> list[str]:
     """Fill product_id / leg_id from product.trade; error on conflicting product_id."""
@@ -169,7 +179,7 @@ def normalize_bundle(
     canonical_pid = _canonical_product_id(product)
     product["product_id"] = canonical_pid
 
-    _resolve_product_id_field(equity, "equity", canonical_pid, notes)
+    _resolve_product_id_field(extension, extension_label, canonical_pid, notes)
 
     if "trade_id" not in trade or _is_blank(trade.get("trade_id")):
         _die("trade.trade_id: required")
@@ -262,7 +272,9 @@ def _collect_json_paths(
     return out
 
 
-def load_bundle(path: Path) -> tuple[Mapping[str, Any], Mapping[str, Any], Mapping[str, Any]]:
+def load_bundle(
+    path: Path,
+) -> tuple[Mapping[str, Any], str, Mapping[str, Any], Mapping[str, Any], list[str]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except OSError as e:
@@ -272,8 +284,19 @@ def load_bundle(path: Path) -> tuple[Mapping[str, Any], Mapping[str, Any], Mappi
 
     root = _require_mapping(data, "root")
     product = dict(_require_mapping(root.get("product"), "product"))
-    equity = dict(_require_mapping(root.get("equity"), "equity"))
     trade = dict(_require_mapping(root.get("trade"), "trade"))
+
+    has_equity = "equity" in root and root.get("equity") is not None
+    has_commodity = "commodity" in root and root.get("commodity") is not None
+    if has_equity == has_commodity:
+        _die(f"{path.name}: bundle must contain exactly one of 'equity' or 'commodity'")
+
+    if has_commodity:
+        extension_label = "commodity"
+        extension = dict(_require_mapping(root.get("commodity"), "commodity"))
+    else:
+        extension_label = "equity"
+        extension = dict(_require_mapping(root.get("equity"), "equity"))
 
     mp = _missing_keys(product, REQUIRED_PRODUCT_KEYS)
     if mp:
@@ -282,7 +305,7 @@ def load_bundle(path: Path) -> tuple[Mapping[str, Any], Mapping[str, Any], Mappi
     if mt:
         _die(f"trade: missing keys: {mt}")
 
-    auto_notes = normalize_bundle(product, equity, trade)
+    auto_notes = normalize_bundle(product, extension, extension_label, trade)
 
     legs_raw = trade["legs"]
     for i, leg in enumerate(legs_raw):
@@ -293,7 +316,7 @@ def load_bundle(path: Path) -> tuple[Mapping[str, Any], Mapping[str, Any], Mappi
             _die(f"{label}: missing keys: {ml}")
         _normalize_leg_direction_db(str(lg["direction"]))
 
-    return product, equity, trade, auto_notes
+    return product, extension_label, extension, trade, auto_notes
 
 
 def _optional_str(d: Mapping[str, Any], key: str) -> str | None:
@@ -409,27 +432,51 @@ def _parse_commission(lg: Mapping[str, Any], quantity: float, leg_id: str) -> fl
     return commission
 
 
-def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: Mapping[str, Any], trade: Mapping[str, Any]) -> None:
+def insert_bundle(
+    conn: sqlite3.Connection,
+    product: Mapping[str, Any],
+    extension_label: str,
+    extension: Mapping[str, Any],
+    trade: Mapping[str, Any],
+) -> None:
     pid = product["product_id"]
-    instrument_type = equity.get("instrument_type", "plain_vanilla_european_option")
-    exercise_style = equity.get("exercise_style", "european")
-    structured_params = _structured_params_to_text(equity.get("structured_params"))
+    instrument_type = extension.get("instrument_type", "plain_vanilla_european_option")
+    structured_params = _structured_params_to_text(
+        extension.get("structured_params"),
+        label=f"{extension_label}.structured_params",
+    )
 
-    is_spot = _is_spot_instrument(instrument_type)
-    is_forward = _is_equity_forward_instrument(instrument_type)
+    is_commodity = extension_label == "commodity"
+    is_spot = (not is_commodity) and _is_spot_instrument(instrument_type)
+    is_forward = (not is_commodity) and _is_equity_forward_instrument(instrument_type)
+    is_outright = is_commodity and _is_commodity_futures_outright(instrument_type)
 
-    strike = _parse_strike(equity.get("strike", None), required=not is_spot)
-
-    option_type = _normalize_option_type(equity.get("option_type", None))
-    if option_type is None and not is_forward and not is_spot:
+    if is_commodity and not is_outright:
         _die(
-            'equity.option_type: required — "call" or "put" '
-            "(null allowed for equity_forward / equity_spot / index_spot only)"
+            f"commodity.instrument_type: unsupported {instrument_type!r} "
+            "(only commodity_futures_outright for now)"
         )
+
+    if is_commodity:
+        strike = None
+        option_type = None
+        exercise_style = extension.get("exercise_style", None)
+        if not _is_blank(exercise_style):
+            exercise_style = str(exercise_style).strip()
+        else:
+            exercise_style = None
+    else:
+        exercise_style = extension.get("exercise_style", "european")
+        strike = _parse_strike(extension.get("strike", None), required=not is_spot)
+        option_type = _normalize_option_type(extension.get("option_type", None))
+        if option_type is None and not is_forward and not is_spot:
+            _die(
+                'equity.option_type: required — "call" or "put" '
+                "(null allowed for equity_forward / equity_spot / index_spot only)"
+            )
 
     trade_date = _require_non_blank_str(trade, "trade_date", "trade")
     if is_spot:
-        # Spot has no maturity; allow blank / null expiry in the catalog row.
         expiry_raw = product.get("expiry_date", None)
         expiry_date = None if _is_blank(expiry_raw) else str(expiry_raw).strip()
     else:
@@ -437,7 +484,10 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
         _require_expiry_on_or_after_trade_date(expiry_date, trade_date, pid)
 
     asset_kind = str(product["asset_kind"]).strip().upper()
-    if is_spot:
+    if is_commodity:
+        if asset_kind != "COMMODITY":
+            _die("product.asset_kind: commodity extension requires COMMODITY")
+    elif is_spot:
         itype_key = _normalize_instrument_type_key(str(instrument_type))
         if itype_key in ("indexspot", "spotindex") and asset_kind != "INDEX":
             _die("product.asset_kind: index_spot requires INDEX")
@@ -473,15 +523,62 @@ def insert_bundle(conn: sqlite3.Connection, product: Mapping[str, Any], equity: 
             str(product["calendar"]),
         ),
     )
-    cur.execute(
-        """
-        INSERT OR IGNORE INTO products_equity (
-            product_id, option_type, strike,
-            instrument_type, exercise_style, structured_params
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (pid, option_type, strike, str(instrument_type), str(exercise_style), structured_params),
-    )
+
+    if is_commodity:
+        product_code = str(extension.get("product_code") or product["underlying_id"]).strip().upper()
+        if not product_code:
+            _die("commodity.product_code: required")
+        contract_ticker = extension.get("contract_ticker", None)
+        if _is_blank(contract_ticker):
+            _die("commodity.contract_ticker: required for commodity_futures_outright")
+        contract_ticker = str(contract_ticker).strip().upper()
+
+        def _opt_float(key: str) -> float | None:
+            raw = extension.get(key, None)
+            if _is_blank(raw):
+                return None
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                _die(f"commodity.{key}: expected number or null, got {raw!r}")
+
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO products_commodity (
+                product_id, instrument_type, product_code, contract_ticker, contract_month,
+                settlement_date, multiplier, tick_size, tick_value, option_type, strike,
+                exercise_style, option_ticker, underlying_contract_ticker, structured_params
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                pid,
+                str(instrument_type),
+                product_code,
+                contract_ticker,
+                _optional_str(extension, "contract_month"),
+                _optional_str(extension, "settlement_date") or expiry_date,
+                _opt_float("multiplier"),
+                _opt_float("tick_size"),
+                _opt_float("tick_value"),
+                option_type,
+                strike,
+                exercise_style,
+                _optional_str(extension, "option_ticker"),
+                _optional_str(extension, "underlying_contract_ticker"),
+                structured_params,
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO products_equity (
+                product_id, option_type, strike,
+                instrument_type, exercise_style, structured_params
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (pid, option_type, strike, str(instrument_type), str(exercise_style), structured_params),
+        )
+
     tid = str(trade["trade_id"])
     booking_timestamp = _optional_str(trade, "booking_timestamp")
     updated_at = _optional_str(trade, "updated_at")
@@ -609,7 +706,7 @@ def main() -> None:
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         for path in paths:
-            product, equity, trade, auto_notes = load_bundle(path)
+            product, extension_label, extension, trade, auto_notes = load_bundle(path)
             for note in auto_notes:
                 print(f"  {note}")
             tid = str(trade["trade_id"])
@@ -619,7 +716,7 @@ def main() -> None:
                 continue
             try:
                 conn.execute("BEGIN")
-                insert_bundle(conn, product, equity, trade)
+                insert_bundle(conn, product, extension_label, extension, trade)
                 conn.commit()
             except sqlite3.IntegrityError as e:
                 conn.rollback()
@@ -632,7 +729,7 @@ def main() -> None:
             n_legs = len(trade["legs"])  # type: ignore[arg-type]
             print(
                 f"OK: {path.name} -> trade {trade['trade_id']!r} product {product['product_id']!r} "
-                f"({n_legs} leg(s))"
+                f"({extension_label}, {n_legs} leg(s))"
             )
             imported += 1
     finally:

@@ -48,8 +48,9 @@
       <div class="nj-panel-body">
         <p class="mb-2">Pick an instrument type to show its fields.</p>
         <p class="small text-secondary mb-0">
-          Only types the C++ <code>ProductFactory</code> can price are bookable here.
-          The full catalog is on the <a href="{% url 'journal:inventory' %}">Inventory</a> page.
+          Wired types: equity/index (priced today) and <strong>FUT</strong> commodity outright
+          (books as <code>PENDING</code>; futures pricer comes later).
+          Catalog codes live on the <a href="{% url 'journal:inventory' %}">Inventory</a> page.
         </p>
       </div>
     </div>
@@ -74,11 +75,18 @@
         <div class="nj-panel-body">
           <div class="nj-form-grid">
             {% include 'partials/form_field.html' with field=form.underlying_id %}
+            {% if form.contract_ticker %}
+              {% include 'partials/form_field.html' with field=form.contract_ticker %}
+            {% endif %}
             {% if form.option_type %}
               {% include 'partials/form_field.html' with field=form.option_type %}
             {% endif %}
-            {% include 'partials/form_field.html' with field=form.strike %}
-            {% include 'partials/form_field.html' with field=form.expiry_date %}
+            {% if form.strike %}
+              {% include 'partials/form_field.html' with field=form.strike %}
+            {% endif %}
+            {% if form.expiry_date %}
+              {% include 'partials/form_field.html' with field=form.expiry_date %}
+            {% endif %}
             {% include 'partials/form_field.html' with field=form.settlement %}
             {% include 'partials/form_field.html' with field=form.contract_size %}
             {% include 'partials/form_field.html' with field=form.currency %}

@@ -6,7 +6,7 @@ and shells out to that script — it stays the only code that INSERTs into
 `products` / `trades` / `trade_legs`. New trades land as `PENDING`; the C++
 `dev_main --price-booking` fills `execution_price` and promotes them to `LIVE`.
 
-Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS); everything
+Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS, FUT); everything
 else in `catalog_instrument_type` stays read-only inventory.
 
 Deletion follows the same rule: `scripts/delete_trade.py` does the DELETE, the
@@ -28,7 +28,11 @@ from pathlib import Path
 
 from django.conf import settings
 
+from django.db.models import Q
+
 from journal.models import (
+    FuturesContract,
+    FuturesProduct,
     Product,
     Trade,
     TradeLeg,
@@ -52,7 +56,7 @@ class BookableInstrument:
 
     code: str
     label: str
-    instrument_type: str  # products_equity.instrument_type
+    instrument_type: str  # products_equity / products_commodity.instrument_type
     strategy_type: str  # default trades.strategy_type
     product_prefix: str
     asset_kind: str
@@ -65,6 +69,10 @@ class BookableInstrument:
     default_contract_size: float
     default_settlement: str
     contract_size_help: str
+    # 'equity' → products_equity; 'commodity' → products_commodity
+    extension: str = 'equity'
+    # Commodity futures: pick listed contract ticker (tenor) from futures_contract.
+    has_contract_ticker: bool = False
 
 
 PLAIN_VANILLA_EUROPEAN = BookableInstrument(
@@ -139,7 +147,33 @@ INDEX_SPOT = BookableInstrument(
     contract_size_help='1 = quantity counts index units (hedge vs index options).',
 )
 
-BOOKABLE = (PLAIN_VANILLA_EUROPEAN, EQUITY_FORWARD, EQUITY_SPOT, INDEX_SPOT)
+COMMODITY_FUTURES_OUTRIGHT = BookableInstrument(
+    code='FUT',
+    label='FUT — Commodity futures outright',
+    instrument_type='commodity_futures_outright',
+    strategy_type='COMMODITY_FUTURES',
+    product_prefix='FUT_OUTRIGHT',
+    asset_kind='COMMODITY',
+    has_option_type=False,
+    has_strike=False,
+    has_expiry=True,  # taken from futures_contract.settlement_date
+    underlier_asset_class='COMMODITY',
+    strike_label='Strike',
+    strike_help='',
+    default_contract_size=1000.0,
+    default_settlement='PHYSICAL',
+    contract_size_help='Futures multiplier (e.g. 1000 bbl for CL). Override from product catalog if known.',
+    extension='commodity',
+    has_contract_ticker=True,
+)
+
+BOOKABLE = (
+    PLAIN_VANILLA_EUROPEAN,
+    EQUITY_FORWARD,
+    EQUITY_SPOT,
+    INDEX_SPOT,
+    COMMODITY_FUTURES_OUTRIGHT,
+)
 
 
 def bookable_instruments() -> list[BookableInstrument]:
@@ -164,18 +198,98 @@ def _db_path() -> str:
 
 
 def underlier_choices(asset_class: str | None = None) -> list[tuple[str, str]]:
-    """Underliers whose EOD data the ingest actually covers, so pricing can resolve a spot."""
-    rows = UniverseInstrument.objects.filter(is_active=1).exclude(
-        ingest_equity_eod=0, ingest_index_eod=0
-    )
+    """Underliers whose market data the ingest covers (equity/index EOD or futures)."""
+    rows = UniverseInstrument.objects.filter(is_active=1)
     if asset_class:
-        rows = rows.filter(asset_class=asset_class.strip().upper())
+        ac = asset_class.strip().upper()
+        rows = rows.filter(asset_class=ac)
+        if ac == 'COMMODITY':
+            rows = rows.filter(Q(ingest_futures_eod=1) | Q(ingest_futures_product=1))
+        elif ac == 'EQUITY':
+            rows = rows.filter(ingest_equity_eod=1)
+        elif ac == 'INDEX':
+            rows = rows.filter(ingest_index_eod=1)
+    else:
+        rows = rows.filter(
+            Q(ingest_equity_eod=1) | Q(ingest_index_eod=1) | Q(ingest_futures_eod=1)
+        )
     choices = []
     for row in rows.order_by('asset_class', 'instrument_id'):
         name = (row.display_name or '').strip()
         suffix = f' — {name}' if name else ''
-        choices.append((row.instrument_id, f'{row.instrument_id} ({row.asset_class}){suffix}'))
+        # Commodity universe uses instrument_id == provider_symbol (CL); show both if they differ.
+        sym = (row.provider_symbol or '').strip().upper()
+        label_id = row.instrument_id
+        if sym and sym != str(label_id).upper():
+            label_id = f'{label_id}/{sym}'
+        choices.append((row.instrument_id, f'{label_id} ({row.asset_class}){suffix}'))
     return choices
+
+
+def _latest_futures_listing_as_of(product_code: str) -> date | None:
+    raw = (
+        FuturesContract.objects.filter(product_code=product_code.upper())
+        .order_by('-listing_as_of')
+        .values_list('listing_as_of', flat=True)
+        .first()
+    )
+    return raw
+
+
+def futures_contract_choices(product_code: str | None) -> list[tuple[str, str]]:
+    """Listed outright tickers for one commodity product_code (latest listing day)."""
+    code = (product_code or '').strip().upper()
+    if not code:
+        return []
+    listing = _latest_futures_listing_as_of(code)
+    if listing is None:
+        return []
+    rows = (
+        FuturesContract.objects.filter(product_code=code, listing_as_of=listing)
+        .filter(Q(active=1) | Q(active__isnull=True))
+        .order_by('settlement_date', 'ticker')
+    )
+    out: list[tuple[str, str]] = []
+    for row in rows:
+        settle = (row.settlement_date or '').strip() or '?'
+        out.append((row.ticker, f'{row.ticker} · settle {settle} · listing {listing}'))
+    return out
+
+
+def lookup_futures_contract(product_code: str, ticker: str) -> FuturesContract | None:
+    code = product_code.strip().upper()
+    tick = ticker.strip().upper()
+    listing = _latest_futures_listing_as_of(code)
+    if listing is None:
+        return None
+    return (
+        FuturesContract.objects.filter(
+            product_code=code, ticker=tick, listing_as_of=listing
+        )
+        .order_by()
+        .first()
+    )
+
+
+def default_futures_multiplier(product_code: str) -> float | None:
+    row = FuturesProduct.objects.filter(product_code=product_code.strip().upper()).first()
+    if row is None or row.unit_of_measure_qty is None:
+        return None
+    try:
+        qty = float(row.unit_of_measure_qty)
+    except (TypeError, ValueError):
+        return None
+    return qty if qty > 0 else None
+
+
+def commodity_product_code(underlying_id: str) -> str:
+    """Map universe instrument_id → Massive product_code (usually the same)."""
+    uid = underlying_id.strip()
+    row = UniverseInstrument.objects.filter(instrument_id=uid).first()
+    if row is not None and (row.provider_symbol or '').strip():
+        return row.provider_symbol.strip().upper()
+    return uid.upper()
+
 
 
 def portfolio_suggestions() -> list[str]:
@@ -229,9 +343,14 @@ def build_product_id(
     expiry_date: date | None,
     strike: float | None,
     option_type: str | None,
+    contract_ticker: str | None = None,
 ) -> str:
     """Deterministic id following the conventions in `trades/incoming/*.sample.json`."""
-    parts = [spec.product_prefix, underlying_id.strip().upper()]
+    und = underlying_id.strip().upper()
+    if spec.has_contract_ticker:
+        ticker = (contract_ticker or '').strip().upper()
+        return '_'.join([spec.product_prefix, und, ticker])
+    parts = [spec.product_prefix, und]
     if spec.has_option_type:
         parts.append('C' if (option_type or '').lower() == 'call' else 'P')
         parts.append(_fmt_id_number(float(strike or 0.0)))
@@ -248,7 +367,7 @@ def product_conflicts(product_id: str, *, spec: BookableInstrument, terms: dict)
     would be worse than refusing, hence this check.
     """
     try:
-        product = Product.objects.select_related('equity').get(pk=product_id)
+        product = Product.objects.select_related('equity', 'commodity').get(pk=product_id)
     except Product.DoesNotExist:
         return []
 
@@ -270,6 +389,18 @@ def product_conflicts(product_id: str, *, spec: BookableInstrument, terms: dict)
         diffs.append(
             f'contract_size: book has {product.contract_size!r}, form says {terms["contract_size"]!r}'
         )
+
+    if spec.extension == 'commodity':
+        commodity = getattr(product, 'commodity', None)
+        if commodity is not None:
+            compare('instrument_type', commodity.instrument_type, spec.instrument_type)
+            compare('product_code', commodity.product_code, terms.get('product_code'))
+            compare(
+                'contract_ticker',
+                (commodity.contract_ticker or '').upper(),
+                (terms.get('contract_ticker') or '').upper(),
+            )
+        return diffs
 
     equity = getattr(product, 'equity', None)
     if equity is not None:
@@ -302,7 +433,7 @@ def build_bundle(
         'execution_price': None,
         'commission_per_contract': cleaned['commission_per_contract'],
     }
-    return {
+    bundle: dict = {
         '_comment': (
             f'Booked from the Numeraire Journal{who} at {now:%Y-%m-%d %H:%M:%S}. '
             f'Import → PENDING; price with: dev_main --price-booking {trade_id}'
@@ -320,14 +451,7 @@ def build_bundle(
             'currency': cleaned['currency'],
             'contract_size': cleaned['contract_size'],
             'day_count': 'Actual365Fixed',
-            'calendar': 'UnitedStates',
-        },
-        'equity': {
-            'instrument_type': spec.instrument_type,
-            'option_type': cleaned.get('option_type') if spec.has_option_type else None,
-            'strike': cleaned.get('strike') if spec.has_strike else None,
-            'exercise_style': 'european',
-            'structured_params': {},
+            'calendar': 'America/Chicago' if spec.extension == 'commodity' else 'UnitedStates',
         },
         'trade': {
             'trade_id': trade_id,
@@ -338,6 +462,37 @@ def build_bundle(
             'legs': [leg],
         },
     }
+    if spec.extension == 'commodity':
+        bundle['commodity'] = {
+            'instrument_type': spec.instrument_type,
+            'product_code': cleaned['product_code'],
+            'contract_ticker': cleaned['contract_ticker'],
+            'contract_month': cleaned.get('contract_month'),
+            'settlement_date': (
+                cleaned['expiry_date'].isoformat()
+                if cleaned.get('expiry_date') is not None
+                else None
+            ),
+            'multiplier': cleaned.get('contract_size'),
+            'tick_size': cleaned.get('tick_size'),
+            'tick_value': cleaned.get('tick_value'),
+            'option_type': None,
+            'strike': None,
+            'exercise_style': None,
+            'option_ticker': None,
+            'underlying_contract_ticker': None,
+            'structured_params': {},
+        }
+    else:
+        bundle['equity'] = {
+            'instrument_type': spec.instrument_type,
+            'option_type': cleaned.get('option_type') if spec.has_option_type else None,
+            'strike': cleaned.get('strike') if spec.has_strike else None,
+            'exercise_style': 'european',
+            'structured_params': {},
+        }
+    return bundle
+
 
 
 def write_bundle(trade_id: str, bundle: dict) -> Path:

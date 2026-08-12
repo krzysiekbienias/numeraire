@@ -16,6 +16,7 @@ from journal.booking import (
     bookable_instruments,
     build_bundle,
     delete_preview,
+    futures_contract_choices,
     get_instrument,
     next_trade_id,
     portfolio_suggestions,
@@ -305,7 +306,7 @@ class TradeNewView(TemplateView):
 
     template_name = 'journal/trade_new.html'
 
-    def _context(self, spec, form):
+    def _context(self, spec, form, *, selected_underlying: str | None = None):
         return {
             'instruments': bookable_instruments(),
             'spec': spec,
@@ -313,18 +314,33 @@ class TradeNewView(TemplateView):
             'preview_trade_id': next_trade_id() if spec is not None else None,
             'portfolio_options': portfolio_suggestions(),
             'strategy_options': strategy_suggestions(),
+            'selected_underlying': selected_underlying or '',
         }
+
+    def _make_form(self, spec, data=None, *, selected_underlying: str | None = None):
+        und = (selected_underlying or '').strip()
+        contract_choices = (
+            futures_contract_choices(und) if spec is not None and spec.has_contract_ticker else []
+        )
+        initial = {'trade_date': date_cls.today()}
+        if und:
+            initial['underlying_id'] = und
+        kwargs = {
+            'underlier_choices': underlier_choices(spec.underlier_asset_class),
+            'contract_choices': contract_choices,
+            'initial': initial,
+        }
+        if data is not None:
+            return NewTradeForm(spec, data, **kwargs)
+        return NewTradeForm(spec, **kwargs)
 
     def get(self, request, *args, **kwargs):
         spec = get_instrument(request.GET.get('instrument'))
         form = None
+        selected_underlying = request.GET.get('underlying', '').strip()
         if spec is not None:
-            form = NewTradeForm(
-                spec,
-                underlier_choices=underlier_choices(spec.underlier_asset_class),
-                initial={'trade_date': date_cls.today()},
-            )
-        return self.render_to_response(self._context(spec, form))
+            form = self._make_form(spec, selected_underlying=selected_underlying)
+        return self.render_to_response(self._context(spec, form, selected_underlying=selected_underlying))
 
     def post(self, request, *args, **kwargs):
         spec = get_instrument(request.POST.get('instrument'))
@@ -332,13 +348,12 @@ class TradeNewView(TemplateView):
             messages.error(request, 'Pick an instrument type before booking.')
             return redirect('journal:trade_new')
 
-        form = NewTradeForm(
-            spec,
-            request.POST,
-            underlier_choices=underlier_choices(spec.underlier_asset_class),
-        )
+        selected_underlying = request.POST.get('underlying_id', '').strip()
+        form = self._make_form(spec, request.POST, selected_underlying=selected_underlying)
         if not form.is_valid():
-            return self.render_to_response(self._context(spec, form))
+            return self.render_to_response(
+                self._context(spec, form, selected_underlying=selected_underlying)
+            )
 
         trade_id = next_trade_id()
         bundle = build_bundle(
@@ -352,7 +367,9 @@ class TradeNewView(TemplateView):
             bundle_path = write_bundle(trade_id, bundle)
         except OSError as exc:
             messages.error(request, f'Could not write the bundle file: {exc}')
-            return self.render_to_response(self._context(spec, form))
+            return self.render_to_response(
+                self._context(spec, form, selected_underlying=selected_underlying)
+            )
 
         result = run_import(bundle_path)
         if not result.ok:
@@ -360,7 +377,9 @@ class TradeNewView(TemplateView):
             # so the trade id stays free for the next attempt.
             bundle_path.unlink(missing_ok=True)
             messages.error(request, result.message)
-            return self.render_to_response(self._context(spec, form))
+            return self.render_to_response(
+                self._context(spec, form, selected_underlying=selected_underlying)
+            )
 
         messages.success(
             request,
