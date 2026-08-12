@@ -71,6 +71,37 @@ class ProductEquity(models.Model):
         return self.product_id
 
 
+class ProductCommodity(models.Model):
+    """Book extension for commodity futures (and later options-on-futures)."""
+
+    product = models.OneToOneField(
+        Product, models.DO_NOTHING, primary_key=True, related_name='commodity'
+    )
+    instrument_type = models.TextField()
+    product_code = models.TextField()
+    contract_ticker = models.TextField(blank=True, null=True)
+    contract_month = models.TextField(blank=True, null=True)
+    settlement_date = models.TextField(blank=True, null=True)
+    multiplier = models.FloatField(blank=True, null=True)
+    tick_size = models.FloatField(blank=True, null=True)
+    tick_value = models.FloatField(blank=True, null=True)
+    option_type = models.TextField(blank=True, null=True)
+    strike = models.FloatField(blank=True, null=True)
+    exercise_style = models.TextField(blank=True, null=True)
+    option_ticker = models.TextField(blank=True, null=True)
+    underlying_contract_ticker = models.TextField(blank=True, null=True)
+    structured_params = models.TextField(default='{}')
+
+    class Meta:
+        managed = False
+        db_table = 'products_commodity'
+        verbose_name = 'Product (commodity)'
+        verbose_name_plural = 'Products (commodity)'
+
+    def __str__(self):
+        return self.product_id
+
+
 class TradeLeg(models.Model):
     leg_id = models.TextField(primary_key=True)
     trade = models.ForeignKey(Trade, models.DO_NOTHING, related_name='legs')

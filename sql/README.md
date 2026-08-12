@@ -13,6 +13,19 @@ There are **no separate `apply_*.sql` migration scripts** for curve tables — e
 
 - **`seed_market_data_prep_scope.sql`** — scope rows for `daily_market_prep.sh` (GOOGL, NVDA, AAPL, MSFT, NDX).
 
+## Book catalog: equity vs commodity
+
+| Table | Role |
+|-------|------|
+| `products` | Shared book header (`asset_kind`, `underlying_id`, expiry, size, …) |
+| `products_equity` | Equity/index extension (options, forwards, spots) |
+| `products_commodity` | Commodity extension — one futures tenor per row (outright now; option fields nullable for later) |
+
+Convention for futures outright: `underlying_id` / `product_code` = `CL`, `product_id` ≈ `FUT_OUTRIGHT_CL_CLU6`,
+`contract_ticker` = `CLU6`. A strip is many `trade_legs` → many products under one trade, not one JSON row.
+
+Vendor market data stays in `futures_product` / `futures_contract` / `futures_daily_eod` (separate from the book).
+
 ## Local futures product catalog (Massive)
 
 Commodity product specs (`futures_product`) are loaded with a one-shot Python helper

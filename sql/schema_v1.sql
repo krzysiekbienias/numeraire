@@ -30,6 +30,53 @@ CREATE TABLE IF NOT EXISTS products_equity (
     structured_params TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (product_id) REFERENCES products (product_id) ON DELETE CASCADE
 );
+-- Commodity book extension (sibling of products_equity).
+--
+-- Market data lives in futures_product / futures_contract / futures_daily_eod.
+-- This table is the trade-catalog side: one row per book product (typically one
+-- futures tenor). Multi-tenor strip / calendar = many trade_legs → many products,
+-- not one JSON blob. structured_params stays for listed combos / exotics later.
+--
+-- Convention:
+--   products.asset_kind = 'COMMODITY'
+--   products.underlying_id = product_code (e.g. CL)
+--   product_id e.g. FUT_OUTRIGHT_CL_CLU6
+--   contract_ticker = Massive/CME ticker used in futures_daily_eod (e.g. CLU6)
+CREATE TABLE IF NOT EXISTS products_commodity (
+    product_id TEXT PRIMARY KEY,
+    instrument_type TEXT NOT NULL,
+    -- e.g. commodity_futures_outright; later calendar/strip package or option_on_future
+    product_code TEXT NOT NULL,
+    -- CL / GC / SI / NG — joins futures_product / universe_instrument.provider_symbol
+    contract_ticker TEXT,
+    -- CLU6; NULL only for multi-leg package products defined in structured_params
+    contract_month TEXT,
+    -- optional display / parse aid (e.g. U6, 2026-09)
+    settlement_date TEXT,
+    -- copy from futures_contract; products.expiry_date should match when set
+    multiplier REAL,
+    -- NULL → use products.contract_size
+    tick_size REAL,
+    tick_value REAL,
+    -- Option-on-future fields (NULL for linear outright)
+    option_type TEXT CHECK (
+        option_type IS NULL
+        OR option_type IN ('call', 'put')
+    ),
+    strike REAL,
+    exercise_style TEXT,
+    option_ticker TEXT,
+    underlying_contract_ticker TEXT,
+    -- futures underlier for an option-on-future (e.g. CLU6)
+    structured_params TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY (product_id) REFERENCES products (product_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_products_commodity_product_code
+    ON products_commodity (product_code);
+CREATE INDEX IF NOT EXISTS idx_products_commodity_contract_ticker
+    ON products_commodity (contract_ticker);
+CREATE INDEX IF NOT EXISTS idx_products_commodity_instrument_type
+    ON products_commodity (instrument_type);
 CREATE TABLE IF NOT EXISTS trades (
     trade_id TEXT PRIMARY KEY,
     portfolio_id TEXT NOT NULL,

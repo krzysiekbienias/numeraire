@@ -51,6 +51,26 @@ class ProductEquityAdmin(ReadOnlyAdmin):
     search_fields = ('product__product_id',)
 
 
+@admin.register(models.ProductCommodity)
+class ProductCommodityAdmin(ReadOnlyAdmin):
+    list_display = (
+        'product',
+        'instrument_type',
+        'product_code',
+        'contract_ticker',
+        'settlement_date',
+        'option_type',
+        'strike',
+    )
+    list_filter = ('instrument_type', 'product_code', 'option_type')
+    search_fields = (
+        'product__product_id',
+        'product_code',
+        'contract_ticker',
+        'option_ticker',
+    )
+
+
 @admin.register(models.TradeLeg)
 class TradeLegAdmin(ReadOnlyAdmin):
     list_display = (
