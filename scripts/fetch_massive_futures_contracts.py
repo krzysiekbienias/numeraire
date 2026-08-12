@@ -1,4 +1,4 @@
-ok #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Fetch Massive/Polygon listed futures contracts into SQLite `futures_contract`.
 
