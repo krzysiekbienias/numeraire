@@ -35,6 +35,11 @@ from journal.curves import (
     load_curve_snapshot,
     nearest_curve_as_of,
 )
+from journal.commodity_curves import (
+    list_futures_curve_as_of,
+    list_futures_product_codes,
+    load_commodity_curve_bundle,
+)
 from journal.exposure import (
     list_exposure_as_of,
     list_exposure_portfolios,
@@ -822,6 +827,72 @@ class CurveView(TemplateView):
                     'latest_curve_as_of': None,
                     'latest_mtm_as_of': None,
                     'lag_days': None,
+                }
+            )
+        return context
+
+
+class CommodityCurveView(TemplateView):
+    """Futures settlement term structure — history of strips + selected day highlight."""
+
+    template_name = 'journal/commodity_curve_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            product_codes = list_futures_product_codes()
+            requested = self.request.GET.get('product_code', '').strip().upper()
+            product_code = requested if requested in product_codes else (
+                product_codes[0] if product_codes else None
+            )
+
+            available_as_of = list_futures_curve_as_of(product_code) if product_code else []
+            as_of = _parse_as_of(self.request.GET.get('as_of', ''), available_as_of)
+            if as_of is None and available_as_of:
+                as_of = available_as_of[0]
+
+            requested_ticker = self.request.GET.get('ticker', '').strip().upper()
+            bundle = (
+                load_commodity_curve_bundle(
+                    product_code,
+                    as_of,
+                    ticker=requested_ticker or None,
+                )
+                if product_code and as_of
+                else None
+            )
+            selected_points = bundle['strip_rows'] if bundle else []
+
+            context.update(
+                {
+                    'product_codes': product_codes,
+                    'product_code': product_code,
+                    'as_of': as_of,
+                    'available_as_of': available_as_of,
+                    'ticker': bundle['ticker'] if bundle else None,
+                    'tickers': bundle['tickers'] if bundle else [],
+                    'bundle': bundle,
+                    'curve_payload': bundle,
+                    'strip_rows': selected_points,
+                    'first_as_of': available_as_of[-1] if available_as_of else None,
+                    'latest_as_of': available_as_of[0] if available_as_of else None,
+                }
+            )
+        except OperationalError as exc:
+            context['db_error'] = str(exc)
+            context.update(
+                {
+                    'product_codes': [],
+                    'product_code': None,
+                    'as_of': None,
+                    'available_as_of': [],
+                    'ticker': None,
+                    'tickers': [],
+                    'bundle': None,
+                    'curve_payload': None,
+                    'strip_rows': [],
+                    'first_as_of': None,
+                    'latest_as_of': None,
                 }
             )
         return context

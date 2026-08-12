@@ -46,6 +46,10 @@
            class="{% if request.resolver_match.url_name == 'curves' %}active{% endif %}">
           <i class="bi bi-bezier2"></i> Curves
         </a>
+        <a href="{% url 'journal:commodity_curves' %}"
+           class="{% if request.resolver_match.url_name == 'commodity_curves' %}active{% endif %}">
+          <i class="bi bi-graph-up-arrow"></i> Commodity curves
+        </a>
         <a href="{% url 'journal:exposure' %}"
            class="{% if request.resolver_match.url_name == 'exposure' %}active{% endif %}">
           <i class="bi bi-activity"></i> Exposure

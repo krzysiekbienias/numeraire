@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% load journal_fmt %}
+
+{% block title %}Commodity curves{% endblock %}
+{% block page_title %}Commodity curves{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    {% if product_code and as_of %}
+      3D settlement field for <strong>{{ product_code }}</strong>
+      · day <strong>{{ as_of|date:"Y-m-d" }}</strong>
+      {% if ticker %}· tenor <strong>{{ ticker }}</strong>{% endif %}
+    {% else %}
+      Rotate the history × tenor surface; pick a day for the strip and a ticker for its path
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if product_codes %}
+    <form method="get" action="{% url 'journal:commodity_curves' %}" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_product_code">product</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_product_code" name="product_code"
+              onchange="this.form.submit()" style="min-width:6rem">
+        {% for code in product_codes %}
+          <option value="{{ code }}" {% if product_code == code %}selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+      {% if available_as_of %}
+        <label class="nj-asof-label" for="id_as_of">as_of</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+                onchange="this.form.submit()">
+          {% for d in available_as_of %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      {% if tickers %}
+        <label class="nj-asof-label" for="id_ticker">tenor</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_ticker" name="ticker"
+                onchange="this.form.submit()" style="min-width:7rem">
+          {% for t in tickers %}
+            <option value="{{ t }}" {% if ticker == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% elif not product_code or not curve_payload %}
+    <div class="nj-empty">No futures settlement strips in the database yet.</div>
+  {% else %}
+
+  <div class="alert alert-secondary py-2 small mb-3" role="status">
+    <strong>{{ product_code }}</strong>
+    · cloud <strong>{{ curve_payload.cloud|length }}</strong> pts
+    over <strong>{{ curve_payload.cloud_days }}</strong> session{{ curve_payload.cloud_days|pluralize }}
+    · gold = strip @ <strong>{{ as_of|date:"Y-m-d" }}</strong>
+    · cyan = history of <strong>{{ ticker }}</strong>
+    {% if first_as_of and latest_as_of %}
+      · full coverage {{ first_as_of|date:"Y-m-d" }} → {{ latest_as_of|date:"Y-m-d" }}
+      ({{ available_as_of|length }} days)
+    {% endif %}
+    · drag to rotate · scroll to zoom
+  </div>
+
+  <div class="nj-panel mb-3">
+    <div class="nj-panel-head">
+      <h2>3D term structure</h2>
+      <span class="small text-secondary">X = τ · Y = history · Z = settle</span>
+    </div>
+    <div class="nj-panel-body">
+      {{ curve_payload|json_script:"commodity-curve-data" }}
+      <div id="commodity-curve-3d" class="nj-chart nj-chart-3d" style="height:520px"></div>
+      <p class="small text-secondary mb-0 mt-2">
+        Grey cloud = recent settlement field.
+        <span style="color:#fbbf24">Gold line</span> = all tenors on the selected day (strip).
+        <span style="color:#22d3ee">Cyan line</span> = selected contract through history.
+      </p>
+    </div>
+  </div>
+
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-head">
+      <h2>Strip @ {{ as_of|date:"Y-m-d" }}</h2>
+      <span class="small text-secondary">settlement_price</span>
+    </div>
+    <div class="nj-panel-body">
+      {% if strip_rows %}
+        <div class="nj-scroll-table">
+          <table class="table table-sm mb-0 nj-compact-table">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Expiry</th>
+                <th class="nj-num">τ (y)</th>
+                <th class="nj-num">Settle</th>
+                <th class="nj-num">Close</th>
+                <th class="nj-num">Volume</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in strip_rows %}
+                <tr {% if row.ticker == ticker %}class="table-active"{% endif %}>
+                  <td><code>{{ row.ticker }}</code></td>
+                  <td>{{ row.expiry|default:"—" }}</td>
+                  <td class="nj-num">{% if row.tau != None %}{{ row.tau|floatformat:3 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{{ row.settle|nj_num:4 }}</td>
+                  <td class="nj-num">{% if row.close != None %}{{ row.close|nj_num:4 }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{% if row.volume != None %}{{ row.volume|nj_num:0 }}{% else %}—{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="nj-empty">No settlement points for this session.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  {% if curve_payload %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+        const raw = document.getElementById('commodity-curve-data');
+        const el = document.getElementById('commodity-curve-3d');
+        if (!raw || !el) return;
+        const payload = JSON.parse(raw.textContent);
+
+        const cloud = (payload.cloud || []).map((p) => [p.tau, p.y, p.settle, p.as_of, p.ticker]);
+        const strip = (payload.strip || [])
+          .filter((p) => p.tau != null)
+          .sort((a, b) => a.tau - b.tau)
+          .map((p) => [p.tau, p.y, p.settle, p.as_of, p.ticker]);
+        const tenor = (payload.tenor_path || [])
+          .slice()
+          .sort((a, b) => (a.as_of < b.as_of ? -1 : 1))
+          .map((p) => [p.tau, p.y, p.settle, p.as_of, p.ticker]);
+
+        const settles = cloud.map((p) => p[2]).filter((v) => v != null);
+        const vmin = settles.length ? Math.min.apply(null, settles) : 0;
+        const vmax = settles.length ? Math.max.apply(null, settles) : 1;
+
+        const chart = echarts.init(el, null, { renderer: 'canvas' });
+        chart.setOption({
+          tooltip: {
+            formatter: (params) => {
+              const d = params.data || [];
+              return [
+                `<strong>${d[4] || ''}</strong>`,
+                d[3] ? `as_of: ${d[3]}` : null,
+                d[0] != null ? `τ: ${Number(d[0]).toFixed(3)}y` : null,
+                d[2] != null ? `settle: ${Number(d[2]).toFixed(4)}` : null,
+              ].filter(Boolean).join('<br/>');
+            },
+          },
+          visualMap: {
+            show: true,
+            min: vmin,
+            max: vmax,
+            dimension: 2,
+            seriesIndex: 0,
+            inRange: {
+              color: ['#334155', '#64748b', '#94a3b8'],
+            },
+            textStyle: { color: '#94a3b8' },
+            right: 8,
+            top: 'middle',
+            calculable: true,
+            text: ['settle', ''],
+          },
+          legend: {
+            data: ['field', 'strip @ day', 'tenor history'],
+            textStyle: { color: '#94a3b8' },
+            top: 0,
+          },
+          xAxis3D: {
+            type: 'value',
+            name: 'τ (years)',
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+            min: 0,
+          },
+          yAxis3D: {
+            type: 'value',
+            name: 'history (y)',
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+          },
+          zAxis3D: {
+            type: 'value',
+            name: 'settle',
+            nameTextStyle: { color: '#94a3b8' },
+            axisLabel: { color: '#94a3b8' },
+            scale: true,
+          },
+          grid3D: {
+            boxWidth: 120,
+            boxDepth: 100,
+            boxHeight: 70,
+            viewControl: {
+              projection: 'perspective',
+              autoRotate: false,
+              distance: 200,
+              alpha: 28,
+              beta: 42,
+            },
+            light: {
+              main: { intensity: 1.1, shadow: false },
+              ambient: { intensity: 0.45 },
+            },
+          },
+          series: [
+            {
+              name: 'field',
+              type: 'scatter3D',
+              data: cloud,
+              symbolSize: 3.5,
+              itemStyle: { opacity: 0.55 },
+              zlevel: 1,
+            },
+            {
+              name: 'strip @ day',
+              type: 'line3D',
+              data: strip,
+              lineStyle: { width: 5, color: '#fbbf24' },
+              zlevel: 3,
+            },
+            {
+              name: 'strip @ day',
+              type: 'scatter3D',
+              data: strip,
+              symbolSize: 10,
+              itemStyle: { color: '#fbbf24', opacity: 1 },
+              zlevel: 4,
+            },
+            {
+              name: 'tenor history',
+              type: 'line3D',
+              data: tenor,
+              lineStyle: { width: 4, color: '#22d3ee' },
+              zlevel: 3,
+            },
+            {
+              name: 'tenor history',
+              type: 'scatter3D',
+              data: tenor,
+              symbolSize: 8,
+              itemStyle: { color: '#22d3ee', opacity: 1 },
+              zlevel: 4,
+            },
+          ],
+        });
+        window.addEventListener('resize', () => chart.resize());
+      })();
+    </script>
+  {% endif %}
+{% endblock %}
