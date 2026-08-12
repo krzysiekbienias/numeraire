@@ -26,6 +26,44 @@ python3 scripts/fetch_massive_futures_products.py
 Default filter: `asset_sub_class` in `energy,metals`, `type=single`. Uses `POLYGON_API_KEY`.
 Does not write `universe_instrument` — seed that separately for products you actually ingest.
 
+### Commodity universe scope
+
+Controlled underliers for futures ingest (default CL / GC / SI / NG):
+
+```bash
+python3 scripts/seed_universe_commodity_futures.py --dry-run
+python3 scripts/seed_universe_commodity_futures.py
+```
+
+Config: [`configs/universe_commodity_futures.json`](../configs/universe_commodity_futures.json).
+Extend the JSON when you want more products in scope.
+
+### Futures contract strip (next ingest step)
+
+`futures_contract` stores listed contract tickers per (`product_code`, `listing_as_of`), analogous
+to `option_contract`. Daily job (C++): Contracts API → this table → session aggs → `futures_daily_eod`.
+
+Local probe / backfill (Python, universe commodity scope):
+
+```bash
+python3 scripts/fetch_massive_futures_contracts.py --as-of 2026-08-12 --dry-run
+python3 scripts/fetch_massive_futures_contracts.py --as-of 2026-08-12
+```
+
+Session marks into `futures_daily_eod` (Python backfill; default sleep 0 for Starter+):
+
+```bash
+# T-1 risk / official settle — prefer aggs (has session_end_date + settlement_price)
+python3 scripts/fetch_massive_futures_daily_eod.py \
+  --as-of 2026-08-11 --listing-as-of 2026-08-12 --source aggs
+
+# Current delayed marks (Futures Starter+); not a historical settle API
+python3 scripts/fetch_massive_futures_daily_eod.py --as-of 2026-08-12 --source snapshot
+
+# Range backfill (monthly contract snapshots + one ranged 1session pull per ticker)
+python3 scripts/backfill_massive_futures_eod_range.py --from 2025-01-01 --to 2026-08-11
+```
+
 ## Cron (two jobs)
 
 ```bash

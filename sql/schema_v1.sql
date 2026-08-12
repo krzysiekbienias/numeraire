@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS universe_instrument (
     UNIQUE (provider_symbol, asset_class)
 );
 CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_equity ON universe_instrument (is_active, ingest_equity_eod);
-CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_futures ON universe_instrument (is_active, ingest_futures_eod);
+-- idx_universe_instrument_active_futures is created in ApplySchemaPatches after
+-- ingest_futures_* columns exist on upgraded DBs (CREATE TABLE IF NOT EXISTS cannot add them).
 CREATE INDEX IF NOT EXISTS idx_universe_instrument_data_vendor ON universe_instrument (data_vendor, is_active);
 -- ---------------------------------------------------------------------------
 -- Explicit scope for `daily_market_prep.sh` (not derived from `trade_legs`).
@@ -320,6 +321,44 @@ CREATE TABLE IF NOT EXISTS futures_product (
 CREATE INDEX IF NOT EXISTS idx_futures_product_asset_sub_class ON futures_product (asset_sub_class);
 CREATE INDEX IF NOT EXISTS idx_futures_product_sector ON futures_product (sector);
 CREATE INDEX IF NOT EXISTS idx_futures_product_trading_venue ON futures_product (trading_venue);
+-- Listed futures contracts for a product on a snapshot day (Massive `GET /futures/v1/contracts`).
+--
+-- Parallel to `option_contract`: discover which contract tickers exist / are active as-of
+-- `listing_as_of`, then fetch session bars into `futures_daily_eod` for those tickers.
+--
+-- `listing_as_of` — `date` query param / point-in-time catalog day (not the session OHLC date;
+--     session bars use `futures_daily_eod.as_of` = provider `session_end_date`).
+-- `ticker` — contract id used by aggs (e.g. CLH26, GCJ5).
+-- `product_code` — joins to `futures_product` / `universe_instrument.provider_symbol`.
+CREATE TABLE IF NOT EXISTS futures_contract (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    listing_as_of TEXT NOT NULL,
+    product_code TEXT NOT NULL,
+    name TEXT,
+    active INTEGER CHECK (active IS NULL OR active IN (0, 1)),
+    type TEXT,
+    trading_venue TEXT,
+    group_code TEXT,
+    first_trade_date TEXT,
+    last_trade_date TEXT,
+    settlement_date TEXT,
+    days_to_maturity INTEGER,
+    trade_tick_size REAL,
+    settlement_tick_size REAL,
+    spread_tick_size REAL,
+    min_order_quantity INTEGER,
+    max_order_quantity INTEGER,
+    source TEXT NOT NULL,
+    ingested_at TEXT NOT NULL,
+    UNIQUE (ticker, listing_as_of)
+);
+CREATE INDEX IF NOT EXISTS idx_futures_contract_product_listing
+    ON futures_contract (product_code, listing_as_of);
+CREATE INDEX IF NOT EXISTS idx_futures_contract_listing_active
+    ON futures_contract (listing_as_of, active);
+CREATE INDEX IF NOT EXISTS idx_futures_contract_product_settlement
+    ON futures_contract (product_code, listing_as_of, settlement_date);
 -- Option contract definitions from provider reference (e.g. Polygon `v3/reference/options/contracts`).
 --
 -- `listing_as_of` — parametr `as_of` w zapytaniu: dzień kalendarzowy snapshotu łańcucha / katalogu
