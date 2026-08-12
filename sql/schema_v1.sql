@@ -58,8 +58,11 @@ CREATE INDEX IF NOT EXISTS idx_trade_legs_product_id ON trade_legs (product_id);
 -- `instrument_id` — canonical key in Numeraire (align with `products.underlying_id` when possible).
 -- `provider_symbol` — symbol passed to the ingest API (Polygon ticker, `I:NDX`, `C:EURUSD`, …).
 -- `data_vendor` — primary vendor for this instrument's market data (not everything is Polygon).
--- Ingest scope: `is_active` + per-pipeline flags (`ingest_equity_eod`, `ingest_index_eod`, …).
+-- Ingest scope: `is_active` + per-pipeline flags (`ingest_equity_eod`, `ingest_index_eod`,
+-- `ingest_futures_product`, `ingest_futures_eod`, …).
 -- No FK to `equity_daily_eod` / `products` — joins by convention on ticker / underlying_id.
+-- Commodity futures: `asset_class='COMMODITY'`, `provider_symbol` = Massive product_code (e.g. CL);
+-- rich product specs live in `futures_product`, session bars in `futures_daily_eod`.
 CREATE TABLE IF NOT EXISTS universe_instrument (
     instrument_id TEXT PRIMARY KEY,
     provider_symbol TEXT NOT NULL,
@@ -84,6 +87,8 @@ CREATE TABLE IF NOT EXISTS universe_instrument (
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     ingest_equity_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_equity_eod IN (0, 1)),
     ingest_index_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_index_eod IN (0, 1)),
+    ingest_futures_product INTEGER NOT NULL DEFAULT 0 CHECK (ingest_futures_product IN (0, 1)),
+    ingest_futures_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_futures_eod IN (0, 1)),
     ingest_priority INTEGER NOT NULL DEFAULT 100,
     notes TEXT,
     created_at TEXT,
@@ -91,6 +96,7 @@ CREATE TABLE IF NOT EXISTS universe_instrument (
     UNIQUE (provider_symbol, asset_class)
 );
 CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_equity ON universe_instrument (is_active, ingest_equity_eod);
+CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_futures ON universe_instrument (is_active, ingest_futures_eod);
 CREATE INDEX IF NOT EXISTS idx_universe_instrument_data_vendor ON universe_instrument (data_vendor, is_active);
 -- ---------------------------------------------------------------------------
 -- Explicit scope for `daily_market_prep.sh` (not derived from `trade_legs`).
@@ -122,6 +128,8 @@ CREATE TABLE IF NOT EXISTS market_data_prep_scope (
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     ingest_index_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_index_eod IN (0, 1)),
     ingest_equity_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_equity_eod IN (0, 1)),
+    ingest_futures_product INTEGER NOT NULL DEFAULT 0 CHECK (ingest_futures_product IN (0, 1)),
+    ingest_futures_eod INTEGER NOT NULL DEFAULT 0 CHECK (ingest_futures_eod IN (0, 1)),
     ingest_option_contracts INTEGER NOT NULL DEFAULT 0 CHECK (ingest_option_contracts IN (0, 1)),
     build_option_universe INTEGER NOT NULL DEFAULT 0 CHECK (build_option_universe IN (0, 1)),
     fetch_option_daily_price_eod INTEGER NOT NULL DEFAULT 0 CHECK (fetch_option_daily_price_eod IN (0, 1)),
@@ -241,6 +249,77 @@ CREATE TABLE IF NOT EXISTS index_daily_eod (
     UNIQUE (ticker, as_of, timespan, adjusted)
 );
 CREATE INDEX IF NOT EXISTS idx_index_daily_eod_ticker_as_of ON index_daily_eod (ticker, as_of);
+-- End-of-day OHLC for listed futures (Massive/Polygon `GET /futures/v1/aggs/{ticker}`,
+-- resolution `1session`). Linear commodity / index / rates futures underliers — not options-on-futures.
+--
+-- Diff vs `equity_daily_eod` / `index_daily_eod`:
+--   No split `adjusted`. Prefer `settlement_price` for curve / swap marks when present;
+--   `close` is last trade in the session. `product_code` is optional denorm (e.g. CL from CLH26)
+--   for strip queries. Provider contract id may appear as `ticker` or `name` in reference APIs;
+--   aggs use `ticker` (e.g. GCJ5, CLH26) — store that here.
+--
+-- Time semantics:
+--   `as_of` — futures session end / trading date (`session_end_date` from provider).
+--   `provider_timestamp_utc_ms` — `window_start` converted ns → ms (audit trail).
+--   `ingested_at` — when this row was written to SQLite (UTC ISO-8601 recommended).
+--   Default `session_calendar` is America/Chicago (CME Globex); override per venue if needed.
+CREATE TABLE IF NOT EXISTS futures_daily_eod (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    product_code TEXT,
+    as_of TEXT NOT NULL,
+    session_calendar TEXT NOT NULL DEFAULT 'America/Chicago',
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    settlement_price REAL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    volume REAL,
+    dollar_volume REAL,
+    vwap REAL,
+    trade_count INTEGER,
+    source TEXT NOT NULL,
+    timespan TEXT NOT NULL DEFAULT '1session',
+    provider_timestamp_utc_ms INTEGER,
+    ingested_at TEXT NOT NULL,
+    UNIQUE (ticker, as_of, timespan)
+);
+CREATE INDEX IF NOT EXISTS idx_futures_daily_eod_ticker_as_of ON futures_daily_eod (ticker, as_of);
+CREATE INDEX IF NOT EXISTS idx_futures_daily_eod_product_as_of ON futures_daily_eod (product_code, as_of);
+-- Futures product catalog (Massive/Polygon `GET /futures/v1/products`).
+--
+-- Static-ish product specs for linear futures underliers (CL, GC, …): asset_sub_class / sector /
+-- venue / unit of measure. Current vendor snapshot keyed by `product_code` (v1; point-in-time
+-- history can be added later via as_of uniqueness).
+--
+-- Join path for analytics:
+--   universe_instrument.provider_symbol (COMMODITY) ≈ futures_product.product_code
+--   futures_daily_eod.product_code = futures_product.product_code
+CREATE TABLE IF NOT EXISTS futures_product (
+    product_code TEXT PRIMARY KEY,
+    name TEXT,
+    asset_class TEXT,
+    asset_sub_class TEXT,
+    sector TEXT,
+    sub_sector TEXT,
+    trading_venue TEXT,
+    type TEXT,
+    trade_currency_code TEXT,
+    settlement_currency_code TEXT,
+    settlement_method TEXT,
+    settlement_type TEXT,
+    price_quotation TEXT,
+    unit_of_measure TEXT,
+    unit_of_measure_qty REAL,
+    as_of TEXT,
+    last_updated TEXT,
+    source TEXT NOT NULL,
+    ingested_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_futures_product_asset_sub_class ON futures_product (asset_sub_class);
+CREATE INDEX IF NOT EXISTS idx_futures_product_sector ON futures_product (sector);
+CREATE INDEX IF NOT EXISTS idx_futures_product_trading_venue ON futures_product (trading_venue);
 -- Option contract definitions from provider reference (e.g. Polygon `v3/reference/options/contracts`).
 --
 -- `listing_as_of` — parametr `as_of` w zapytaniu: dzień kalendarzowy snapshotu łańcucha / katalogu

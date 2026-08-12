@@ -281,6 +281,40 @@ class IndexDailyEod(models.Model):
         return f'{self.ticker} @ {self.as_of}'
 
 
+class FuturesDailyEod(models.Model):
+    """Daily / session OHLC for listed futures (Massive ``/futures/v1/aggs``)."""
+
+    id = models.AutoField(primary_key=True)
+    ticker = models.TextField()
+    product_code = models.TextField(blank=True, null=True)
+    as_of = models.DateField()
+    session_calendar = models.TextField()
+    open = models.FloatField()
+    high = models.FloatField()
+    low = models.FloatField()
+    close = models.FloatField()
+    settlement_price = models.FloatField(blank=True, null=True)
+    currency = models.TextField()
+    volume = models.FloatField(blank=True, null=True)
+    dollar_volume = models.FloatField(blank=True, null=True)
+    vwap = models.FloatField(blank=True, null=True)
+    trade_count = models.IntegerField(blank=True, null=True)
+    source = models.TextField()
+    timespan = models.TextField()
+    provider_timestamp_utc_ms = models.BigIntegerField(blank=True, null=True)
+    ingested_at = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = 'futures_daily_eod'
+        ordering = ['-as_of', 'ticker']
+        verbose_name = 'Futures daily EOD'
+        verbose_name_plural = 'Futures daily EOD'
+
+    def __str__(self):
+        return f'{self.ticker} @ {self.as_of}'
+
+
 class DiscountCurveEod(models.Model):
     pk = models.CompositePrimaryKey('curve_id', 'as_of')
     curve_id = models.TextField()
@@ -386,6 +420,8 @@ class UniverseInstrument(models.Model):
     is_active = models.IntegerField()
     ingest_equity_eod = models.IntegerField()
     ingest_index_eod = models.IntegerField()
+    ingest_futures_product = models.IntegerField()
+    ingest_futures_eod = models.IntegerField()
     ingest_priority = models.IntegerField()
     notes = models.TextField(blank=True, null=True)
     created_at = models.TextField(blank=True, null=True)
@@ -399,6 +435,40 @@ class UniverseInstrument(models.Model):
 
     def __str__(self):
         return self.instrument_id
+
+
+class FuturesProduct(models.Model):
+    """Futures product catalog (Massive ``/futures/v1/products``)."""
+
+    product_code = models.TextField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+    asset_class = models.TextField(blank=True, null=True)
+    asset_sub_class = models.TextField(blank=True, null=True)
+    sector = models.TextField(blank=True, null=True)
+    sub_sector = models.TextField(blank=True, null=True)
+    trading_venue = models.TextField(blank=True, null=True)
+    type = models.TextField(blank=True, null=True)
+    trade_currency_code = models.TextField(blank=True, null=True)
+    settlement_currency_code = models.TextField(blank=True, null=True)
+    settlement_method = models.TextField(blank=True, null=True)
+    settlement_type = models.TextField(blank=True, null=True)
+    price_quotation = models.TextField(blank=True, null=True)
+    unit_of_measure = models.TextField(blank=True, null=True)
+    unit_of_measure_qty = models.FloatField(blank=True, null=True)
+    as_of = models.TextField(blank=True, null=True)
+    last_updated = models.TextField(blank=True, null=True)
+    source = models.TextField()
+    ingested_at = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = 'futures_product'
+        ordering = ['product_code']
+        verbose_name = 'Futures product'
+        verbose_name_plural = 'Futures products'
+
+    def __str__(self):
+        return self.product_code
 
 
 class CatalogInstrumentType(models.Model):

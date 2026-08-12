@@ -13,6 +13,19 @@ There are **no separate `apply_*.sql` migration scripts** for curve tables — e
 
 - **`seed_market_data_prep_scope.sql`** — scope rows for `daily_market_prep.sh` (GOOGL, NVDA, AAPL, MSFT, NDX).
 
+## Local futures product catalog (Massive)
+
+Commodity product specs (`futures_product`) are loaded with a one-shot Python helper
+(same pattern as FRED par yields) — not via `dev_main` / deploy:
+
+```bash
+python3 scripts/fetch_massive_futures_products.py --dry-run
+python3 scripts/fetch_massive_futures_products.py
+```
+
+Default filter: `asset_sub_class` in `energy,metals`, `type=single`. Uses `POLYGON_API_KEY`.
+Does not write `universe_instrument` — seed that separately for products you actually ingest.
+
 ## Cron (two jobs)
 
 ```bash

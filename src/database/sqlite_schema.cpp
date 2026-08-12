@@ -20,6 +20,22 @@ void ApplySchemaPatches(SQLite::Database& db) {
             db.exec("ALTER TABLE par_curve_point_eod ADD COLUMN quoted_price REAL");
         }
     }
+    // Commodity / futures ingest flags on existing universe + prep scope tables.
+    // `CREATE TABLE IF NOT EXISTS` in schema_v1.sql cannot add these to DBs that predate them.
+    for (const char* table : {"universe_instrument", "market_data_prep_scope"}) {
+        const std::string has_column_sql =
+                std::string{"SELECT 1 FROM pragma_table_info('"} + table + "') WHERE name = ?";
+        for (const char* column : {"ingest_futures_product", "ingest_futures_eod"}) {
+            SQLite::Statement has_column(db, has_column_sql);
+            has_column.bind(1, column);
+            if (!has_column.executeStep()) {
+                db.exec(std::string{"ALTER TABLE "} + table + " ADD COLUMN " + column +
+                        " INTEGER NOT NULL DEFAULT 0 CHECK (" + column + " IN (0, 1))");
+            }
+        }
+    }
+    db.exec("CREATE INDEX IF NOT EXISTS idx_universe_instrument_active_futures "
+            "ON universe_instrument (is_active, ingest_futures_eod)");
     // Rename legacy PFE column (was mislabeled pfe_97; stores the 97.5% quantile).
     for (const char* table : {"trade_leg_exposure_eod", "trade_leg_exposure_eod_archive"}) {
         SQLite::Statement has_old(

@@ -126,6 +126,27 @@ class IndexDailyEodAdmin(ReadOnlyAdmin):
     date_hierarchy = 'as_of'
 
 
+@admin.register(models.FuturesDailyEod)
+class FuturesDailyEodAdmin(ReadOnlyAdmin):
+    list_display = (
+        'ticker', 'product_code', 'as_of', 'open', 'high', 'low', 'close',
+        'settlement_price', 'volume', 'source',
+    )
+    list_filter = ('product_code', 'source', 'timespan')
+    search_fields = ('ticker', 'product_code')
+    date_hierarchy = 'as_of'
+
+
+@admin.register(models.FuturesProduct)
+class FuturesProductAdmin(ReadOnlyAdmin):
+    list_display = (
+        'product_code', 'name', 'asset_class', 'asset_sub_class', 'sector',
+        'trading_venue', 'unit_of_measure', 'unit_of_measure_qty', 'type',
+    )
+    list_filter = ('asset_class', 'asset_sub_class', 'sector', 'trading_venue', 'type')
+    search_fields = ('product_code', 'name')
+
+
 # DiscountCurveEod / DiscountCurvePointEod are deliberately absent: their primary key
 # is composite (curve_id, as_of[, tenor]) and admin rejects such models outright
 # ("cannot be registered with admin"). They are read through the ORM in the curve views,
