@@ -32,12 +32,28 @@
             {% endfor %}
           </select>
         </label>
+        {% if spec and spec.has_contract_ticker %}
+          <label class="nj-quant-type">
+            <span>Underlier</span>
+            <select class="form-select form-select-sm" name="underlying" onchange="this.form.submit()">
+              <option value="">— pick —</option>
+              {% for value, label in underlier_options %}
+                <option value="{{ value }}" {% if selected_underlying == value %}selected{% endif %}>
+                  {{ label }}
+                </option>
+              {% endfor %}
+            </select>
+          </label>
+        {% endif %}
         <noscript><button type="submit" class="btn btn-sm btn-outline-secondary">Show fields</button></noscript>
       </form>
       {% if spec %}
         <span class="nj-booking-pick-tag">
           <span class="nj-sym">{{ spec.code }}</span>
           <code>{{ spec.instrument_type }}</code>
+          {% if selected_underlying %}
+            <span class="nj-sym">{{ selected_underlying }}</span>
+          {% endif %}
         </span>
       {% endif %}
     </div>
@@ -74,7 +90,11 @@
         </div>
         <div class="nj-panel-body">
           <div class="nj-form-grid">
-            {% include 'partials/form_field.html' with field=form.underlying_id %}
+            {% if not spec.has_contract_ticker %}
+              {% include 'partials/form_field.html' with field=form.underlying_id %}
+            {% else %}
+              {{ form.underlying_id }}
+            {% endif %}
             {% if form.contract_ticker %}
               {% include 'partials/form_field.html' with field=form.contract_ticker %}
             {% endif %}
@@ -88,7 +108,46 @@
               {% include 'partials/form_field.html' with field=form.expiry_date %}
             {% endif %}
             {% include 'partials/form_field.html' with field=form.settlement %}
-            {% include 'partials/form_field.html' with field=form.contract_size %}
+            {% if futures_size_hint %}
+              <div class="nj-form-field{% if form.contract_size.errors %} has-error{% endif %}">
+                <div class="nj-form-label-row">
+                  <label for="{{ form.contract_size.id_for_label }}">{{ form.contract_size.label }}</label>
+                  <button type="button"
+                          class="nj-size-hint-btn"
+                          id="nj-size-hint-toggle"
+                          aria-expanded="false"
+                          aria-controls="nj-size-hint-panel"
+                          title="Show contract size cheat sheet">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <div class="nj-size-hint-panel" id="nj-size-hint-panel" hidden>
+                  <div class="nj-size-hint-title">
+                    {{ futures_size_hint.product_code }} · {{ futures_size_hint.name }}
+                  </div>
+                  <div><strong>{{ futures_size_hint.summary }}</strong></div>
+                  {% if futures_size_hint.quotation %}
+                    <div>{{ futures_size_hint.quotation }}</div>
+                  {% endif %}
+                  {% if futures_size_hint.settlement %}
+                    <div>settlement: {{ futures_size_hint.settlement }}</div>
+                  {% endif %}
+                </div>
+                {{ form.contract_size }}
+                {% for error in form.contract_size.errors %}
+                  <span class="nj-form-error">{{ error }}</span>
+                {% endfor %}
+                <span class="nj-form-help">
+                  Catalog: <strong>{{ futures_size_hint.summary }}</strong>
+                  {% if futures_size_hint.quotation %}
+                    · {{ futures_size_hint.quotation }}
+                  {% endif %}
+                  · click ⓘ for details
+                </span>
+              </div>
+            {% else %}
+              {% include 'partials/form_field.html' with field=form.contract_size %}
+            {% endif %}
             {% include 'partials/form_field.html' with field=form.currency %}
           </div>
         </div>
@@ -128,7 +187,7 @@
         <button type="submit" class="btn btn-primary">
           <i class="bi bi-plus-lg"></i> Book trade
         </button>
-        <a class="btn btn-outline-secondary" href="{% url 'journal:trade_new' %}?instrument={{ spec.code }}">
+        <a class="btn btn-outline-secondary" href="{% url 'journal:trade_new' %}?instrument={{ spec.code }}{% if selected_underlying %}&underlying={{ selected_underlying }}{% endif %}">
           Reset
         </a>
         <span class="small text-secondary">
@@ -145,4 +204,26 @@
     </datalist>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    const btn = document.getElementById('nj-size-hint-toggle');
+    const panel = document.getElementById('nj-size-hint-panel');
+    if (!btn || !panel) return;
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const open = panel.hasAttribute('hidden');
+      if (open) {
+        panel.removeAttribute('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+      } else {
+        panel.setAttribute('hidden', '');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  })();
+</script>
 {% endblock %}

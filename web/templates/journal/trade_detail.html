@@ -102,9 +102,11 @@
                 <td class="small">
                   {% if row.equity %}
                     {{ row.equity.instrument_type }}{% if row.equity.option_type %}/{{ row.equity.option_type|slice:":1"|upper }}{% endif %}
+                  {% elif row.commodity %}
+                    {{ row.commodity.instrument_type }}{% if row.commodity.contract_ticker %} · {{ row.commodity.contract_ticker }}{% endif %}
                   {% else %}—{% endif %}
                 </td>
-                <td class="nj-num">{% if row.equity and row.equity.strike != None %}{{ row.equity.strike|nj_num:2 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{% if row.equity and row.equity.strike != None %}{{ row.equity.strike|nj_num:2 }}{% elif row.commodity and row.commodity.strike != None %}{{ row.commodity.strike|nj_num:2 }}{% else %}—{% endif %}</td>
                 <td class="small">{% if row.leg.product.expiry_date %}{{ row.leg.product.expiry_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
                 <td class="nj-num">{{ row.leg.quantity|floatformat:0 }}</td>
                 <td class="nj-num">{{ row.leg.product.contract_size|floatformat:0 }}</td>
@@ -128,12 +130,19 @@
     </div>
   </div>
 
-  {# Market (vertical) + charts #}
+  {# Market (vertical) + charts — DB market bundle and/or MTM snap #}
   <div class="nj-panel mt-2">
     <div class="nj-panel-head">
       <h2>Market</h2>
       <span class="small text-secondary">
-        {% if primary_market and primary_market.mtm %}
+        {% if primary_market and primary_market.futures_market %}
+          {{ primary_market.futures_market.ticker }}
+          · futures EOD
+          @ {{ primary_market.futures_market.as_of|date:"Y-m-d" }}
+          {% if primary_market.futures_market.stale %}
+            <span class="text-warning">· lag {{ primary_market.futures_market.lag_days }}d</span>
+          {% endif %}
+        {% elif primary_market and primary_market.mtm %}
           {{ primary_market.underlier }}
           · {{ primary_market.mtm.pricing_engine }}
           {% if primary_market.remark_flags %}
@@ -142,55 +151,93 @@
         {% elif as_of %}
           @ {{ as_of|date:"Y-m-d" }}
         {% else %}
-          no mark
+          no market day
         {% endif %}
       </span>
     </div>
     <div class="nj-panel-body">
-      {% if primary_market and primary_market.mtm %}
+      {% if primary_market and primary_market.futures_market or primary_market and primary_market.mtm %}
         <div class="nj-market-split">
           <dl class="nj-kv">
-            <div>
-              <dt>Spot</dt>
-              <dd>{{ primary_market.mtm.underlying_spot|nj_num:4 }}</dd>
-            </div>
-            {% if not trade_is_linear %}
+            {% if primary_market.futures_market %}
+              {% with fm=primary_market.futures_market %}
+                <div>
+                  <dt>Settle</dt>
+                  <dd>{% if fm.settlement_price != None %}{{ fm.settlement_price|nj_num:4 }}{% else %}—{% endif %}</dd>
+                </div>
+                <div>
+                  <dt>Close</dt>
+                  <dd>{{ fm.close|nj_num:4 }}</dd>
+                </div>
+                <div>
+                  <dt>Open</dt>
+                  <dd>{{ fm.open|nj_num:4 }}</dd>
+                </div>
+                <div>
+                  <dt>High</dt>
+                  <dd>{{ fm.high|nj_num:4 }}</dd>
+                </div>
+                <div>
+                  <dt>Low</dt>
+                  <dd>{{ fm.low|nj_num:4 }}</dd>
+                </div>
+                <div>
+                  <dt>Volume</dt>
+                  <dd>{% if fm.volume != None %}{{ fm.volume|floatformat:0 }}{% else %}—{% endif %}</dd>
+                </div>
+                <div class="nj-kv-note">
+                  <dt>Session</dt>
+                  <dd class="small">
+                    {{ fm.ticker }}
+                    · {{ fm.session_calendar }}
+                    · {{ fm.source }}
+                    {% if fm.currency %} · {{ fm.currency }}{% endif %}
+                  </dd>
+                </div>
+              {% endwith %}
+            {% else %}
               <div>
-                <dt>IV</dt>
-                <dd>{{ primary_market.mtm.implied_vol_used|floatformat:4 }}</dd>
+                <dt>Spot</dt>
+                <dd>{{ primary_market.mtm.underlying_spot|nj_num:4 }}</dd>
               </div>
-            {% endif %}
-            <div>
-              <dt>r</dt>
-              <dd>{{ primary_market.mtm.risk_free_rate|floatformat:6 }}</dd>
-            </div>
-            <div>
-              <dt>q</dt>
-              <dd>{{ primary_market.mtm.dividend_yield|floatformat:6 }}</dd>
-            </div>
-            <div>
-              <dt>τ</dt>
-              <dd>{{ primary_market.mtm.years_to_maturity|floatformat:6 }}</dd>
-            </div>
-            <div>
-              <dt>DF(τ)</dt>
-              <dd>
-                {% if primary_market.curve_df %}
-                  {{ primary_market.curve_df.discount_factor|floatformat:6 }}
-                {% elif primary_market.flat_df != None %}
-                  {{ primary_market.flat_df|floatformat:6 }}
-                {% else %}—{% endif %}
-              </dd>
-            </div>
-            {% if primary_market.curve_df %}
-              <div class="nj-kv-note">
-                <dt>Curve</dt>
-                <dd class="small">
-                  {{ primary_market.curve_df.curve_id }}
-                  @ {{ primary_market.curve_df.curve_as_of|date:"Y-m-d" }}
-                  {% if primary_market.curve_df.stale %}<span class="text-warning"> lag</span>{% endif %}
+              {% if not trade_is_linear %}
+                <div>
+                  <dt>IV</dt>
+                  <dd>{{ primary_market.mtm.implied_vol_used|floatformat:4 }}</dd>
+                </div>
+              {% endif %}
+              <div>
+                <dt>r</dt>
+                <dd>{{ primary_market.mtm.risk_free_rate|floatformat:6 }}</dd>
+              </div>
+              <div>
+                <dt>q</dt>
+                <dd>{{ primary_market.mtm.dividend_yield|floatformat:6 }}</dd>
+              </div>
+              <div>
+                <dt>τ</dt>
+                <dd>{{ primary_market.mtm.years_to_maturity|floatformat:6 }}</dd>
+              </div>
+              <div>
+                <dt>DF(τ)</dt>
+                <dd>
+                  {% if primary_market.curve_df %}
+                    {{ primary_market.curve_df.discount_factor|floatformat:6 }}
+                  {% elif primary_market.flat_df != None %}
+                    {{ primary_market.flat_df|floatformat:6 }}
+                  {% else %}—{% endif %}
                 </dd>
               </div>
+              {% if primary_market.curve_df %}
+                <div class="nj-kv-note">
+                  <dt>Curve</dt>
+                  <dd class="small">
+                    {{ primary_market.curve_df.curve_id }}
+                    @ {{ primary_market.curve_df.curve_as_of|date:"Y-m-d" }}
+                    {% if primary_market.curve_df.stale %}<span class="text-warning"> lag</span>{% endif %}
+                  </dd>
+                </div>
+              {% endif %}
             {% endif %}
           </dl>
 
@@ -199,7 +246,7 @@
               {{ underlier_chart|json_script:"trade-underlier-chart" }}
               <div class="nj-chart-block">
                 <div class="nj-chart-label">
-                  <span>{{ underlier_chart_ticker }} close</span>
+                  <span>{{ underlier_chart_ticker }} {{ underlier_chart_label|default:"close" }}</span>
                   <span class="text-secondary">1Y · mark day dashed</span>
                 </div>
                 <div id="trade-underlier-chart-el" class="nj-chart nj-chart-sm"
@@ -220,7 +267,7 @@
           </div>
         </div>
 
-        {% if primary_market.alt_marks %}
+        {% if primary_market.mtm and primary_market.alt_marks %}
           <div class="nj-alt-marks mt-3">
             <div class="nj-chart-label mb-1">
               <span>Alternative pricing</span>
@@ -412,7 +459,7 @@
           </div>
         {% endif %}
       {% else %}
-        <div class="nj-empty">No market inputs for the selected as_of.</div>
+        <div class="nj-empty">No market data in the DB for the selected as_of (futures EOD / mark inputs).</div>
       {% endif %}
     </div>
   </div>
@@ -621,51 +668,49 @@
     </div>
   {% endif %}
 
-  {# History — scroll, not endless page #}
+  {# History — only once marks exist (PENDING / fresh booking has nothing useful here). #}
+  {% if mtm_history %}
   <div class="nj-panel mt-2">
     <div class="nj-panel-head">
       <h2>MTM history</h2>
       <span class="small text-secondary">
-        {% if mtm_history %}{{ mtm_history|length }} dates · click row to change as_of{% else %}none{% endif %}
+        {{ mtm_history|length }} dates · click row to change as_of
         · Θ shown as /day (model stores /yr)
       </span>
     </div>
     <div class="nj-panel-body tight">
-      {% if mtm_history %}
-        <div class="nj-scroll-table nj-scroll-table-lg">
-          <table class="table table-sm mb-0 nj-compact-table nj-clickable">
-            <thead>
-              <tr>
-                <th>as_of</th>
-                <th class="nj-num">PV</th>
-                <th class="nj-num">PnL day</th>
-                <th class="nj-num">PnL ince.</th>
-                <th class="nj-num">Δ</th>
-                <th class="nj-num">ν</th>
-                <th class="nj-num" title="θ_total / 365 · model is per calendar year">Θ/day</th>
+      <div class="nj-scroll-table nj-scroll-table-lg">
+        <table class="table table-sm mb-0 nj-compact-table nj-clickable">
+          <thead>
+            <tr>
+              <th>as_of</th>
+              <th class="nj-num">PV</th>
+              <th class="nj-num">PnL day</th>
+              <th class="nj-num">PnL ince.</th>
+              <th class="nj-num">Δ</th>
+              <th class="nj-num">ν</th>
+              <th class="nj-num" title="θ_total / 365 · model is per calendar year">Θ/day</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in mtm_history %}
+              <tr {% if as_of and row.as_of == as_of %}class="table-active"{% endif %}
+                  onclick="window.location='?as_of={{ row.as_of|date:'Y-m-d' }}'">
+                <td>{{ row.as_of|date:"Y-m-d" }}</td>
+                <td class="nj-num {% if row.pv_total < 0 %}nj-pnl-neg{% elif row.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.pv_total|nj_num:2 }}</td>
+                <td class="nj-num {% if row.pnl_daily != None and row.pnl_daily < 0 %}nj-pnl-neg{% elif row.pnl_daily != None and row.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.pnl_daily != None %}{{ row.pnl_daily|nj_num:2 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{% if row.pnl_inception != None %}{{ row.pnl_inception|nj_num:2 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{{ row.delta_total|nj_num:2 }}</td>
+                <td class="nj-num">{{ row.vega_total|nj_num:2 }}</td>
+                <td class="nj-num" title="{% if row.theta_total != None %}{{ row.theta_total|nj_num:2 }} /yr{% endif %}">{{ row.theta_total|nj_theta_day:2 }}</td>
               </tr>
-            </thead>
-            <tbody>
-              {% for row in mtm_history %}
-                <tr {% if as_of and row.as_of == as_of %}class="table-active"{% endif %}
-                    onclick="window.location='?as_of={{ row.as_of|date:'Y-m-d' }}'">
-                  <td>{{ row.as_of|date:"Y-m-d" }}</td>
-                  <td class="nj-num {% if row.pv_total < 0 %}nj-pnl-neg{% elif row.pv_total > 0 %}nj-pnl-pos{% endif %}">{{ row.pv_total|nj_num:2 }}</td>
-                  <td class="nj-num {% if row.pnl_daily != None and row.pnl_daily < 0 %}nj-pnl-neg{% elif row.pnl_daily != None and row.pnl_daily > 0 %}nj-pnl-pos{% endif %}">{% if row.pnl_daily != None %}{{ row.pnl_daily|nj_num:2 }}{% else %}—{% endif %}</td>
-                  <td class="nj-num">{% if row.pnl_inception != None %}{{ row.pnl_inception|nj_num:2 }}{% else %}—{% endif %}</td>
-                  <td class="nj-num">{{ row.delta_total|nj_num:2 }}</td>
-                  <td class="nj-num">{{ row.vega_total|nj_num:2 }}</td>
-                  <td class="nj-num" title="{% if row.theta_total != None %}{{ row.theta_total|nj_num:2 }} /yr{% endif %}">{{ row.theta_total|nj_theta_day:2 }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <div class="nj-empty">No MTM history.</div>
-      {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
+  {% endif %}
 
 </div>
 

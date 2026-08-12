@@ -126,21 +126,26 @@ class NewTradeForm(forms.Form):
         if not spec.has_contract_ticker:
             del self.fields['contract_ticker']
         else:
-            self.fields['contract_ticker'].choices = [('', '— pick underlier first —')] + list(
-                contract_choices or []
-            )
-            if not contract_choices:
+            # Underlier is chosen via a GET filter (see trade_new.html); keep it as a
+            # hidden POST field so clean()/bundle still see underlying_id.
+            self.fields['underlying_id'].widget = forms.HiddenInput()
+            self.fields['underlying_id'].help_text = ''
+            choices = list(contract_choices or [])
+            if choices:
+                self.fields['contract_ticker'].choices = [
+                    ('', f'— {len(choices)} tenors with EOD —')
+                ] + choices
                 self.fields['contract_ticker'].help_text = (
-                    'Pick an underlier above (reload) — needs futures_contract rows for that product.'
+                    'Tenors that have futures_daily_eod on the latest session for this underlier '
+                    '(not the full deferred listing).'
                 )
-            # Reload contract list when underlier changes (GET round-trip).
-            self.fields['underlying_id'].widget.attrs['onchange'] = (
-                "const u=new URL(window.location.href);"
-                "u.searchParams.set('instrument', this.form.instrument.value);"
-                "u.searchParams.set('underlying', this.value);"
-                "window.location=u;"
-            )
-
+            else:
+                self.fields['contract_ticker'].choices = [
+                    ('', '— pick underlier above first —')
+                ]
+                self.fields['contract_ticker'].help_text = (
+                    'Use the underlier filter above (page reloads). Needs futures_daily_eod rows.'
+                )
         self.fields['contract_size'].initial = spec.default_contract_size
         self.fields['settlement'].initial = spec.default_settlement
         self.fields['strategy_type'].initial = spec.strategy_type

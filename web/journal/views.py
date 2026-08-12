@@ -15,8 +15,10 @@ from django.views.generic import DetailView, ListView, TemplateView
 from journal.booking import (
     bookable_instruments,
     build_bundle,
+    commodity_product_code,
     delete_preview,
     futures_contract_choices,
+    futures_contract_size_hint,
     get_instrument,
     next_trade_id,
     portfolio_suggestions,
@@ -51,7 +53,12 @@ from journal.hypo_portfolio import build_hypo_lab_context, parse_instruments, pa
 from journal.quant_lab import build_quant_lab
 from journal.simulation_lab import build_simulation_lab
 from journal.inventory import is_priceable, pricing_notes
-from journal.market import list_underliers, resolve_underlier
+from journal.market import (
+    futures_close_series,
+    futures_market_bundle,
+    list_underliers,
+    resolve_underlier,
+)
 from journal.payoff import build_trade_payoff_chart
 from journal.models import (
     CatalogInstrumentType,
@@ -306,7 +313,18 @@ class TradeNewView(TemplateView):
 
     template_name = 'journal/trade_new.html'
 
-    def _context(self, spec, form, *, selected_underlying: str | None = None):
+    def _context(
+        self,
+        spec,
+        form,
+        *,
+        selected_underlying: str | None = None,
+        underlier_options: list | None = None,
+    ):
+        und = (selected_underlying or '').strip()
+        size_hint = None
+        if spec is not None and getattr(spec, 'has_contract_ticker', False) and und:
+            size_hint = futures_contract_size_hint(commodity_product_code(und))
         return {
             'instruments': bookable_instruments(),
             'spec': spec,
@@ -314,13 +332,18 @@ class TradeNewView(TemplateView):
             'preview_trade_id': next_trade_id() if spec is not None else None,
             'portfolio_options': portfolio_suggestions(),
             'strategy_options': strategy_suggestions(),
-            'selected_underlying': selected_underlying or '',
+            'selected_underlying': und,
+            'underlier_options': underlier_options or [],
+            'futures_size_hint': size_hint,
         }
 
     def _make_form(self, spec, data=None, *, selected_underlying: str | None = None):
         und = (selected_underlying or '').strip()
+        product_code = commodity_product_code(und) if und else ''
         contract_choices = (
-            futures_contract_choices(und) if spec is not None and spec.has_contract_ticker else []
+            futures_contract_choices(product_code)
+            if spec is not None and spec.has_contract_ticker and product_code
+            else []
         )
         initial = {'trade_date': date_cls.today()}
         if und:
@@ -338,9 +361,21 @@ class TradeNewView(TemplateView):
         spec = get_instrument(request.GET.get('instrument'))
         form = None
         selected_underlying = request.GET.get('underlying', '').strip()
-        if spec is not None:
+        if spec is not None and spec.has_contract_ticker and not selected_underlying:
+            # Do not pre-select the first underlier — that blocked onchange reload.
+            form = self._make_form(spec, selected_underlying='')
+        elif spec is not None:
             form = self._make_form(spec, selected_underlying=selected_underlying)
-        return self.render_to_response(self._context(spec, form, selected_underlying=selected_underlying))
+        return self.render_to_response(
+            self._context(
+                spec,
+                form,
+                selected_underlying=selected_underlying,
+                underlier_options=(
+                    underlier_choices(spec.underlier_asset_class) if spec is not None else []
+                ),
+            )
+        )
 
     def post(self, request, *args, **kwargs):
         spec = get_instrument(request.POST.get('instrument'))
@@ -352,7 +387,12 @@ class TradeNewView(TemplateView):
         form = self._make_form(spec, request.POST, selected_underlying=selected_underlying)
         if not form.is_valid():
             return self.render_to_response(
-                self._context(spec, form, selected_underlying=selected_underlying)
+                self._context(
+                    spec,
+                    form,
+                    selected_underlying=selected_underlying,
+                    underlier_options=underlier_choices(spec.underlier_asset_class),
+                )
             )
 
         trade_id = next_trade_id()
@@ -368,7 +408,12 @@ class TradeNewView(TemplateView):
         except OSError as exc:
             messages.error(request, f'Could not write the bundle file: {exc}')
             return self.render_to_response(
-                self._context(spec, form, selected_underlying=selected_underlying)
+                self._context(
+                    spec,
+                    form,
+                    selected_underlying=selected_underlying,
+                    underlier_options=underlier_choices(spec.underlier_asset_class),
+                )
             )
 
         result = run_import(bundle_path)
@@ -378,7 +423,12 @@ class TradeNewView(TemplateView):
             bundle_path.unlink(missing_ok=True)
             messages.error(request, result.message)
             return self.render_to_response(
-                self._context(spec, form, selected_underlying=selected_underlying)
+                self._context(
+                    spec,
+                    form,
+                    selected_underlying=selected_underlying,
+                    underlier_options=underlier_choices(spec.underlier_asset_class),
+                )
             )
 
         messages.success(
@@ -449,7 +499,9 @@ class TradeDetailView(DetailView):
         return Trade.objects.prefetch_related(
             Prefetch(
                 'legs',
-                queryset=TradeLeg.objects.select_related('product', 'product__equity'),
+                queryset=TradeLeg.objects.select_related(
+                    'product', 'product__equity', 'product__commodity'
+                ),
             )
         )
 
@@ -469,16 +521,20 @@ class TradeDetailView(DetailView):
         as_of = _parse_as_of(self.request.GET.get('as_of', ''), available_as_of)
         if as_of is None and available_as_of:
             as_of = available_as_of[0]
+        # Before the first mark, Market still needs a session day — use trade_date so
+        # Price booking can show the futures/equity bundle that will price the trade.
+        if as_of is None and trade.trade_date is not None:
+            as_of = trade.trade_date
 
         mtm_by_leg = {}
-        if as_of is not None:
+        if as_of is not None and available_as_of and as_of in available_as_of:
             for row in official_mtm().filter(trade=trade, as_of=as_of):
                 mtm_by_leg[row.leg_id] = row
 
         # Engines that priced the same leg for comparison only. Products covered by a
         # single engine produce nothing here, and the template then skips the panel.
         alt_marks_by_leg: dict[str, list] = {}
-        if as_of is not None:
+        if as_of is not None and mtm_by_leg:
             for row in TradeLegMtmEod.objects.filter(
                 trade=trade, as_of=as_of, is_official=False
             ).order_by('pricing_engine'):
@@ -497,6 +553,7 @@ class TradeDetailView(DetailView):
         market_rows = []
         for leg in legs:
             equity = getattr(leg.product, 'equity', None)
+            commodity = getattr(leg.product, 'commodity', None)
             mtm = mtm_by_leg.get(leg.leg_id)
             underlier = leg.product.underlying_id
             curve_df = None
@@ -504,11 +561,18 @@ class TradeDetailView(DetailView):
             if mtm is not None:
                 flat_df = discount_factor_from_zero(mtm.risk_free_rate, mtm.years_to_maturity)
                 curve_df = curve_discount_for_maturity(as_of, mtm.years_to_maturity)
+            futures_market = None
+            if commodity is not None and as_of is not None:
+                ticker = (commodity.contract_ticker or '').strip().upper()
+                if ticker:
+                    futures_market = futures_market_bundle(ticker, as_of)
             market_rows.append(
                 {
                     'leg': leg,
                     'equity': equity,
+                    'commodity': commodity,
                     'mtm': mtm,
+                    'futures_market': futures_market,
                     'alt_marks': alt_marks_by_leg.get(leg.leg_id, []),
                     'underlier': underlier,
                     'underlier_url_ticker': underlier,
@@ -523,8 +587,11 @@ class TradeDetailView(DetailView):
         )
         # Only a payoff that is linear in spot is vol-free. Anything we cannot classify
         # (digitals today) keeps the surface: they do depend on vol, they merely lack a
-        # what-if engine.
-        trade_is_linear = trade_caps.kind == 'linear'
+        # what-if engine. Commodity futures outrights are linear in the contract price.
+        trade_is_commodity = bool(market_rows) and all(
+            row.get('commodity') is not None for row in market_rows
+        )
+        trade_is_linear = trade_caps.kind == 'linear' or trade_is_commodity
 
         valuation = {}
         if as_of is not None and mtm_by_leg:
@@ -556,17 +623,31 @@ class TradeDetailView(DetailView):
         )
 
         # Charts: primary underlier close + trade PV path (chronological).
-        primary = next((r for r in market_rows if r['mtm'] is not None), market_rows[0] if market_rows else None)
+        primary = next(
+            (
+                r
+                for r in market_rows
+                if r['mtm'] is not None or r.get('futures_market') is not None
+            ),
+            market_rows[0] if market_rows else None,
+        )
         underlier_chart = []
         underlier_chart_ticker = None
+        underlier_chart_label = 'close'
         if primary is not None:
-            resolved = resolve_underlier(primary['underlier'])
-            if resolved is not None:
-                _kind, underlier_chart_ticker, bars_qs = resolved
-                underlier_chart = [
-                    {'date': d.isoformat(), 'close': close}
-                    for d, close in bars_qs.order_by('as_of').values_list('as_of', 'close')
-                ]
+            futures_mkt = primary.get('futures_market')
+            if futures_mkt is not None:
+                underlier_chart_ticker = futures_mkt['ticker']
+                underlier_chart = futures_close_series(futures_mkt['ticker'])
+                underlier_chart_label = 'settle'
+            else:
+                resolved = resolve_underlier(primary['underlier'])
+                if resolved is not None:
+                    _kind, underlier_chart_ticker, bars_qs = resolved
+                    underlier_chart = [
+                        {'date': d.isoformat(), 'close': close}
+                        for d, close in bars_qs.order_by('as_of').values_list('as_of', 'close')
+                    ]
 
         pv_chart = [
             {'date': row['as_of'].isoformat(), 'pv': row['pv_total'], 'pnl': row['pnl_daily']}
@@ -574,9 +655,10 @@ class TradeDetailView(DetailView):
         ]
 
         # Yield / DF pillars for the curve actually used on this mark day (may lag).
+        # Listed commodity futures mark off settle — rates curve is equity/forward noise here.
         curve_chart = []
         curve_meta = None
-        if as_of is not None:
+        if as_of is not None and not trade_is_commodity:
             picked = nearest_curve_as_of(as_of)
             if picked is not None:
                 cid, curve_as_of = picked
@@ -680,6 +762,7 @@ class TradeDetailView(DetailView):
                 'mtm_history': mtm_history,
                 'underlier_chart': underlier_chart,
                 'underlier_chart_ticker': underlier_chart_ticker,
+                'underlier_chart_label': underlier_chart_label,
                 'pv_chart': pv_chart,
                 'curve_chart': curve_chart,
                 'curve_meta': curve_meta,

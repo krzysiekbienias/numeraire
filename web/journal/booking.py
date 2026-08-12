@@ -32,6 +32,7 @@ from django.db.models import Q
 
 from journal.models import (
     FuturesContract,
+    FuturesDailyEod,
     FuturesProduct,
     Product,
     Trade,
@@ -236,23 +237,60 @@ def _latest_futures_listing_as_of(product_code: str) -> date | None:
     return raw
 
 
+def _latest_futures_eod_as_of(product_code: str) -> date | None:
+    raw = (
+        FuturesDailyEod.objects.filter(product_code=product_code.upper())
+        .order_by('-as_of')
+        .values_list('as_of', flat=True)
+        .first()
+    )
+    return raw
+
+
 def futures_contract_choices(product_code: str | None) -> list[tuple[str, str]]:
-    """Listed outright tickers for one commodity product_code (latest listing day)."""
+    """Bookable tenors for one product_code: those with a session bar on the latest EOD day.
+
+    Full `futures_contract` listings can be 100+ deferred contracts; the booking
+    dropdown only offers tickers that actually have `futures_daily_eod` marks for
+    the newest available session (typically ~10–30 liquid tenors).
+    """
     code = (product_code or '').strip().upper()
     if not code:
         return []
-    listing = _latest_futures_listing_as_of(code)
-    if listing is None:
+
+    eod_as_of = _latest_futures_eod_as_of(code)
+    if eod_as_of is None:
         return []
-    rows = (
-        FuturesContract.objects.filter(product_code=code, listing_as_of=listing)
-        .filter(Q(active=1) | Q(active__isnull=True))
-        .order_by('settlement_date', 'ticker')
-    )
+
+    eod_tickers = {
+        str(t).strip().upper()
+        for t in FuturesDailyEod.objects.filter(product_code=code, as_of=eod_as_of)
+        .order_by()
+        .values_list('ticker', flat=True)
+        if t
+    }
+    if not eod_tickers:
+        return []
+
+    listing = _latest_futures_listing_as_of(code)
+    meta_by_ticker: dict[str, FuturesContract] = {}
+    if listing is not None:
+        for row in FuturesContract.objects.filter(
+            product_code=code, listing_as_of=listing, ticker__in=eod_tickers
+        ):
+            meta_by_ticker[str(row.ticker).upper()] = row
+
+    # Preserve curve order: settlement_date when known, else ticker.
+    def sort_key(ticker: str) -> tuple:
+        meta = meta_by_ticker.get(ticker)
+        settle = (meta.settlement_date if meta is not None else None) or ''
+        return (settle, ticker)
+
     out: list[tuple[str, str]] = []
-    for row in rows:
-        settle = (row.settlement_date or '').strip() or '?'
-        out.append((row.ticker, f'{row.ticker} · settle {settle} · listing {listing}'))
+    for ticker in sorted(eod_tickers, key=sort_key):
+        meta = meta_by_ticker.get(ticker)
+        settle = (meta.settlement_date if meta is not None else None) or '?'
+        out.append((ticker, f'{ticker} · settle {settle} · EOD {eod_as_of}'))
     return out
 
 
@@ -260,13 +298,20 @@ def lookup_futures_contract(product_code: str, ticker: str) -> FuturesContract |
     code = product_code.strip().upper()
     tick = ticker.strip().upper()
     listing = _latest_futures_listing_as_of(code)
-    if listing is None:
-        return None
-    return (
-        FuturesContract.objects.filter(
-            product_code=code, ticker=tick, listing_as_of=listing
+    if listing is not None:
+        row = (
+            FuturesContract.objects.filter(
+                product_code=code, ticker=tick, listing_as_of=listing
+            )
+            .order_by()
+            .first()
         )
-        .order_by()
+        if row is not None:
+            return row
+    # Fall back: any listing row for this ticker (EOD-only tenors still need expiry).
+    return (
+        FuturesContract.objects.filter(product_code=code, ticker=tick)
+        .order_by('-listing_as_of')
         .first()
     )
 
@@ -280,6 +325,49 @@ def default_futures_multiplier(product_code: str) -> float | None:
     except (TypeError, ValueError):
         return None
     return qty if qty > 0 else None
+
+
+def futures_contract_size_hint(product_code: str | None) -> dict | None:
+    """Quick cheat-sheet for booking UI (multiplier / unit / quotation)."""
+    code = (product_code or '').strip().upper()
+    if not code:
+        return None
+    row = FuturesProduct.objects.filter(product_code=code).first()
+    if row is None:
+        return None
+    qty = None
+    if row.unit_of_measure_qty is not None:
+        try:
+            qty = float(row.unit_of_measure_qty)
+        except (TypeError, ValueError):
+            qty = None
+    unit = (row.unit_of_measure or '').strip() or '?'
+    name = (row.name or code).strip()
+    quote = (row.price_quotation or '').strip()
+    settle = (row.settlement_method or row.settlement_type or '').strip()
+    if qty is not None and qty == int(qty):
+        qty_disp = str(int(qty))
+    elif qty is not None:
+        qty_disp = f'{qty:g}'
+    else:
+        qty_disp = '?'
+    summary = f'1 contract = {qty_disp} {unit}'
+    lines = [summary]
+    if quote:
+        lines.append(quote)
+    if settle:
+        lines.append(f'settlement: {settle}')
+    return {
+        'product_code': code,
+        'name': name,
+        'unit': unit,
+        'qty': qty,
+        'qty_display': qty_disp,
+        'quotation': quote,
+        'settlement': settle,
+        'summary': summary,
+        'popover': ' · '.join(lines),
+    }
 
 
 def commodity_product_code(underlying_id: str) -> str:
