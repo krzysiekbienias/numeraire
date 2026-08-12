@@ -30,7 +30,17 @@ urlpatterns = [
     path('surfaces/', views.SurfaceView.as_view(), name='surfaces'),
     path('inventory/', views.InventoryView.as_view(), name='inventory'),
     path('lab/', views.QuantLabHubView.as_view(), name='quant_lab'),
-    path('lab/pricing/', views.QuantLabView.as_view(), name='quant_lab_pricing'),
+    path('lab/pricing/', views.QuantLabPricingHubView.as_view(), name='quant_lab_pricing'),
+    path(
+        'lab/pricing/equities/',
+        views.QuantLabEquitiesView.as_view(),
+        name='quant_lab_pricing_equities',
+    ),
+    path(
+        'lab/pricing/commodities/',
+        views.QuantLabCommoditiesView.as_view(),
+        name='quant_lab_pricing_commodities',
+    ),
     path('lab/hypo/', views.HypoPortfolioView.as_view(), name='hypo_portfolio'),
     path('lab/hypo/price/', views.HypoPortfolioPriceView.as_view(), name='hypo_portfolio_price'),
     path('lab/simulation/', views.SimulationLabView.as_view(), name='simulation_lab'),

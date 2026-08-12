@@ -53,6 +53,12 @@ std::vector<PathPricingLegEntry> LoadPathPricingLegsForPortfolio(
         database::RequireTradeLiveForMtm(bundle.trade);
 
         for (const database::TradeLegCatalogRow& row : bundle.legs) {
+            if (row.commodity.has_value()) {
+                // Path / EE engines calibrate equity-style factors; listed futures are EOD settle marks.
+                throw ValidationError("LoadPathPricingLegsForPortfolio: commodity futures legs are not "
+                                      "supported in path pricing yet (leg " +
+                                      row.leg.leg_id + ").");
+            }
             const schedule::Date expiry_date = RequireLegExpiryDate(row);
 
             const std::string& underlying = row.equity.underlying_id;
@@ -66,8 +72,7 @@ std::vector<PathPricingLegEntry> LoadPathPricingLegsForPortfolio(
             database::RequirePositiveContractSize(row.equity.contract_size, row.leg.leg_id);
             database::RequirePositiveQuantity(row.leg.quantity, row.leg.leg_id);
 
-            auto product = products::ProductFactory::MakeFromEquityCatalog(row.product, row.equity,
-                                                                           &bundle.trade);
+            auto product = products::ProductFactory::MakeFromCatalogLeg(row, &bundle.trade);
             if (product == nullptr) {
                 throw ValidationError("LoadPathPricingLegsForPortfolio: ProductFactory returned null for leg " +
                                       row.leg.leg_id);

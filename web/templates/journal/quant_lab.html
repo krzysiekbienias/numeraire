@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% load journal_fmt %}
 
-{% block title %}Pricing · Quant Lab{% endblock %}
-{% block page_title %}Pricing &amp; sensitivities{% endblock %}
+{% block title %}{{ asset_class_label }} · Pricing · Quant Lab{% endblock %}
+{% block page_title %}{{ asset_class_label }} pricing{% endblock %}
 {% block page_subtitle %}
 <p class="muted">
   <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+  · <a href="{% url 'journal:quant_lab_pricing' %}">Pricing</a>
+  · {{ asset_class_label|lower }}
   · not persisted
-  · C++ pricers
 </p>
 {% endblock %}
 
@@ -50,7 +51,7 @@
       </div>
 
       {% if instrument_selected and fields %}
-      <form method="get" action="{% url 'journal:quant_lab_pricing' %}" class="nj-quant-lab-form"
+      <form method="get" action="{% url pricing_url_name %}" class="nj-quant-lab-form"
         id="quant-lab-params-form">
         <input type="hidden" name="instrument" value="{{ meta.instrument_code }}">
         <div class="nj-quant-params">
@@ -91,7 +92,7 @@
           <div class="nj-quant-actions">
             <button type="submit" class="btn btn-sm btn-primary">Price</button>
             <a class="btn btn-sm btn-outline-secondary"
-              href="{% url 'journal:quant_lab_pricing' %}?instrument={{ meta.instrument_code }}">Reset</a>
+              href="{% url pricing_url_name %}?instrument={{ meta.instrument_code }}">Reset</a>
           </div>
         </div>
       </form>
@@ -107,7 +108,9 @@
       <div class="nj-quant-edu-head">
         <strong>{% if is_eu_vanilla %}Analytic formulas{% else %}Formulas{% endif %}</strong>
         <span class="small text-secondary">
-          {% if meta.lab_product == 'forward' %}
+          {% if meta.lab_product == 'futures_outright' %}
+          listed futures outright
+          {% elif meta.lab_product == 'forward' %}
           long equity forward
           {% else %}
           {% if params.is_call %}call{% else %}put{% endif %}
@@ -118,8 +121,10 @@
       </div>
       <div class="nj-quant-edu-grid">
         <div class="nj-quant-edu-block">
-          <span class="nj-quant-edu-label">Payoff at \(T\)</span>
-          {% if meta.lab_product == 'forward' %}
+          <span class="nj-quant-edu-label">Payoff / mark</span>
+          {% if meta.lab_product == 'futures_outright' %}
+          <div class="nj-quant-edu-math">\[F_{\mathrm{settle}}\]</div>
+          {% elif meta.lab_product == 'forward' %}
           <div class="nj-quant-edu-math">\[S_T - K\]</div>
           {% elif meta.lab_product == 'aon' %}
           {% if params.is_call %}
@@ -141,7 +146,9 @@
               </div>
               <div class="nj-quant-edu-block">
                 <span class="nj-quant-edu-label">
-                  {% if meta.lab_product == 'forward' %}
+                  {% if meta.lab_product == 'futures_outright' %}
+                  Futures mark
+                  {% elif meta.lab_product == 'forward' %}
                   Forward price
                   {% elif meta.lab_product == 'aon' %}
                   Asset-or-nothing price
@@ -153,7 +160,14 @@
                   Black–Scholes price
                   {% endif %}
                 </span>
-                {% if meta.lab_product == 'forward' %}
+                {% if meta.lab_product == 'futures_outright' %}
+                <div class="nj-quant-edu-math">\[
+                  V = F,\qquad \Delta = 1
+                  \]</div>
+                <p class="nj-quant-edu-note mb-0">
+                  Listed outright (<code>analytic_futures_outright</code>) · daily margining · no DF / vol
+                </p>
+                {% elif meta.lab_product == 'forward' %}
                 <div class="nj-quant-edu-math">\[
                   V = S_0 e^{-q\tau} - K e^{-r\tau}
                   \]</div>
@@ -635,10 +649,10 @@
           instrumentSel.addEventListener('change', () => {
             const code = instrumentSel.value;
             if (!code) {
-              window.location = "{% url 'journal:quant_lab_pricing' %}";
+              window.location = "{% url pricing_url_name %}";
               return;
             }
-            window.location = "{% url 'journal:quant_lab_pricing' %}?instrument=" + encodeURIComponent(code);
+            window.location = "{% url pricing_url_name %}?instrument=" + encodeURIComponent(code);
           });
         }
 

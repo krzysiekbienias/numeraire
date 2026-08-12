@@ -1,6 +1,7 @@
 #include <numeraire/products/product_factory.hpp>
 
 #include <numeraire/enums/exercise_style.hpp>
+#include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
@@ -275,6 +276,66 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
             break;
     }
     throw ValidationError("internal: unhandled equity instrument kind");
+}
+
+std::unique_ptr<core::IProduct> ProductFactory::MakeFromCommodityCatalog(
+        const database::ProductDto& product, const database::ProductEquityDto& header,
+        const database::ProductCommodityDto& commodity,
+        const database::TradeHeaderDto* trade_header) {
+    EnsureMatchingProductIds(product.product_id, header.product_id);
+    if (product.product_id != commodity.product_id) {
+        throw ValidationError("product_id mismatch between ProductDto and ProductCommodityDto");
+    }
+    if (numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(header.asset_kind)) != "commodity") {
+        throw ValidationError("ProductFactory::MakeFromCommodityCatalog expects asset_kind COMMODITY");
+    }
+
+    const std::string type_key = NormalizeInstrumentTypeKey(
+            product.catalog_instrument_type.value_or(commodity.instrument_type));
+    if (type_key != "commodityfuturesoutright" && type_key != "futuresoutright") {
+        throw ValidationError("unsupported commodity instrument_type: " +
+                              (product.catalog_instrument_type.has_value()
+                                       ? *product.catalog_instrument_type
+                                       : commodity.instrument_type));
+    }
+
+    const std::string ticker = numeraire::utils::TrimCopy(commodity.contract_ticker);
+    if (ticker.empty()) {
+        throw ValidationError("commodity futures outright requires contract_ticker");
+    }
+    const std::string product_code = numeraire::utils::TrimCopy(commodity.product_code);
+    if (product_code.empty()) {
+        throw ValidationError("commodity futures outright requires product_code");
+    }
+    if (trade_header == nullptr || numeraire::utils::TrimCopy(trade_header->trade_date).empty()) {
+        throw ValidationError("commodity futures outright requires trades.trade_date");
+    }
+    const schedule::Date trade_date = schedule::ParseIsoDate(trade_header->trade_date);
+
+    std::optional<std::string> expiry_iso = header.expiry_date;
+    if ((!expiry_iso.has_value() || numeraire::utils::TrimCopy(*expiry_iso).empty()) &&
+        commodity.settlement_date.has_value()) {
+        expiry_iso = commodity.settlement_date;
+    }
+    if (!expiry_iso.has_value() || numeraire::utils::TrimCopy(*expiry_iso).empty()) {
+        throw ValidationError("commodity futures outright requires expiry_date or settlement_date");
+    }
+    const schedule::Date expiry = schedule::ParseIsoDate(*expiry_iso);
+    if (schedule::ToQuantLibDate(expiry) < schedule::ToQuantLibDate(trade_date)) {
+        throw ValidationError("product " + product.product_id + ": expiry_date " + *expiry_iso +
+                              " must be on or after trade_date " +
+                              numeraire::utils::TrimCopy(trade_header->trade_date));
+    }
+
+    return std::make_unique<CommodityFuturesOutrightProduct>(ticker, product_code, trade_date, expiry);
+}
+
+std::unique_ptr<core::IProduct> ProductFactory::MakeFromCatalogLeg(
+        const database::TradeLegCatalogRow& row, const database::TradeHeaderDto* trade_header) {
+    if (row.commodity.has_value()) {
+        return MakeFromCommodityCatalog(row.product, row.equity, *row.commodity, trade_header);
+    }
+    return MakeFromEquityCatalog(row.product, row.equity, trade_header);
 }
 
 }  // namespace numeraire::products

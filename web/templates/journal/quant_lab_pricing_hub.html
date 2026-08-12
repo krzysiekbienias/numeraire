@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Pricing · Quant Lab{% endblock %}
+{% block page_title %}Pricing &amp; sensitivities{% endblock %}
+{% block page_subtitle %}
+<p class="muted">
+  <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+  · pick an asset class
+</p>
+{% endblock %}
+
+{% block content %}
+<div class="nj-lab-hub nj-lab-hub-asset">
+  <a class="nj-lab-tile" href="{% url 'journal:quant_lab_pricing_equities' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/new-york-ex.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Asset class</span>
+      <h2>Equities</h2>
+      <p>Vanilla · binary · equity forward · CRR / MC · educational formulas</p>
+      <span class="nj-lab-tile-cta">Open equities <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+
+  <a class="nj-lab-tile" href="{% url 'journal:quant_lab_pricing_commodities' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/ship.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Asset class</span>
+      <h2>Commodities</h2>
+      <p>Listed futures outright · mark = settle · no discount curve</p>
+      <span class="nj-lab-tile-cta">Open commodities <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+</div>
+<p class="nj-lab-hub-note small text-secondary mt-3 mb-0">
+  Tile photos: drop Unsplash downloads on
+  <code>web/static/img/lab-equities.jpg</code> and
+  <code>web/static/img/lab-commodities.jpg</code> anytime.
+</p>
+{% endblock %}

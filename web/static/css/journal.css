@@ -1530,6 +1530,11 @@ body {
   .nj-lab-hub {
     grid-template-columns: repeat(4, 1fr);
   }
+
+  .nj-lab-hub-asset {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 56rem;
+  }
 }
 
 @media (max-width: 1100px) {

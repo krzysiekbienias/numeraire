@@ -1195,16 +1195,30 @@ class QuantLabHubView(TemplateView):
     template_name = 'journal/quant_lab_hub.html'
 
 
+class QuantLabPricingHubView(TemplateView):
+    """Pricing gate — Equities vs Commodities asset class."""
+
+    template_name = 'journal/quant_lab_pricing_hub.html'
+
+
 class QuantLabView(TemplateView):
-    """Pricing & sensitivities sandbox (C++ pricers). Nothing persisted."""
+    """Pricing & sensitivities sandbox (C++ / analytic). Nothing persisted."""
 
     template_name = 'journal/quant_lab.html'
+    asset_class = 'equity'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(build_quant_lab(self.request.GET))
+        context.update(build_quant_lab(self.request.GET, asset_class=self.asset_class))
         return context
 
+
+class QuantLabEquitiesView(QuantLabView):
+    asset_class = 'equity'
+
+
+class QuantLabCommoditiesView(QuantLabView):
+    asset_class = 'commodity'
 
 class HypoPortfolioView(TemplateView):
     """Hypo portfolio sandbox — market path × toy legs; state in browser localStorage."""

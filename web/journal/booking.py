@@ -539,7 +539,7 @@ def build_bundle(
             'currency': cleaned['currency'],
             'contract_size': cleaned['contract_size'],
             'day_count': 'Actual365Fixed',
-            'calendar': 'America/Chicago' if spec.extension == 'commodity' else 'UnitedStates',
+            'calendar': 'UnitedStates',
         },
         'trade': {
             'trade_id': trade_id,

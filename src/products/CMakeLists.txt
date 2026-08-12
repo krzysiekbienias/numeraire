@@ -1,4 +1,5 @@
 add_library(numeraire_products STATIC
+        commodity_futures_outright_product.cpp
         equity_asset_or_nothing_product.cpp
         equity_cash_or_nothing_product.cpp
         equity_forward_product.cpp

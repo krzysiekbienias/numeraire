@@ -28,11 +28,14 @@ constexpr const char* kSelectCatalogSql =
         "tl.leg_id, tl.product_id, tl.direction, tl.quantity, tl.execution_price, tl.commission, "
         "p.product_id, p.asset_kind, p.underlying_id, p.expiry_date, p.settlement, p.currency, "
         "p.contract_size, p.day_count, p.calendar, "
-        "e.option_type, e.strike, e.instrument_type, e.exercise_style, e.structured_params "
+        "e.option_type, e.strike, e.instrument_type, e.exercise_style, e.structured_params, "
+        "c.product_id, c.instrument_type, c.product_code, c.contract_ticker, c.settlement_date, "
+        "c.multiplier, c.structured_params "
         "FROM trades t "
         "INNER JOIN trade_legs tl ON tl.trade_id = t.trade_id "
         "INNER JOIN products p ON p.product_id = tl.product_id "
         "LEFT JOIN products_equity e ON e.product_id = tl.product_id "
+        "LEFT JOIN products_commodity c ON c.product_id = tl.product_id "
         "WHERE t.trade_id = ? "
         "ORDER BY tl.leg_id";
 
@@ -64,6 +67,13 @@ enum class CatalogCol : int {
     kInstrumentType = 24,
     kExerciseStyle = 25,
     kStructuredParams = 26,
+    kCommodityProductId = 27,
+    kCommodityInstrumentType = 28,
+    kCommodityProductCode = 29,
+    kCommodityContractTicker = 30,
+    kCommoditySettlementDate = 31,
+    kCommodityMultiplier = 32,
+    kCommodityStructuredParams = 33,
 };
 
 [[nodiscard]] std::string NormalizeEnumKey(std::string s) {
@@ -227,6 +237,45 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
         }
     }
 
+    // Commodity extension: coalesce instrument_type / structured_params when equity facet absent.
+    if (!ColumnIsNull(st, static_cast<int>(CatalogCol::kCommodityProductId))) {
+        ProductCommodityDto commodity{};
+        commodity.product_id = ColumnText(st, static_cast<int>(CatalogCol::kCommodityProductId));
+        commodity.instrument_type =
+                utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCommodityInstrumentType)));
+        commodity.product_code =
+                utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCommodityProductCode)));
+        commodity.contract_ticker =
+                utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCommodityContractTicker)));
+        if (ColumnIsNull(st, static_cast<int>(CatalogCol::kCommoditySettlementDate))) {
+            commodity.settlement_date = std::nullopt;
+        } else {
+            const std::string sd =
+                    utils::TrimCopy(ColumnText(st, static_cast<int>(CatalogCol::kCommoditySettlementDate)));
+            commodity.settlement_date = sd.empty() ? std::nullopt : std::optional<std::string>(sd);
+        }
+        if (ColumnIsNull(st, static_cast<int>(CatalogCol::kCommodityMultiplier))) {
+            commodity.multiplier = std::nullopt;
+        } else {
+            commodity.multiplier =
+                    st.getColumn(static_cast<int>(CatalogCol::kCommodityMultiplier)).getDouble();
+        }
+        row.commodity = std::move(commodity);
+
+        if (!row.product.catalog_instrument_type.has_value() &&
+            !row.commodity->instrument_type.empty()) {
+            row.product.catalog_instrument_type = row.commodity->instrument_type;
+        }
+        if ((row.product.attributes_json.empty() || row.product.attributes_json == "{}") &&
+            !ColumnIsNull(st, static_cast<int>(CatalogCol::kCommodityStructuredParams))) {
+            const std::string csp =
+                    ColumnText(st, static_cast<int>(CatalogCol::kCommodityStructuredParams));
+            if (!csp.empty()) {
+                row.product.attributes_json = csp;
+            }
+        }
+    }
+
     row.equity.product_id = pid;
     row.equity.asset_kind = ColumnText(st, static_cast<int>(CatalogCol::kAssetKind));
     row.equity.underlying_id = ColumnText(st, static_cast<int>(CatalogCol::kUnderlyingId));
@@ -260,7 +309,13 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
     if (calendar_txt.empty()) {
         row.equity.calendar = std::nullopt;
     } else {
-        row.equity.calendar = ParseCalendar(calendar_txt);
+        try {
+            row.equity.calendar = ParseCalendar(calendar_txt);
+        } catch (const PersistenceError&) {
+            // Session TZ strings (e.g. America/Chicago) are not CalendarType; pricing
+            // does not require the enum — leave unset rather than failing the catalog load.
+            row.equity.calendar = std::nullopt;
+        }
     }
 
     return row;

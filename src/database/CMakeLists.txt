@@ -1,5 +1,6 @@
 add_library(numeraire_database STATIC
         equity_daily_eod_lookup.cpp
+        futures_daily_eod_lookup.cpp
         underlying_daily_closes.cpp
         index_daily_eod_lookup.cpp
         leg_mtm_pnl.cpp

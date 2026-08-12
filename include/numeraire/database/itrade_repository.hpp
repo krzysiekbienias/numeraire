@@ -2,16 +2,20 @@
 
 #include <numeraire/database/dtos.hpp>
 
+#include <optional>
 #include <string_view>
 #include <vector>
 
 namespace numeraire::database {
 
 /// One leg with the catalog rows needed to build `core::IProduct` for that leg.
+/// Exactly one of equity-only vs commodity extension is expected per product:
+/// `commodity` is set when `products_commodity` joins; equity options leave it empty.
 struct TradeLegCatalogRow {
     TradeLegDto leg;
     ProductDto product;
     ProductEquityDto equity;
+    std::optional<ProductCommodityDto> commodity;
 };
 
 /// Trade header plus all legs (each with product + equity facet for pricing).

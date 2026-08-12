@@ -23,9 +23,9 @@ struct ProductDto {
     std::string attributes_json;
 };
 
-/// Equity-backed row keyed by the same `product_id` (underlying, expiry,
-/// settlement, conventions). `asset_kind` mirrors the DB discriminator (e.g.
-/// `"EQUITY"`) until a typed hierarchy ships.
+/// Shared `products` row fields used when building `IProduct` (equity *or*
+/// commodity). Historically named for the equity JOIN; commodity legs reuse it
+/// for parent-table columns (`asset_kind`, `underlying_id`, `contract_size`, …).
 struct ProductEquityDto {
     std::string product_id;
     std::string asset_kind;
@@ -36,6 +36,16 @@ struct ProductEquityDto {
     std::optional<SettlementType> settlement;
     std::optional<DayCount> day_count;
     std::optional<CalendarType> calendar;
+};
+
+/// Book extension for commodity futures (`products_commodity`).
+struct ProductCommodityDto {
+    std::string product_id;
+    std::string instrument_type;
+    std::string product_code;
+    std::string contract_ticker;
+    std::optional<std::string> settlement_date;
+    std::optional<double> multiplier;
 };
 
 /// Trade header (`trades` row). `trade_date` / timestamps may be empty strings

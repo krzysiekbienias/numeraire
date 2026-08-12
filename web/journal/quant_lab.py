@@ -24,6 +24,7 @@ _VALUE_CHART_POINTS = 81
 # Full legend; UI filters to symbols needed by the selected instrument (+ greeks when priced).
 SYMBOL_LEGEND = (
     ('S', 'Spot', 'Underlying price used for pricing / chart mark'),
+    ('F', 'Settle', 'Listed futures settlement / mark price (pv_unit = F)'),
     ('K', 'Strike', 'Option strike (or forward delivery price)'),
     ('σ', 'IV', 'Black–Scholes implied volatility (absolute, e.g. 0.25 = 25%)'),
     ('r', 'Rate', 'Continuous risk-free rate'),
@@ -176,7 +177,36 @@ _FORWARD_FIELDS = (
     _FIELD_TAU,
 )
 
+_FIELD_FUTURES = {
+    'name': 'spot',
+    'sym': 'F',
+    'label': 'Settle',
+    'kind': 'number',
+    'step': '0.01',
+}
+_FUTURES_FIELDS = (_FIELD_FUTURES,)
+
 _GREEK_SYMS = frozenset({'Δ', 'Γ', 'ν', 'Θ', 'ρ'})
+
+# Quant Lab asset-class filters (catalog codes).
+_EQUITY_CODES = frozenset({'PVE', 'PVA', 'AON', 'BIN', 'DIG', 'ASN', 'BRR', 'EQF'})
+_COMMODITY_CODES = frozenset({'EFT', 'FUT'})
+_EQUITY_MAPS = frozenset({
+    'plain_vanilla_european_option',
+    'plain_vanilla_american_option',
+    'asset_or_nothing',
+    'binary_cash_or_nothing',
+    'digital',
+    'cash_or_nothing',
+    'asian_option',
+    'barrier_option',
+    'equity_forward',
+})
+_COMMODITY_MAPS = frozenset({
+    'listed_future',
+    'commodity_futures_outright',
+    'futures_outright',
+})
 
 
 @dataclass(frozen=True)
@@ -187,7 +217,7 @@ class InventoryChoice:
     family: str
     is_vanilla: bool
     exercise: str  # european | american | n/a
-    param_kind: str  # option | forward | unsupported
+    param_kind: str  # option | forward | futures | unsupported
 
 
 @dataclass(frozen=True)
@@ -225,7 +255,7 @@ def _is_vanilla(maps_to: str | None) -> bool:
 
 
 def _lab_product(code: str, maps_to: str, param_kind: str) -> str:
-    """Sandbox product wire: vanilla | aon | con | forward | unsupported."""
+    """Sandbox product wire: vanilla | aon | con | forward | futures_outright | unsupported."""
     code_u = (code or '').strip().upper()
     key = (maps_to or '').strip().lower()
     if _is_vanilla(key) or code_u in {'PVE', 'PVA'}:
@@ -241,6 +271,12 @@ def _lab_product(code: str, maps_to: str, param_kind: str) -> str:
         param_kind == 'forward' and 'equity' in key
     ):
         return 'forward'
+    if (
+        key in {'listed_future', 'commodity_futures_outright', 'futures_outright'}
+        or code_u in {'EFT', 'FUT'}
+        or param_kind == 'futures'
+    ):
+        return 'futures_outright'
     return 'unsupported'
 
 
@@ -248,7 +284,12 @@ def _exercise_for(maps_to: str) -> str:
     key = (maps_to or '').strip().lower()
     if 'american' in key:
         return 'american'
-    if 'forward' in key or key in {'fra', 'listed_future'}:
+    if 'forward' in key or key in {
+        'fra',
+        'listed_future',
+        'commodity_futures_outright',
+        'futures_outright',
+    }:
         return 'n/a'
     return 'european'
 
@@ -258,7 +299,13 @@ def _param_kind(code: str, family: str, maps_to: str) -> str:
     fam = (family or '').strip().upper()
     key = (maps_to or '').strip().lower()
     code_u = (code or '').strip().upper()
-    if fam in {'FORWARD', 'FUTURE'} or 'forward' in key or code_u in {'EQF', 'FXF', 'IRF', 'EFT'}:
+    if fam == 'FUTURE' or key in {
+        'listed_future',
+        'commodity_futures_outright',
+        'futures_outright',
+    } or code_u in {'EFT', 'FUT'}:
+        return 'futures'
+    if fam == 'FORWARD' or 'forward' in key or code_u in {'EQF', 'FXF', 'IRF'}:
         return 'forward'
     if fam == 'OPTION' or _is_vanilla(key) or code_u in {
         'PVE',
@@ -281,6 +328,8 @@ def fields_for_kind(
 ) -> list[dict]:
     product = (lab_product or '').strip().lower()
     ex = (exercise or '').strip().lower()
+    if product == 'futures_outright' or param_kind == 'futures':
+        return [dict(f) for f in _FUTURES_FIELDS]
     if product == 'con':
         return [dict(f) for f in _CON_FIELDS]
     if product == 'forward' or param_kind == 'forward':
@@ -301,13 +350,23 @@ def legend_for_fields(fields: list[dict], *, include_greeks: bool) -> list[tuple
     return [row for row in SYMBOL_LEGEND if row[0] in syms]
 
 
-def list_inventory_choices() -> list[InventoryChoice]:
+def _choice_asset_class(choice: InventoryChoice) -> str:
+    code = (choice.code or '').strip().upper()
+    maps = (choice.maps_to or '').strip().lower()
+    if code in _COMMODITY_CODES or maps in _COMMODITY_MAPS or choice.family.upper() == 'FUTURE':
+        return 'commodity'
+    if code in _EQUITY_CODES or maps in _EQUITY_MAPS:
+        return 'equity'
+    return 'other'
+
+
+def list_inventory_choices(*, asset_class: str | None = None) -> list[InventoryChoice]:
     try:
         rows = list(
             CatalogInstrumentType.objects.filter(is_active=True).order_by('sort_order', 'code')
         )
     except Exception:
-        return []
+        rows = []
     out: list[InventoryChoice] = []
     for cat in rows:
         maps = (cat.maps_to_instrument_type or '').strip()
@@ -327,6 +386,23 @@ def list_inventory_choices() -> list[InventoryChoice]:
                 param_kind=_param_kind(code, family, maps),
             )
         )
+
+    if not any(c.code == 'EFT' for c in out):
+        out.append(
+            InventoryChoice(
+                code='EFT',
+                label='EFT — Listed Future Outright',
+                maps_to='commodity_futures_outright',
+                family='FUTURE',
+                is_vanilla=False,
+                exercise='n/a',
+                param_kind='futures',
+            )
+        )
+
+    wanted = (asset_class or '').strip().lower()
+    if wanted in {'equity', 'commodity'}:
+        out = [c for c in out if _choice_asset_class(c) == wanted]
     return out
 
 
@@ -341,8 +417,12 @@ def defaults_from_instrument(code: str) -> dict:
         try:
             cat = CatalogInstrumentType.objects.get(code__iexact=code_u)
         except Exception:
+            if code_u in {'EFT', 'FUT'}:
+                return _synthetic_futures_defaults(code_u)
             return {}
     except Exception:
+        if code_u in {'EFT', 'FUT'}:
+            return _synthetic_futures_defaults(code_u)
         return {}
 
     maps = (cat.maps_to_instrument_type or '').strip()
@@ -350,7 +430,7 @@ def defaults_from_instrument(code: str) -> dict:
     exercise = _exercise_for(maps)
     kind = _param_kind(code_u, family, maps)
     product = _lab_product(code_u, maps, kind)
-    return {
+    defaults = {
         'instrument': code_u,
         'spot': 100.0,
         'strike': 100.0,
@@ -369,8 +449,35 @@ def defaults_from_instrument(code: str) -> dict:
         'param_kind': kind,
         'lab_product': product,
     }
+    if product == 'futures_outright' or kind == 'futures':
+        defaults['spot'] = 80.0
+        defaults['strike'] = 80.0
+        defaults['tau'] = 0.0
+        defaults['exercise'] = 'n/a'
+        defaults['instrument_title'] = defaults['instrument_title'] or 'Listed Future Outright'
+    return defaults
 
 
+def _synthetic_futures_defaults(code_u: str) -> dict:
+    return {
+        'instrument': code_u,
+        'spot': 80.0,
+        'strike': 80.0,
+        'vol': 0.0,
+        'rate': 0.0,
+        'div': 0.0,
+        'side': 'call',
+        'cash_payout': 1.0,
+        'n_steps': _CRR_DEFAULT_STEPS,
+        'tau': 0.0,
+        'exercise': 'n/a',
+        'instrument_code': code_u,
+        'instrument_title': 'Listed Future Outright',
+        'maps_to': 'commodity_futures_outright',
+        'is_vanilla': False,
+        'param_kind': 'futures',
+        'lab_product': 'futures_outright',
+    }
 def _parse_tau(get, default: float) -> float:
     raw = get.get('tau')
     if raw is None or str(raw).strip() == '':
@@ -808,6 +915,28 @@ def price_sandbox(
         cpp = _quote_from_cpp_forward(params, tau)
         return cpp if cpp is not None else _needs_cpp('EQF')
 
+    if product == 'futures_outright':
+        # Same economics as C++ AnalyticFuturesOutrightPricer: pv_unit = settle, Δ = 1.
+        f = float(params.spot)
+        if not (f > 0.0):
+            return QuantLabQuote(
+                ok=False,
+                engine_label='analytic_futures_outright',
+                message='Settle (F) must be positive.',
+            )
+        return QuantLabQuote(
+            ok=True,
+            engine_label='analytic_futures_outright',
+            message='',
+            pv_unit=f,
+            delta=1.0,
+            gamma=0.0,
+            vega=0.0,
+            theta=0.0,
+            theta_day=0.0,
+            rho=0.0,
+        )
+
     return QuantLabQuote(
         ok=False,
         engine_label='lab',
@@ -940,10 +1069,19 @@ def build_payoff_value_chart(
     }
 
 
-def build_quant_lab(get) -> dict:
-    choices = list_inventory_choices()
+def build_quant_lab(get, *, asset_class: str = 'equity') -> dict:
+    asset = (asset_class or 'equity').strip().lower()
+    if asset not in {'equity', 'commodity'}:
+        asset = 'equity'
+    choices = list_inventory_choices(asset_class=asset)
     params, tau, meta = resolve_lab_params(get)
     selected = bool(meta.get('instrument_code'))
+    if selected:
+        code = str(meta.get('instrument_code') or '').strip().upper()
+        if code and not any(c.code == code for c in choices):
+            selected = False
+            params = None
+            meta = {'instrument_code': None, 'param_kind': None, 'lab_product': None}
     kind = str(meta.get('param_kind') or '')
     product = str(meta.get('lab_product') or '')
     exercise = str(meta.get('exercise') or 'european')
@@ -963,7 +1101,13 @@ def build_quant_lab(get) -> dict:
     is_eu_vanilla = product == 'vanilla' and exercise == 'european'
     is_am_vanilla = product == 'vanilla' and exercise == 'american'
 
-    if selected and params is not None and product in {'vanilla', 'aon', 'con', 'forward'}:
+    if selected and params is not None and product in {
+        'vanilla',
+        'aon',
+        'con',
+        'forward',
+        'futures_outright',
+    }:
         quote = price_sandbox(
             params,
             tau,
@@ -994,7 +1138,6 @@ def build_quant_lab(get) -> dict:
         and quote.ok
         and any(x is not None for x in (quote.delta, quote.gamma, quote.vega, quote.theta, quote.rho))
     )
-    # For European PVE, greeks sit in their own section before the charts — not beside NPV.
     show_quote_greeks = has_greeks and not is_eu_vanilla
     legend = (
         legend_for_fields(fields, include_greeks=charts is not None or has_greeks)
@@ -1002,7 +1145,16 @@ def build_quant_lab(get) -> dict:
         else []
     )
 
+    pricing_url_name = (
+        'journal:quant_lab_pricing_commodities'
+        if asset == 'commodity'
+        else 'journal:quant_lab_pricing_equities'
+    )
+
     return {
+        'asset_class': asset,
+        'asset_class_label': 'Commodities' if asset == 'commodity' else 'Equities',
+        'pricing_url_name': pricing_url_name,
         'choices': choices,
         'instrument_selected': selected,
         'fields': fields,
@@ -1026,7 +1178,8 @@ def build_quant_lab(get) -> dict:
         'show_charts': charts is not None,
         'show_quote_greeks': show_quote_greeks,
         'show_greeks_panel': is_eu_vanilla and has_greeks,
-        'show_formulas': selected and product in {'vanilla', 'aon', 'con', 'forward'},
+        'show_formulas': selected
+        and product in {'vanilla', 'aon', 'con', 'forward', 'futures_outright'},
         'crr_tree': crr_tree,
         'show_crr_tree': bool(crr_tree and crr_tree.get('nodes')),
         'crr_tree_max_steps': _CRR_TREE_MAX_STEPS,

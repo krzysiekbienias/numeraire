@@ -10,6 +10,7 @@
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/core/pricing_result.hpp>
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
+#include <numeraire/database/futures_daily_eod_lookup.hpp>
 #include <numeraire/database/index_daily_eod_lookup.hpp>
 #include <numeraire/database/leg_mtm_pnl.hpp>
 #include <numeraire/database/leg_pv.hpp>
@@ -45,6 +46,7 @@
 #include <numeraire/market_data_providers/polygon_option_daily_price_eod_fetch.hpp>
 #include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
+#include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/equity_spot_product.hpp>
 #include <numeraire/products/product_factory.hpp>
@@ -66,6 +68,7 @@
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
 using numeraire::database::LookupEquityDailyClose;
+using numeraire::database::LookupFuturesDailySettlement;
 using numeraire::database::LookupIndexDailyClose;
 using numeraire::database::SqliteTradeLegBookingRepository;
 using numeraire::database::SqliteTradeLegMtmRepository;
@@ -363,7 +366,7 @@ struct PricingArgvScan {
     const numeraire::core::IPricer& pricer = *engine.pricer;
     double total_npv = 0.0;
     for (const auto& row : bundle.legs) {
-        const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
+        const auto product = ProductFactory::MakeFromCatalogLeg(row, &bundle.trade);
         if (product == nullptr) {
             throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
         }
@@ -398,15 +401,18 @@ struct PricingArgvScan {
             continue;
         }
 
-        const std::string& underlying = row.equity.underlying_id;
+        const std::string underlying = std::string(product->UnderlyingId());
         const double spot_used = mkt.Spot(underlying);
 
         const bool is_spot =
                 dynamic_cast<const numeraire::products::EquitySpotProduct*>(product.get()) != nullptr;
         const bool is_forward =
                 dynamic_cast<const numeraire::products::EquityForwardProduct*>(product.get()) != nullptr;
+        const bool is_futures_outright =
+                dynamic_cast<const numeraire::products::CommodityFuturesOutrightProduct*>(product.get()) !=
+                nullptr;
         // Spot has no maturity; keep the column at 0 rather than a negative τ from
-        // ExpiryDate() == TradeDate().
+        // ExpiryDate() == TradeDate(). Listed futures mark off settle — τ is informational.
         const double years_to_maturity =
                 is_spot ? 0.0 : Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate());
 
@@ -418,11 +424,11 @@ struct PricingArgvScan {
         mtm.underlying_spot = spot_used;
         mtm.risk_free_rate = mkt.RiskFreeRateForTenor(years_to_maturity > 0.0 ? years_to_maturity : 0.0);
         mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
-        // Linear / spot payoffs never query the surface, so storing a vol against them
+        // Linear / spot / futures payoffs never query the surface, so storing a vol against them
         // would claim an input the price never saw. Zero is the column's existing "not
         // applicable" marker (it already covers expired legs). The surface itself stays
         // ingested for the underlier — options written on it still need it.
-        const bool payoff_uses_volatility = !is_spot && !is_forward;
+        const bool payoff_uses_volatility = !is_spot && !is_forward && !is_futures_outright;
         const double strike = product->Strike();
         if (payoff_uses_volatility && years_to_maturity > 0.0 && strike > 0.0) {
             mtm.implied_vol_used =
@@ -632,44 +638,57 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
     std::unordered_set<std::string> seen;
     for (const TradeCatalogBundle& bundle : bundles) {
         for (const auto& row : bundle.legs) {
-            const std::string& u = row.equity.underlying_id;
-            if (seen.contains(u)) {
+            const bool is_commodity = row.commodity.has_value();
+            const std::string market_key =
+                    is_commodity ? row.commodity->contract_ticker : row.equity.underlying_id;
+            if (market_key.empty() || seen.contains(market_key)) {
                 continue;
             }
-            seen.insert(u);
+            seen.insert(market_key);
 
             if (mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kEnv) {
-                snap.spots[u] = mq.env_fallback_spot;
-                Logger::NumInfo("Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
-                                u,
-                                mq.env_fallback_spot);
+                snap.spots[market_key] = mq.env_fallback_spot;
+                Logger::NumInfo(
+                        "Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
+                        market_key, mq.env_fallback_spot);
                 continue;
             }
 
-            const std::optional<double> close =
-                    LookupDbSpotForUnderlying(db_path_file, u, mq.as_of_iso, mq.equity_eod_adjusted);
+            if (is_commodity) {
+                const std::optional<double> settle = LookupFuturesDailySettlement(
+                        db_path_file.string(), market_key, mq.as_of_iso);
+                if (!settle.has_value()) {
+                    throw numeraire::ValidationError(
+                            "missing futures EOD settle for ticker=" + market_key +
+                            " as_of=" + mq.as_of_iso +
+                            " — ingest futures_daily_eod before NUMERAIRE_DEV_SPOT_SOURCE=db.");
+                }
+                snap.spots[market_key] = *settle;
+                Logger::NumInfo("Futures {} settle={} from futures_daily_eod (as_of={}).", market_key,
+                                *settle, mq.as_of_iso);
+                continue;
+            }
+
+            const std::optional<double> close = LookupDbSpotForUnderlying(
+                    db_path_file, market_key, mq.as_of_iso, mq.equity_eod_adjusted);
             if (!close.has_value()) {
                 throw numeraire::ValidationError(
-                        "missing EOD spot for underlying=" + u + " as_of=" + mq.as_of_iso +
+                        "missing EOD spot for underlying=" + market_key + " as_of=" + mq.as_of_iso +
                         " adjusted=" + std::to_string(mq.equity_eod_adjusted) +
                         " — ingest equity_daily_eod or index_daily_eod (e.g. NDX → I:NDX) before "
                         "NUMERAIRE_DEV_SPOT_SOURCE=db.");
             }
-            snap.spots[u] = *close;
-            if (LookupEquityDailyClose(db_path_file.string(), u, mq.as_of_iso, mq.equity_eod_adjusted).has_value()) {
+            snap.spots[market_key] = *close;
+            if (LookupEquityDailyClose(db_path_file.string(), market_key, mq.as_of_iso, mq.equity_eod_adjusted)
+                        .has_value()) {
                 Logger::NumInfo("Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
-                                u,
-                                *close,
-                                mq.as_of_iso,
-                                mq.equity_eod_adjusted);
-            } else if (const std::optional<std::string> index_ticker = IndexDailyTickerForUnderlying(u);
+                                market_key, *close, mq.as_of_iso, mq.equity_eod_adjusted);
+            } else if (const std::optional<std::string> index_ticker =
+                               IndexDailyTickerForUnderlying(market_key);
                        index_ticker.has_value()) {
-                Logger::NumInfo("Underlying {} spot={} from index_daily_eod ticker={} (as_of={}, adjusted={}).",
-                                u,
-                                *close,
-                                *index_ticker,
-                                mq.as_of_iso,
-                                mq.equity_eod_adjusted);
+                Logger::NumInfo(
+                        "Underlying {} spot={} from index_daily_eod ticker={} (as_of={}, adjusted={}).",
+                        market_key, *close, *index_ticker, mq.as_of_iso, mq.equity_eod_adjusted);
             }
         }
     }
@@ -926,7 +945,7 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
     updates.reserve(bundle.legs.size());
 
     for (const auto& row : bundle.legs) {
-        const auto product = ProductFactory::MakeFromEquityCatalog(row.product, row.equity, &bundle.trade);
+        const auto product = ProductFactory::MakeFromCatalogLeg(row, &bundle.trade);
         if (product == nullptr) {
             throw numeraire::PersistenceError("ProductFactory returned null for leg " + row.leg.leg_id);
         }

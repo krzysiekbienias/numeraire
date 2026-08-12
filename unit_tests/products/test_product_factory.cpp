@@ -3,6 +3,7 @@
 #include <numeraire/database/dtos.hpp>
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/enums/option_type.hpp>
+#include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
@@ -392,5 +393,71 @@ TEST(ProductFactoryTest, AsianOptionAttributesThrowsUntilSupported) {
 
     EXPECT_THROW(static_cast<void>(
                          numeraire::products::ProductFactory::MakeFromEquityCatalog(product, equity, nullptr)),
+                 numeraire::ValidationError);
+}
+
+TEST(ProductFactoryTest, BuildsCommodityFuturesOutrightFromCatalog) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "FUT_OUTRIGHT_CL_CLX6";
+    product.catalog_instrument_type = std::string{"commodity_futures_outright"};
+    product.attributes_json = "{}";
+
+    numeraire::database::ProductEquityDto header{};
+    header.product_id = "FUT_OUTRIGHT_CL_CLX6";
+    header.asset_kind = "COMMODITY";
+    header.underlying_id = "CL";
+    header.expiry_date = std::string{"2026-10-20"};
+    header.contract_size = 1000.0;
+
+    numeraire::database::ProductCommodityDto commodity{};
+    commodity.product_id = "FUT_OUTRIGHT_CL_CLX6";
+    commodity.instrument_type = "commodity_futures_outright";
+    commodity.product_code = "CL";
+    commodity.contract_ticker = "CLX6";
+
+    numeraire::database::TradeHeaderDto trade{};
+    trade.trade_id = "TRD_10016";
+    trade.trade_date = "2026-08-11";
+
+    const auto instrument = numeraire::products::ProductFactory::MakeFromCommodityCatalog(
+            product, header, commodity, &trade);
+    ASSERT_NE(instrument, nullptr);
+    EXPECT_EQ(instrument->UnderlyingId(), "CLX6");
+    EXPECT_DOUBLE_EQ(instrument->Strike(), 0.0);
+    EXPECT_EQ(instrument->TradeDate().year, 2026);
+    EXPECT_EQ(instrument->TradeDate().month, 8);
+    EXPECT_EQ(instrument->TradeDate().day, 11);
+    EXPECT_EQ(instrument->ExpiryDate().year, 2026);
+    EXPECT_EQ(instrument->ExpiryDate().month, 10);
+    EXPECT_EQ(instrument->ExpiryDate().day, 20);
+
+    const auto* fut =
+            dynamic_cast<const numeraire::products::CommodityFuturesOutrightProduct*>(instrument.get());
+    ASSERT_NE(fut, nullptr);
+    EXPECT_EQ(fut->ProductCode(), "CL");
+}
+
+TEST(ProductFactoryTest, CommodityMissingTickerThrows) {
+    numeraire::database::ProductDto product{};
+    product.product_id = "FUT_BAD";
+    product.catalog_instrument_type = std::string{"commodity_futures_outright"};
+
+    numeraire::database::ProductEquityDto header{};
+    header.product_id = "FUT_BAD";
+    header.asset_kind = "COMMODITY";
+    header.underlying_id = "CL";
+    header.expiry_date = std::string{"2026-10-20"};
+
+    numeraire::database::ProductCommodityDto commodity{};
+    commodity.product_id = "FUT_BAD";
+    commodity.instrument_type = "commodity_futures_outright";
+    commodity.product_code = "CL";
+    commodity.contract_ticker = "";
+
+    numeraire::database::TradeHeaderDto trade{};
+    trade.trade_date = "2026-08-11";
+
+    EXPECT_THROW(static_cast<void>(numeraire::products::ProductFactory::MakeFromCommodityCatalog(
+                         product, header, commodity, &trade)),
                  numeraire::ValidationError);
 }
