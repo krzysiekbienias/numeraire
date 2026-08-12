@@ -41,7 +41,13 @@ Extend the JSON when you want more products in scope.
 ### Futures contract strip (next ingest step)
 
 `futures_contract` stores listed contract tickers per (`product_code`, `listing_as_of`), analogous
-to `option_contract`. Daily job (C++): Contracts API → this table → session aggs → `futures_daily_eod`.
+to `option_contract`. Daily job (C++ via `daily_market_prep.sh`): Contracts API → this table →
+session aggs → `futures_daily_eod`. Skip: `NUMERAIRE_PREP_SKIP_FUTURES=1`.
+
+```bash
+./build/dev_main --fetch-futures-contracts --as-of 2026-08-11
+./build/dev_main --fetch-futures-eod-daily --from 2026-08-11 --to 2026-08-11 --listing-as-of 2026-08-11
+```
 
 Local probe / backfill (Python, universe commodity scope):
 
@@ -96,6 +102,8 @@ Each column is **0 or 1** per `scope_id` — not all-or-nothing.
 **Date window:** cron `as_of` must satisfy `ingest_from_date <= as_of` and (`ingest_to_date` IS NULL OR `ingest_to_date >= as_of`).
 
 **Book catch-up:** after scope rows, `daily_market_prep.sh` fetches equity EOD for any `trade_legs` underlying not covered by an active `ingest_equity_eod=1` scope row (`NUMERAIRE_PREP_SKIP_BOOK_EQUITY=1` to disable).
+
+**Commodity futures:** after book catch-up, contracts + `1session` EOD for active `universe_instrument` COMMODITY rows with `ingest_futures_*` (`NUMERAIRE_PREP_SKIP_FUTURES=1` to disable).
 
 **USD discount curve (global, before scope loop):** FRED par ingest + `--build-discount-curve-eod` with **`NUMERAIRE_FRED_AS_OF_LAG_DAYS=2`** (FRED T-2). Scope ingest uses **`NUMERAIRE_AS_OF_LAG_DAYS=1`** by default. Skip: `NUMERAIRE_PREP_SKIP_FRED_CURVE=1`.
 

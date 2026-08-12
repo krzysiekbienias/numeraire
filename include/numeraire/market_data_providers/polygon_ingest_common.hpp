@@ -17,6 +17,11 @@ namespace numeraire::market_data_providers::polygon_ingest {
 /// Env: `NUMERAIRE_POLYGON_OPTIONS_SLEEP_SEC`, `NUMERAIRE_POLYGON_OPTIONS_PLAN`, then legacy.
 [[nodiscard]] int SleepSecAfterPolygonOptionsCall() noexcept;
 
+/// Throttle for futures jobs (`/futures/v1/contracts`, `/futures/v1/aggs`).
+/// Env: `NUMERAIRE_POLYGON_FUTURES_SLEEP_SEC`, `NUMERAIRE_POLYGON_FUTURES_PLAN`, then legacy.
+/// Default 0 (Futures Starter+ unlimited); set plan=basic for 13 s.
+[[nodiscard]] int SleepSecAfterPolygonFuturesCall() noexcept;
+
 /// @deprecated Prefer `SleepSecAfterPolygonEquityCall` / `SleepSecAfterPolygonOptionsCall`.
 /// Same resolution as equity (legacy alias).
 [[nodiscard]] int SleepSecAfterPolygonCall() noexcept;

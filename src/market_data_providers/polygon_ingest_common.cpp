@@ -102,6 +102,21 @@ int SleepSecAfterPolygonOptionsCall() noexcept {
                            "NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL");
 }
 
+int SleepSecAfterPolygonFuturesCall() noexcept {
+    int sleep_sec = kStarterTierSleepSec;
+    if (TryParseIntEnv("NUMERAIRE_POLYGON_FUTURES_SLEEP_SEC", sleep_sec)) {
+        return sleep_sec;
+    }
+    if (TryParsePlanEnv("NUMERAIRE_POLYGON_FUTURES_PLAN", sleep_sec)) {
+        return sleep_sec;
+    }
+    if (TryParseIntEnv("NUMERAIRE_POLYGON_SLEEP_SEC_AFTER_CALL", sleep_sec)) {
+        return sleep_sec;
+    }
+    // Futures Starter is the common path in this repo; default no throttle.
+    return kStarterTierSleepSec;
+}
+
 int SleepSecAfterPolygonCall() noexcept {
     return SleepSecAfterPolygonEquityCall();
 }

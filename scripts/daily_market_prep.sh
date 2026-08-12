@@ -15,6 +15,8 @@
 #   3. option_universe_eod build (optional)
 #   4. option_daily_price_eod (optional)
 #   5. vol_surface_eod build (optional; index spot via --index-ticker, equity via equity_daily_eod)
+#   6. futures_contract + futures_daily_eod for COMMODITY universe (optional; skip via
+#      NUMERAIRE_PREP_SKIP_FUTURES=1)
 #
 # Usage:
 #   /opt/numeraire/dev/scripts/daily_market_prep.sh
@@ -32,6 +34,7 @@
 #   NUMERAIRE_DB_PATH=db.sqlite3
 #   NUMERAIRE_GRID_CONFIG=configs/option_universe_grid.json
 #   NUMERAIRE_PREP_SKIP_BOOK_EQUITY=1   skip equity fetch for book underlyings not in scope
+#   NUMERAIRE_PREP_SKIP_FUTURES=1       skip commodity futures contracts + session EOD
 #   NUMERAIRE_DRY_RUN=1
 # ============================================================================
 set -euo pipefail
@@ -365,6 +368,40 @@ run_usd_treasury_discount_curve() {
     return "${failed}"
 }
 
+# Commodity futures: listing strip + 1session settles for universe COMMODITY products.
+# Uses prep as_of (typically T-1). Listing snapshot and session as_of share that date.
+run_commodity_futures_ingest() {
+    local as_of="$1"
+    if [[ "${NUMERAIRE_PREP_SKIP_FUTURES:-0}" == "1" ]]; then
+        log "commodity futures ingest skipped (NUMERAIRE_PREP_SKIP_FUTURES=1)"
+        return 0
+    fi
+
+    local count
+    count="$(sqlite3 "${DB_PATH}" "
+        SELECT COUNT(*) FROM universe_instrument
+        WHERE is_active = 1
+          AND asset_class = 'COMMODITY'
+          AND (ingest_futures_eod = 1 OR ingest_futures_product = 1)
+          AND ingest_from_date <= '${as_of}'
+          AND (ingest_to_date IS NULL OR ingest_to_date >= '${as_of}');
+    ")"
+    if [[ "${count}" -eq 0 ]]; then
+        log "commodity futures ingest: no active COMMODITY universe rows for as_of=${as_of}"
+        return 0
+    fi
+
+    log "commodity futures ingest as_of=${as_of} products=${count}"
+    if ! run_cmd "${DEV_MAIN}" --fetch-futures-contracts --as-of "${as_of}"; then
+        return 1
+    fi
+    if ! run_cmd "${DEV_MAIN}" \
+        --fetch-futures-eod-daily --from "${as_of}" --to "${as_of}" --listing-as-of "${as_of}"; then
+        return 1
+    fi
+    return 0
+}
+
 main() {
     log "daily_market_prep start repo=${REPO_ROOT}"
 
@@ -401,6 +438,10 @@ main() {
     fi
 
     if ! run_book_equity_catchup "${as_of}"; then
+        failed_scopes=$((failed_scopes + 1))
+    fi
+
+    if ! run_commodity_futures_ingest "${as_of}"; then
         failed_scopes=$((failed_scopes + 1))
     fi
 

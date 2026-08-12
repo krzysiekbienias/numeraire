@@ -37,6 +37,8 @@
 #include <numeraire/market_data/sqlite_vol_surface_market_data.hpp>
 #include <numeraire/market_data/static_market_data_provider.hpp>
 #include <numeraire/market_data_providers/polygon_daily_eod_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_futures_contract_fetch.hpp>
+#include <numeraire/market_data_providers/polygon_futures_daily_eod_fetch.hpp>
 #include <numeraire/market_data_providers/polygon_index_daily_eod_fetch.hpp>
 #include <numeraire/market_data_providers/polygon_ingest_common.hpp>
 #include <numeraire/market_data_providers/polygon_option_contract_fetch.hpp>
@@ -85,10 +87,14 @@ using numeraire::simulation::TryRunHistoricalGbmSimulate;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
+using numeraire::market_data_providers::PrintFuturesContractFetchUsageLines;
+using numeraire::market_data_providers::PrintFuturesDailyEodFetchUsageLines;
 using numeraire::market_data_providers::PrintIndexFetchUsageLines;
 using numeraire::market_data_providers::PrintOptionContractFetchUsageLines;
 using numeraire::market_data_providers::PrintOptionDailyPriceEodFetchUsageLines;
 using numeraire::market_data_providers::TryRunPolygonDailyEodFetch;
+using numeraire::market_data_providers::TryRunPolygonFuturesContractFetch;
+using numeraire::market_data_providers::TryRunPolygonFuturesDailyEodFetch;
 using numeraire::market_data_providers::TryRunPolygonIndexDailyEodFetch;
 using numeraire::market_data_providers::TryRunPolygonOptionContractFetch;
 using numeraire::market_data_providers::TryRunPolygonOptionDailyPriceEodFetch;
@@ -508,6 +514,10 @@ void PrintUsage() {
             "(see --help).\n"
             "  dev_main --fetch-option-daily-price-eod ... Ingest option EOD closes into "
             "`option_daily_price_eod` (see --help).\n"
+            "  dev_main --fetch-futures-contracts ... Ingest futures listing into `futures_contract` "
+            "(see --help).\n"
+            "  dev_main --fetch-futures-eod-daily ... Ingest futures 1session bars into `futures_daily_eod` "
+            "(see --help).\n"
             "  dev_main --build-option-universe ... Build `option_universe_eod` from catalog + grid JSON "
             "(see --help).\n"
             "  dev_main --build-vol-surface-eod ... Build implied-vol surface from option/index EOD "
@@ -536,6 +546,8 @@ void PrintUsage() {
     PrintIndexFetchUsageLines();
     PrintOptionContractFetchUsageLines();
     PrintOptionDailyPriceEodFetchUsageLines();
+    PrintFuturesContractFetchUsageLines();
+    PrintFuturesDailyEodFetchUsageLines();
     PrintDiscountCurveEodBuildUsageLines();
     PrintVolSurfaceEodBuildUsageLines();
     PrintHistoricalCalibrationEodBuildUsageLines();
@@ -1118,6 +1130,14 @@ int main(const int argc, char** argv) {
         const int option_price_rc = TryRunPolygonOptionDailyPriceEodFetch(argc, argv, cfg);
         if (option_price_rc >= 0) {
             return option_price_rc;
+        }
+        const int futures_contract_rc = TryRunPolygonFuturesContractFetch(argc, argv, cfg);
+        if (futures_contract_rc >= 0) {
+            return futures_contract_rc;
+        }
+        const int futures_eod_rc = TryRunPolygonFuturesDailyEodFetch(argc, argv, cfg);
+        if (futures_eod_rc >= 0) {
+            return futures_eod_rc;
         }
         const int discount_curve_rc = TryRunDiscountCurveEodBuild(argc, argv, cfg);
         if (discount_curve_rc >= 0) {
