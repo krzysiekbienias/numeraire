@@ -1,5 +1,7 @@
-# Generated manually for commodity futures catalog + universe ingest flags.
+# Generated manually for futures_product catalog mirror.
 # Schema owned by sql/schema_v1.sql (+ ApplySchemaPatches for existing DBs).
+# Do not AddField UniverseInstrument here — that model is not in migration state
+# (managed=False mirror only; flags live in schema_v1 / ApplySchemaPatches).
 
 from django.db import migrations, models
 
@@ -41,17 +43,5 @@ class Migration(migrations.Migration):
                 'ordering': ['product_code'],
                 'managed': False,
             },
-        ),
-        migrations.AddField(
-            model_name='universeinstrument',
-            name='ingest_futures_eod',
-            field=models.IntegerField(),
-            preserve_default=False,
-        ),
-        migrations.AddField(
-            model_name='universeinstrument',
-            name='ingest_futures_product',
-            field=models.IntegerField(),
-            preserve_default=False,
         ),
     ]
