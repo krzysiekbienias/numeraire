@@ -1189,20 +1189,30 @@ class AboutView(TemplateView):
     template_name = 'journal/about.html'
 
 
+@method_decorator(login_not_required, name='dispatch')
+class ProductView(TemplateView):
+    """Public product page — what Numeraire is (screenshots + capabilities)."""
+
+    template_name = 'journal/product.html'
+
+
+@method_decorator(login_not_required, name='dispatch')
 class QuantLabHubView(TemplateView):
-    """Quant Lab landing — pick Pricing or Simulation workspace."""
+    """Public Quant Lab landing — pick Pricing (or signed-in workspaces)."""
 
     template_name = 'journal/quant_lab_hub.html'
 
 
+@method_decorator(login_not_required, name='dispatch')
 class QuantLabPricingHubView(TemplateView):
-    """Pricing gate — Equities vs Commodities asset class."""
+    """Public pricing gate — Equities vs Commodities asset class."""
 
     template_name = 'journal/quant_lab_pricing_hub.html'
 
 
+@method_decorator(login_not_required, name='dispatch')
 class QuantLabView(TemplateView):
-    """Pricing & sensitivities sandbox (C++ / analytic). Nothing persisted."""
+    """Public pricing & sensitivities sandbox (C++ / analytic). Nothing persisted."""
 
     template_name = 'journal/quant_lab.html'
     asset_class = 'equity'
@@ -1220,8 +1230,9 @@ class QuantLabEquitiesView(QuantLabView):
 class QuantLabCommoditiesView(QuantLabView):
     asset_class = 'commodity'
 
+@method_decorator(login_not_required, name='dispatch')
 class HypoPortfolioView(TemplateView):
-    """Hypo portfolio sandbox — market path × toy legs; state in browser localStorage."""
+    """Public hypo portfolio sandbox — market path × toy legs; localStorage only."""
 
     template_name = 'journal/hypo_portfolio.html'
 
@@ -1231,8 +1242,9 @@ class HypoPortfolioView(TemplateView):
         return context
 
 
+@method_decorator(login_not_required, name='dispatch')
 class HypoPortfolioPriceView(View):
-    """POST JSON → price hypo run (no DB writes)."""
+    """POST JSON → price hypo run (no DB writes). Public demo endpoint."""
 
     def post(self, request, *args, **kwargs):
         try:
@@ -1259,8 +1271,9 @@ class HypoPortfolioPriceView(View):
         return JsonResponse(result)
 
 
+@method_decorator(login_not_required, name='dispatch')
 class SimulationLabView(TemplateView):
-    """Simulation workspace — risk-factor paths on the production exposure grid."""
+    """Public simulation workspace — toy risk-factor paths; nothing persisted."""
 
     template_name = 'journal/simulation_lab.html'
 
@@ -1270,8 +1283,9 @@ class SimulationLabView(TemplateView):
         return context
 
 
+@method_decorator(login_not_required, name='dispatch')
 class RatesConversionLabView(TemplateView):
-    """Rates conversion sandbox (continuous zero ↔ DF). Nothing persisted."""
+    """Public rates conversion sandbox (continuous zero ↔ DF). Nothing persisted."""
 
     template_name = 'journal/interest_rate_conversion.html'
 

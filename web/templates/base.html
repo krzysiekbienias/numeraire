@@ -11,13 +11,13 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="{% static 'css/journal.css' %}?v=34" rel="stylesheet">
+  <link href="{% static 'css/journal.css' %}?v=41" rel="stylesheet">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <div class="nj-shell">
+  <div class="nj-shell{% if not user.is_authenticated %} nj-shell-guest{% endif %}">
     <aside class="nj-sidebar">
-      <a class="nj-brand" href="{% url 'journal:dashboard' %}">
+      <a class="nj-brand" href="{% if user.is_authenticated %}{% url 'journal:dashboard' %}{% else %}{% url 'journal:landing' %}{% endif %}">
         {% include 'partials/brand_mark.html' %}
         <span class="nj-brand-text">
           <strong>Numeraire</strong>
@@ -26,6 +26,7 @@
       </a>
 
       <nav class="nj-nav" aria-label="Primary">
+        {% if user.is_authenticated %}
         <a href="{% url 'journal:dashboard' %}"
            class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
           <i class="bi bi-grid-1x2"></i> Overview
@@ -66,9 +67,27 @@
         <a href="{% url 'admin:index' %}">
           <i class="bi bi-table"></i> Admin tables
         </a>
+        {% else %}
+        <a href="{% url 'journal:quant_lab' %}"
+           class="{% if request.resolver_match.url_name == 'quant_lab' or request.resolver_match.url_name == 'quant_lab_pricing' or request.resolver_match.url_name == 'quant_lab_pricing_equities' or request.resolver_match.url_name == 'quant_lab_pricing_commodities' or request.resolver_match.url_name == 'hypo_portfolio' or request.resolver_match.url_name == 'simulation_lab' or request.resolver_match.url_name == 'rates_conversion_lab' %}active{% endif %}">
+          <i class="bi bi-lightning-charge"></i> Quant Lab
+        </a>
+        <a href="{% url 'journal:product' %}"
+           class="{% if request.resolver_match.url_name == 'product' %}active{% endif %}">
+          <i class="bi bi-info-circle"></i> About the product
+        </a>
+        <a href="{% url 'journal:about' %}"
+           class="{% if request.resolver_match.url_name == 'about' %}active{% endif %}">
+          <i class="bi bi-person"></i> About / contact
+        </a>
+        <a href="{% url 'login' %}">
+          <i class="bi bi-box-arrow-in-right"></i> Sign in
+        </a>
+        {% endif %}
       </nav>
 
       <div class="nj-sidebar-foot">
+        {% if user.is_authenticated %}
         <div class="d-flex justify-content-between align-items-center gap-2">
           <span>{{ request.user.username }}</span>
           <form method="post" action="{% url 'logout' %}" class="m-0">
@@ -76,6 +95,12 @@
             <button type="submit" class="btn btn-sm btn-outline-secondary">Log out</button>
           </form>
         </div>
+        {% else %}
+        <p class="nj-guest-foot mb-0">
+          Public demo sandbox ·
+          <a href="{% url 'journal:about' %}">ask for full access</a>
+        </p>
+        {% endif %}
       </div>
     </aside>
 
@@ -89,6 +114,19 @@
           {% block topbar_actions %}{% endblock %}
         </div>
       </header>
+
+      {% if not user.is_authenticated %}
+      <div class="nj-guest-banner" role="status">
+        <div class="nj-guest-banner-inner">
+          <strong>Quant Lab demo</strong>
+          <span>
+            Pricing, simulation, hypo book and rates — toy inputs only, nothing saved, no live book.
+            For the full Numeraire Journal (trades, MTM, market data),
+            <a href="{% url 'journal:about' %}">contact the owner</a>.
+          </span>
+        </div>
+      </div>
+      {% endif %}
 
       {% if messages %}
         <div class="px-4 pt-3">
@@ -105,6 +143,9 @@
       <footer class="nj-footer">
         <span>© 2026 Numeraire Journal <span class="nj-version">v{% app_version %}</span></span>
         <a href="{% url 'journal:about' %}">About</a>
+        {% if not user.is_authenticated %}
+        <a href="{% url 'login' %}">Sign in</a>
+        {% endif %}
       </footer>
     </div>
   </div>

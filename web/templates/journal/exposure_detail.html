@@ -91,72 +91,70 @@
     </div>
   </div>
 
-  <div class="row g-2">
-    <div class="col-lg-6">
-      <div class="nj-panel">
-        <div class="nj-panel-head">
-          <h2>Pillar profile</h2>
-          <span class="small text-secondary">grid @ {{ as_of|date:"Y-m-d" }}</span>
+  <div class="nj-panel mb-2">
+    <div class="nj-panel-head">
+      <h2>Breakdown</h2>
+      <span class="small text-secondary">pillars · by trade @ {{ as_of|date:"Y-m-d" }}</span>
+    </div>
+    <div class="nj-panel-body nj-exposure-breakdown">
+      <div class="nj-exposure-breakdown-col">
+        <div class="nj-exposure-subhead">
+          <strong>Pillar profile</strong>
+          <span>grid</span>
         </div>
-        <div class="nj-panel-body tight">
-          <div class="nj-scroll-table nj-scroll-table-lg">
-            <table class="table table-sm mb-0 nj-compact-table">
-              <thead>
+        <div class="nj-scroll-table nj-exposure-table">
+          <table class="table table-sm mb-0 nj-compact-table">
+            <thead>
+              <tr>
+                <th>Pillar</th>
+                <th class="nj-num">τ</th>
+                <th>Date</th>
+                <th class="nj-num">EE</th>
+                <th class="nj-num">PFE 95</th>
+                <th class="nj-num">PFE 97.5</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in profile.pillars %}
                 <tr>
-                  <th>Pillar</th>
-                  <th class="nj-num">τ</th>
-                  <th>Date</th>
-                  <th class="nj-num">EE</th>
-                  <th class="nj-num">PFE 95</th>
-                  <th class="nj-num">PFE 97.5</th>
+                  <td>{{ p.pillar_id }}</td>
+                  <td class="nj-num">{{ p.year_fraction|floatformat:4 }}</td>
+                  <td class="small">{% if p.exposure_date %}{{ p.exposure_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+                  <td class="nj-num">{{ p.ee|nj_num:2 }}</td>
+                  <td class="nj-num">{{ p.pfe_95|nj_num:2 }}</td>
+                  <td class="nj-num">{{ p.pfe_975|nj_num:2 }}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {% for p in profile.pillars %}
-                  <tr>
-                    <td>{{ p.pillar_id }}</td>
-                    <td class="nj-num">{{ p.year_fraction|floatformat:4 }}</td>
-                    <td class="small">{% if p.exposure_date %}{{ p.exposure_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
-                    <td class="nj-num">{{ p.ee|nj_num:2 }}</td>
-                    <td class="nj-num">{{ p.pfe_95|nj_num:2 }}</td>
-                    <td class="nj-num">{{ p.pfe_975|nj_num:2 }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="nj-panel">
-        <div class="nj-panel-head">
-          <h2>By trade</h2>
-          <span class="small text-secondary">sum over pillars · click to open</span>
+      <div class="nj-exposure-breakdown-col">
+        <div class="nj-exposure-subhead">
+          <strong>By trade</strong>
+          <span>sum · click to open</span>
         </div>
-        <div class="nj-panel-body tight">
-          <div class="nj-scroll-table nj-scroll-table-lg">
-            <table class="table table-sm mb-0 nj-compact-table nj-clickable">
-              <thead>
-                <tr>
-                  <th>Trade</th>
-                  <th class="nj-num">Σ EE</th>
-                  <th class="nj-num">Σ PFE 95</th>
-                  <th class="nj-num">Σ PFE 97.5</th>
+        <div class="nj-scroll-table nj-exposure-table">
+          <table class="table table-sm mb-0 nj-compact-table nj-clickable">
+            <thead>
+              <tr>
+                <th>Trade</th>
+                <th class="nj-num">Σ EE</th>
+                <th class="nj-num">Σ PFE 95</th>
+                <th class="nj-num">Σ PFE 97.5</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in profile.by_trade %}
+                <tr onclick="window.location='{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}'">
+                  <td><a href="{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}">{{ row.trade_id }}</a></td>
+                  <td class="nj-num">{{ row.ee|nj_num:2 }}</td>
+                  <td class="nj-num">{{ row.pfe_95|nj_num:2 }}</td>
+                  <td class="nj-num">{{ row.pfe_975|nj_num:2 }}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {% for row in profile.by_trade %}
-                  <tr onclick="window.location='{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}'">
-                    <td><a href="{% url 'journal:trade_detail' row.trade_id %}?as_of={{ as_of|date:'Y-m-d' }}">{{ row.trade_id }}</a></td>
-                    <td class="nj-num">{{ row.ee|nj_num:2 }}</td>
-                    <td class="nj-num">{{ row.pfe_95|nj_num:2 }}</td>
-                    <td class="nj-num">{{ row.pfe_975|nj_num:2 }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

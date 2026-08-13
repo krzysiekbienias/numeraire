@@ -1,0 +1,202 @@
+{% load static journal_fmt %}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About the product · Numeraire Journal</title>
+  <meta name="description"
+    content="Numeraire is a derivatives pricing and CCR risk journal for equity options — automated Massive market data, overnight MTM, greeks and EE/PFE exposure. Commodities under development.">
+  <link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{% url 'journal:product' %}">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="{% static 'css/journal.css' %}?v=40" rel="stylesheet">
+</head>
+
+<body class="nj-product-body">
+  <div class="nj-product">
+    <header class="nj-product-top">
+      <a class="nj-brand" href="{% url 'journal:landing' %}">
+        {% include 'partials/brand_mark.html' %}
+        <span class="nj-brand-text">
+          <strong>Numeraire</strong>
+          <span>Journal</span>
+        </span>
+      </a>
+      <nav class="nj-product-top-nav" aria-label="Product page">
+        <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+        <a href="{% url 'journal:about' %}">About</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'login' %}">Sign in</a>
+      </nav>
+    </header>
+
+    <main class="nj-product-main">
+      <section class="nj-product-hero">
+        <p class="nj-product-kicker">About the product</p>
+        <h1>Price the book. See the risk. Own the stack.</h1>
+        <p class="nj-product-lede">
+          Numeraire is an application for <strong>pricing equity options</strong> and
+          <strong>managing counterparty credit risk (CCR)</strong> end to end — from
+          overnight mark-to-model through greeks and PnL to expected exposure and PFE.
+          A C++ engine does the heavy lifting; a Django journal lets you review the book
+          without opening a notebook.
+        </p>
+        <div class="nj-product-cta">
+          <a class="btn btn-primary" href="{% url 'journal:quant_lab' %}">Open Quant Lab</a>
+          <a class="btn btn-outline-light" href="{% url 'journal:about' %}">Contact the owner</a>
+        </div>
+      </section>
+
+      {# 1 — text left / photo right #}
+      <section class="nj-product-row">
+        <div class="nj-product-copy">
+          <h2>What Numeraire is</h2>
+          <p>
+            Numeraire is a derivatives pricing and risk platform built around a C++
+            engine. The engine prices instruments, computes greeks, builds discount
+            curves and vol surfaces, and writes official marks plus EE / PFE exposure
+            into SQLite. A Django and Bootstrap journal sits on top so you can review
+            the overnight book, challenge a number, and see what the library can
+            already price.
+          </p>
+          <p>
+            Today the production focus is <strong>equity options and CCR</strong>.
+            <strong>Commodity futures are under active development</strong> — listed
+            outrights and session settles are coming online; options on futures and a
+            fuller commodity stack are next.
+          </p>
+        </div>
+        <figure class="nj-product-shot">
+          <img src="{% static 'img/overview.jpg' %}?v=2" alt="Numeraire Journal overview — overnight book summary"
+               loading="lazy" decoding="async">
+        </figure>
+      </section>
+
+      {# 2 — photo left / text right #}
+      <section class="nj-product-row nj-product-row-flip">
+        <div class="nj-product-copy">
+          <h2>Portfolio, marks &amp; greeks</h2>
+          <p>
+            Book trades, inspect legs and read official EOD marks: unit and position
+            PV, greeks and PnL. The journal is built so you can challenge a number
+            against the same engine that produced it — analytic Black–Scholes, CRR
+            binomial or Monte Carlo where it fits.
+          </p>
+          <p>
+            Quant Lab is the public sandbox: vanillas, binaries, forwards, American
+            options, rates conversion, path demos and a toy hypo portfolio. Your own
+            inputs, nothing persisted, no live book data.
+          </p>
+        </div>
+        <figure class="nj-product-shot nj-product-shot-empty" data-slot="product-trades.png">
+          <span>
+            Drop screenshot
+            <code>web/static/img/product-trades.png</code>
+            <em>Trades list or trade detail with MTM / greeks</em>
+          </span>
+        </figure>
+      </section>
+
+      {# 3 — text left / photo collage right #}
+      <section class="nj-product-row">
+        <div class="nj-product-copy">
+          <h2>Trade view + market data</h2>
+          <p>
+            Open a trade and see the mark next to the market that priced it —
+            underlier spot, discount curve and implied volatility for options.
+            Equity and options feeds land automatically from <strong>Massive</strong>
+            (Polygon); after prep, official <strong>MTM is recomputed</strong> so you
+            stay on analysis, not plumbing.
+          </p>
+          <p>
+            Surfaces and term structures live beside the book: challenge a greek or
+            PV against the same curve and vol input the engine used.
+          </p>
+        </div>
+        <div class="nj-product-collage" aria-label="Trade market data and volatility surface">
+          <figure class="nj-product-collage-card nj-product-collage-back">
+            <img src="{% static 'img/vol-surf.jpg' %}?v=1" alt="Implied volatility surface"
+                 loading="lazy" decoding="async">
+            <figcaption>Vol surface</figcaption>
+          </figure>
+          <figure class="nj-product-collage-card nj-product-collage-front">
+            <img src="{% static 'img/market-data.jpg' %}?v=1" alt="Trade detail with market data inputs"
+                 loading="lazy" decoding="async">
+            <figcaption>Trade · market data</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      {# 4 — photo left / text right #}
+      <section class="nj-product-row nj-product-row-flip">
+        <div class="nj-product-copy">
+          <h2>CCR exposure</h2>
+          <p>
+            After MTM, Numeraire simulates risk-factor paths and persists expected
+            exposure and potential future exposure (PFE 95% / 97.5%) for the book.
+            The journal surfaces those profiles so counterparty risk sits next to
+            the marks — not in a separate spreadsheet.
+          </p>
+        </div>
+        <figure class="nj-product-shot nj-product-shot-empty" data-slot="product-exposure.png">
+          <span>
+            Drop screenshot
+            <code>web/static/img/product-exposure.png</code>
+            <em>Exposure / EE–PFE chart</em>
+          </span>
+        </figure>
+      </section>
+
+      {# 5 — text left / photo right #}
+      <section class="nj-product-row">
+        <div class="nj-product-copy">
+          <h2>Stack</h2>
+          <p>
+            C++20 pricing core, Python and Django for the web layer, SQLite storage,
+            ECharts for curves, surfaces and exposure. Hosted on AWS in production.
+            Quant Lab is open without login so anyone can try the pricing ideas;
+            the live book, overnight MTM and market views stay behind sign-in.
+          </p>
+        </div>
+        <figure class="nj-product-shot nj-product-shot-empty" data-slot="product-lab.png">
+          <span>
+            Drop screenshot
+            <code>web/static/img/product-lab.png</code>
+            <em>Quant Lab pricing or CRR tree</em>
+          </span>
+        </figure>
+      </section>
+
+      <section class="nj-product-disclaimer" aria-label="Disclaimer">
+        <h2>Disclaimer</h2>
+        <p>
+          Numeraire Journal is provided for <strong>demonstration, education and
+            evaluation</strong> only. It is not an offering of investment advice, a
+          licensed trading system, or a product intended for commercial production
+          use. No warranty of fitness for any particular purpose is made; use is at
+          your own risk. For access to the full journal, contact the owner.
+        </p>
+      </section>
+
+      <section class="nj-product-bottom-cta">
+        <a class="btn btn-primary btn-lg" href="{% url 'journal:quant_lab' %}">Try Quant Lab</a>
+        <a class="btn btn-outline-light btn-lg" href="{% url 'journal:about' %}">About the author</a>
+      </section>
+    </main>
+
+    <footer class="nj-product-foot">
+      <span>© 2026 Numeraire Journal <span class="nj-version">v{% app_version %}</span></span>
+      <a href="{% url 'journal:landing' %}">Home</a>
+      <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
+      <a href="{% url 'login' %}">Sign in</a>
+    </footer>
+  </div>
+</body>
+
+</html>

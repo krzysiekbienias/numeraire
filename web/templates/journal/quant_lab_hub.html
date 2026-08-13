@@ -4,7 +4,13 @@
 {% block title %}Quant Lab{% endblock %}
 {% block page_title %}Quant Lab{% endblock %}
 {% block page_subtitle %}
-<p class="muted">Choose a workspace · pricing and simulation stay separate</p>
+<p class="muted">
+  {% if user.is_authenticated %}
+  Choose a workspace · pricing and simulation stay separate
+  {% else %}
+  Public demo · no login · nothing persisted · no live book data
+  {% endif %}
+</p>
 {% endblock %}
 
 {% block content %}
@@ -53,4 +59,11 @@
     </div>
   </a>
 </div>
+{% if not user.is_authenticated %}
+<p class="nj-lab-hub-note small text-secondary mt-3 mb-0">
+  Full Quant Lab demo is open here.
+  <a href="{% url 'journal:about' %}">Contact the owner</a> for the live journal
+  (trades, MTM, curves, market data).
+</p>
+{% endif %}
 {% endblock %}

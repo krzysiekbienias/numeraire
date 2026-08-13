@@ -2,7 +2,7 @@
 
 `LoginRequiredMiddleware` guards everything here; auth views under
 `django.contrib.auth.urls` are exempt, as are journal views marked
-`@login_not_required` (landing, about).
+`@login_not_required` (landing, product, about, full Quant Lab demo).
 """
 
 from django.contrib import admin
