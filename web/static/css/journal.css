@@ -286,7 +286,15 @@ body {
   border: 1px solid var(--bs-border-color);
   border-radius: 0.65rem;
   overflow: hidden;
+  /* Equal-height cards inside Bootstrap rows; see override for stacked page panels. */
   height: 100%;
+}
+
+/* Direct children of the main column must not stretch to fill the viewport —
+   otherwise the first panel (e.g. Exposure chart) eats the page and pushes
+   the next panel (Breakdown) below the fold. */
+.nj-content > .nj-panel {
+  height: auto;
 }
 
 .nj-panel-head {
@@ -2108,6 +2116,10 @@ body {
   max-height: min(22rem, 42vh);
 }
 
+.nj-exposure-page > .nj-panel {
+  height: auto;
+}
+
 .nj-exposure-breakdown {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
@@ -2132,6 +2144,32 @@ body {
 .nj-exposure-table {
   /* Grow with rows; scroll only when the grid is long. */
   max-height: min(16rem, 36vh);
+}
+
+.nj-exposure-pillar-form {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
+.nj-exposure-attr-note {
+  font-size: 0.72rem !important;
+}
+
+.nj-exposure-pillar-row {
+  cursor: pointer;
+}
+
+.nj-exposure-pillar-row:hover {
+  background: color-mix(in srgb, #94a3b8 10%, transparent);
+}
+
+.nj-exposure-pillar-active {
+  background: color-mix(in srgb, #2dd4bf 14%, transparent);
+}
+
+.nj-exposure-pillar-active td {
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {

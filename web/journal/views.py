@@ -1018,8 +1018,11 @@ class ExposureView(TemplateView):
             if as_of is None and available_as_of:
                 as_of = available_as_of[0]
 
+            pillar_req = self.request.GET.get('pillar', '').strip()
             profile = (
-                portfolio_exposure_profile(as_of, portfolio_id)
+                portfolio_exposure_profile(
+                    as_of, portfolio_id, pillar_id=pillar_req or None
+                )
                 if portfolio_id and as_of
                 else None
             )
@@ -1043,6 +1046,9 @@ class ExposureView(TemplateView):
                     'as_of': as_of,
                     'available_as_of': available_as_of,
                     'profile': profile,
+                    'attribution_pillar': (
+                        profile['attribution_pillar'] if profile else None
+                    ),
                     'exposure_chart': profile['chart'] if profile else [],
                     'first_exposure_as_of': available_as_of[-1] if available_as_of else None,
                     'latest_exposure_as_of': available_as_of[0] if available_as_of else None,
@@ -1059,6 +1065,7 @@ class ExposureView(TemplateView):
                     'as_of': None,
                     'available_as_of': [],
                     'profile': None,
+                    'attribution_pillar': None,
                     'exposure_chart': [],
                     'first_exposure_as_of': None,
                     'latest_exposure_as_of': None,

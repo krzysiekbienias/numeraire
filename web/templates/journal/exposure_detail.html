@@ -59,8 +59,9 @@
     {% if profile.engines %} · {{ profile.engines|join:", " }}{% endif %}
     {% if profile.scopes %} · scope {{ profile.scopes|join:", " }}{% endif %}
     <br>
-    EE is summed across legs (additive).
+    EE is summed across legs at each pillar (additive).
     PFE columns are <em>sum of leg PFEs</em> — a conservative upper bound, not joint portfolio PFE.
+    <strong>By trade</strong> attributes that same pillar (not a sum across tenors).
     {% if first_exposure_as_of and latest_exposure_as_of %}
       <br>
       Coverage:
@@ -78,6 +79,7 @@
     {% endif %}
   </div>
 
+  <div class="nj-exposure-page">
   <div class="nj-panel mb-2">
     <div class="nj-panel-head">
       <h2>Exposure profile</h2>
@@ -94,7 +96,10 @@
   <div class="nj-panel mb-2">
     <div class="nj-panel-head">
       <h2>Breakdown</h2>
-      <span class="small text-secondary">pillars · by trade @ {{ as_of|date:"Y-m-d" }}</span>
+      <span class="small text-secondary">
+        pillars · trade attribution @ {{ attribution_pillar|default:"—" }}
+        · {{ as_of|date:"Y-m-d" }}
+      </span>
     </div>
     <div class="nj-panel-body nj-exposure-breakdown">
       <div class="nj-exposure-breakdown-col">
@@ -116,7 +121,9 @@
             </thead>
             <tbody>
               {% for p in profile.pillars %}
-                <tr>
+                <tr class="nj-exposure-pillar-row{% if attribution_pillar == p.pillar_id %} nj-exposure-pillar-active{% endif %}"
+                    data-pillar="{{ p.pillar_id }}"
+                    title="Show trade attribution at {{ p.pillar_id }}">
                   <td>{{ p.pillar_id }}</td>
                   <td class="nj-num">{{ p.year_fraction|floatformat:4 }}</td>
                   <td class="small">{% if p.exposure_date %}{{ p.exposure_date|date:"Y-m-d" }}{% else %}—{% endif %}</td>
@@ -132,16 +139,32 @@
       <div class="nj-exposure-breakdown-col">
         <div class="nj-exposure-subhead">
           <strong>By trade</strong>
-          <span>sum · click to open</span>
+          <form method="get" action="{% url 'journal:exposure' %}" class="nj-exposure-pillar-form">
+            <input type="hidden" name="portfolio_id" value="{{ portfolio_id }}">
+            <input type="hidden" name="as_of" value="{{ as_of|date:'Y-m-d' }}">
+            <label class="visually-hidden" for="id_attribution_pillar">pillar</label>
+            <select class="form-select form-select-sm nj-asof-select" id="id_attribution_pillar"
+                    name="pillar" onchange="this.form.submit()" title="Attribution pillar">
+              {% for p in profile.pillars %}
+                <option value="{{ p.pillar_id }}"
+                  {% if attribution_pillar == p.pillar_id %}selected{% endif %}>
+                  {{ p.pillar_id }}
+                </option>
+              {% endfor %}
+            </select>
+          </form>
         </div>
+        <p class="nj-exposure-attr-note small text-secondary mb-1">
+          Attribution @ <strong>{{ attribution_pillar }}</strong> · click trade to open
+        </p>
         <div class="nj-scroll-table nj-exposure-table">
           <table class="table table-sm mb-0 nj-compact-table nj-clickable">
             <thead>
               <tr>
                 <th>Trade</th>
-                <th class="nj-num">Σ EE</th>
-                <th class="nj-num">Σ PFE 95</th>
-                <th class="nj-num">Σ PFE 97.5</th>
+                <th class="nj-num">EE</th>
+                <th class="nj-num">PFE 95</th>
+                <th class="nj-num">PFE 97.5</th>
               </tr>
             </thead>
             <tbody>
@@ -152,6 +175,10 @@
                   <td class="nj-num">{{ row.pfe_95|nj_num:2 }}</td>
                   <td class="nj-num">{{ row.pfe_975|nj_num:2 }}</td>
                 </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="4" class="small text-secondary">No trade rows for this pillar.</td>
+                </tr>
               {% endfor %}
             </tbody>
           </table>
@@ -159,11 +186,28 @@
       </div>
     </div>
   </div>
+  </div>
 
   {% endif %}
 {% endblock %}
 
 {% block extra_js %}
+  {% if profile %}
+    <script>
+      (function () {
+        function goPillar(pillar) {
+          if (!pillar) return;
+          const url = new URL(window.location.href);
+          url.searchParams.set('pillar', pillar);
+          window.location = url.toString();
+        }
+        document.querySelectorAll('.nj-exposure-pillar-row').forEach((row) => {
+          row.addEventListener('click', () => goPillar(row.dataset.pillar));
+        });
+        window.__njGoExposurePillar = goPillar;
+      })();
+    </script>
+  {% endif %}
   {% if exposure_chart %}
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     <script>
@@ -247,6 +291,18 @@
           ],
         });
         window.addEventListener('resize', () => chart.resize());
+
+        // Click a pillar on the chart → reload By trade attribution for that tenor.
+        chart.getZr().on('click', function (params) {
+          const pointInPixel = [params.offsetX, params.offsetY];
+          if (!chart.containPixel('grid', pointInPixel)) return;
+          const xIndex = chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel)[0];
+          const i = Math.round(xIndex);
+          if (i < 0 || i >= labels.length) return;
+          if (typeof window.__njGoExposurePillar === 'function') {
+            window.__njGoExposurePillar(labels[i]);
+          }
+        });
       })();
     </script>
   {% endif %}

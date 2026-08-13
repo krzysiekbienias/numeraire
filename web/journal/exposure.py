@@ -26,11 +26,19 @@ def list_exposure_portfolios() -> list[str]:
     )
 
 
-def portfolio_exposure_profile(as_of: date, portfolio_id: str) -> dict | None:
+def portfolio_exposure_profile(
+    as_of: date,
+    portfolio_id: str,
+    *,
+    pillar_id: str | None = None,
+) -> dict | None:
     """Aggregate leg EE / PFE to a portfolio pillar profile.
 
-    EE sums are exact (linearity of expectation). Summed PFE is a conservative
-    upper bound — not a joint portfolio PFE.
+    EE sums across legs are exact (linearity of expectation). Summed PFE is a
+    conservative upper bound — not a joint portfolio PFE.
+
+    ``by_trade`` is attribution **at one pillar** (same tenor as the chart /
+    pillar table), not a sum across the time grid.
     """
     qs = TradeLegExposureEod.objects.filter(as_of=as_of, trade__portfolio_id=portfolio_id)
     if not qs.exists():
@@ -55,16 +63,23 @@ def portfolio_exposure_profile(as_of: date, portfolio_id: str) -> dict | None:
         )
         .order_by('grid_step', 'pillar_id')
     )
-    by_trade = list(
-        qs.values('trade_id')
-        .annotate(
-            ee=Sum('ee'),
-            pfe_95=Sum('pfe_95'),
-            pfe_975=Sum('pfe_975'),
-            pillars=Count('id'),
+    pillar_ids = [p['pillar_id'] for p in pillars]
+    selected = pillar_id if pillar_id in pillar_ids else (pillar_ids[0] if pillar_ids else None)
+
+    by_trade = []
+    if selected is not None:
+        by_trade = list(
+            qs.filter(pillar_id=selected)
+            .values('trade_id')
+            .annotate(
+                ee=Sum('ee'),
+                pfe_95=Sum('pfe_95'),
+                pfe_975=Sum('pfe_975'),
+                legs=Count('leg_id', distinct=True),
+            )
+            .order_by('-pfe_95', 'trade_id')
         )
-        .order_by('-pfe_95', 'trade_id')
-    )
+
     chart = [
         {
             'pillar': p['pillar_id'],
@@ -82,6 +97,8 @@ def portfolio_exposure_profile(as_of: date, portfolio_id: str) -> dict | None:
         'engines': engines,
         'scopes': scopes,
         'pillars': pillars,
+        'pillar_ids': pillar_ids,
+        'attribution_pillar': selected,
         'by_trade': by_trade,
         'chart': chart,
     }
