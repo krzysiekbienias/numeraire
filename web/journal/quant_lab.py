@@ -67,21 +67,22 @@ _FIELD_VOL = {
     'sym': 'σ',
     'label': 'IV',
     'kind': 'number',
-    'step': '0.1',
+    # HTML step=0.1 rejects 0.25 / 0.19 (browser constraint validation).
+    'step': 'any',
 }
 _FIELD_RATE = {
     'name': 'rate',
     'sym': 'r',
     'label': 'Rate',
     'kind': 'number',
-    'step': '0.01',
+    'step': 'any',
 }
 _FIELD_DIV = {
     'name': 'div',
     'sym': 'q',
     'label': 'Dividend',
     'kind': 'number',
-    'step': '0.1',
+    'step': 'any',
 }
 _FIELD_TAU = {
     'name': 'tau',
