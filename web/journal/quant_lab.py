@@ -7,6 +7,7 @@ shapes for vanillas only.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -778,6 +779,56 @@ def _dump_crr_tree(
         return None
 
 
+def _crr_params_from_tree(tree: dict | None) -> dict | None:
+    """Numeric CRR factors from a C++ tree dump (same u,d,Δt as the drawn tree)."""
+    if not tree:
+        return None
+    try:
+        p_up = float(tree['p_up'])
+        return {
+            'n_steps': int(tree['n_steps']),
+            'dt': float(tree['dt']),
+            'u': float(tree['u']),
+            'd': float(tree['d']),
+            'p_up': p_up,
+            'p_down': 1.0 - p_up,
+            'discount': float(tree.get('discount') or 0.0),
+            'source': 'c++',
+        }
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _compute_crr_params(
+    *,
+    vol: float,
+    rate: float,
+    div: float,
+    tau: float,
+    n_steps: int,
+) -> dict | None:
+    """Same CRR factor formulas as ``CoxRossRubinsteinVanillaTree`` (for large N)."""
+    n = int(n_steps)
+    if n < 1 or tau <= 0.0 or vol <= 0.0:
+        return None
+    dt = float(tau) / float(n)
+    u = math.exp(float(vol) * math.sqrt(dt))
+    d = 1.0 / u
+    growth = math.exp((float(rate) - float(div)) * dt)
+    p_up = (growth - d) / (u - d)
+    p_up = min(1.0, max(0.0, p_up))
+    return {
+        'n_steps': n,
+        'dt': dt,
+        'u': u,
+        'd': d,
+        'p_up': p_up,
+        'p_down': 1.0 - p_up,
+        'discount': math.exp(-float(rate) * dt),
+        'source': 'formula',
+    }
+
+
 def _quote_from_cpp_aon(params: GreeksLabParams, tau: float) -> QuantLabQuote | None:
     mod = _try_import_cpp()
     if mod is None:
@@ -1094,6 +1145,7 @@ def build_quant_lab(get, *, asset_class: str = 'equity') -> dict:
     quote_crr: QuantLabQuote | None = None
     charts = None
     crr_tree = None
+    crr_params = None
     payoff_value_chart = None
     n_steps = int(meta.get('n_steps') or _CRR_DEFAULT_STEPS)
     mc_paths = int(meta.get('mc_paths') or _MC_DEFAULT_PATHS)
@@ -1128,10 +1180,18 @@ def build_quant_lab(get, *, asset_class: str = 'equity') -> dict:
             if meta.get('draw_tree'):
                 tree_steps = int(meta.get('tree_steps') or _CRR_TREE_DRAW_DEFAULT)
                 crr_tree = _dump_crr_tree(params, tau, 'european', tree_steps)
+                crr_params = _crr_params_from_tree(crr_tree)
         if is_am_vanilla and quote and quote.ok:
             steps_used = quote.n_steps if quote.n_steps is not None else n_steps
             if _CRR_TREE_DRAW_MIN <= steps_used <= _CRR_TREE_MAX_STEPS:
                 crr_tree = _dump_crr_tree(params, tau, exercise, steps_used)
+            crr_params = _crr_params_from_tree(crr_tree) or _compute_crr_params(
+                vol=float(params.vol),
+                rate=float(params.rate),
+                div=float(params.div),
+                tau=float(tau),
+                n_steps=int(steps_used),
+            )
 
     has_greeks = bool(
         quote
@@ -1181,6 +1241,7 @@ def build_quant_lab(get, *, asset_class: str = 'equity') -> dict:
         'show_formulas': selected
         and product in {'vanilla', 'aon', 'con', 'forward', 'futures_outright'},
         'crr_tree': crr_tree,
+        'crr_params': crr_params,
         'show_crr_tree': bool(crr_tree and crr_tree.get('nodes')),
         'crr_tree_max_steps': _CRR_TREE_MAX_STEPS,
         'payoff_value_chart': payoff_value_chart,

@@ -234,9 +234,25 @@
                   V = \max\!\bigl(\mathrm{payoff}(S),\;
                   e^{-r\Delta t}\bigl(p\,V_u + q\,V_d\bigr)\bigr)
                   \]</div>
+                {% if crr_params %}
+                <div class="nj-quant-crr-nums" aria-label="CRR numeric parameters for this quote">
+                  <span><span class="nj-sym">N</span> {{ crr_params.n_steps }}</span>
+                  <span><span class="nj-sym">Δt</span> {{ crr_params.dt|floatformat:6 }}</span>
+                  <span><span class="nj-sym">u</span> {{ crr_params.u|floatformat:6 }}</span>
+                  <span><span class="nj-sym">d</span> {{ crr_params.d|floatformat:6 }}</span>
+                  <span><span class="nj-sym">p</span> {{ crr_params.p_up|floatformat:6 }}</span>
+                  <span><span class="nj-sym">q</span> {{ crr_params.p_down|floatformat:6 }}</span>
+                </div>
+                <p class="nj-quant-edu-note mb-0">
+                  Numeric CRR factors for this \(N\)
+                  {% if crr_params.source == 'c++' %}(from C++ tree dump){% else %}(same formulas as C++){% endif %}
+                  · risk-neutral \(p\) up, \(q\) down
+                </p>
+                {% else %}
                 <p class="nj-quant-edu-note mb-0">
                   Risk-neutral \(p\) (up), \(q\) (down) · same \(u,d,p\) as in the tree panel below
                 </p>
+                {% endif %}
               </div>
               {% endif %}
           </div>
@@ -425,6 +441,7 @@
             <strong>CRR tree</strong>
             <span class="small text-secondary">
               N={{ crr_tree.n_steps }}
+              · Δt={{ crr_tree.dt|floatformat:6 }}
               · u={{ crr_tree.u|floatformat:4 }}
               · d={{ crr_tree.d|floatformat:4 }}
               · p={{ crr_tree.p_up|floatformat:4 }}
@@ -534,6 +551,7 @@
             <strong>CRR tree</strong>
             <span class="small text-secondary">
               N={{ crr_tree.n_steps }}
+              · Δt={{ crr_tree.dt|floatformat:6 }}
               · u={{ crr_tree.u|floatformat:4 }}
               · d={{ crr_tree.d|floatformat:4 }}
               · p={{ crr_tree.p_up|floatformat:4 }}

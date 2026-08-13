@@ -1434,6 +1434,26 @@ body {
   margin-top: 0.25rem;
 }
 
+.nj-quant-crr-nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.1rem;
+  margin: 0.45rem 0 0.15rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, #0f172a 72%, transparent);
+  border: 1px solid color-mix(in srgb, #2dd4bf 28%, transparent);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+  color: #e2e8f0;
+}
+
+.nj-quant-crr-nums .nj-sym {
+  color: #2dd4bf;
+  margin-right: 0.3rem;
+  font-weight: 600;
+}
+
 .nj-quant-crr-body {
   padding: 0.55rem 0.85rem !important;
 }
