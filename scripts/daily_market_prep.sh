@@ -377,17 +377,17 @@ run_commodity_futures_ingest() {
         return 0
     fi
 
+    # Date window (ingest_from_date / ingest_to_date) lives on market_data_prep_scope only —
+    # universe_instrument has no such columns; filter by active COMMODITY + futures flags.
     local count
     count="$(sqlite3 "${DB_PATH}" "
         SELECT COUNT(*) FROM universe_instrument
         WHERE is_active = 1
           AND asset_class = 'COMMODITY'
-          AND (ingest_futures_eod = 1 OR ingest_futures_product = 1)
-          AND ingest_from_date <= '${as_of}'
-          AND (ingest_to_date IS NULL OR ingest_to_date >= '${as_of}');
+          AND (ingest_futures_eod = 1 OR ingest_futures_product = 1);
     ")"
     if [[ "${count}" -eq 0 ]]; then
-        log "commodity futures ingest: no active COMMODITY universe rows for as_of=${as_of}"
+        log "commodity futures ingest: no active COMMODITY universe rows"
         return 0
     fi
 
