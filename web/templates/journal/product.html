@@ -16,7 +16,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
     integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="{% static 'css/journal.css' %}?v=40" rel="stylesheet">
+  <link href="{% static 'css/journal.css' %}?v=51" rel="stylesheet">
 </head>
 
 <body class="nj-product-body">
@@ -74,32 +74,30 @@
         </div>
         <figure class="nj-product-shot">
           <img src="{% static 'img/overview.jpg' %}?v=2" alt="Numeraire Journal overview — overnight book summary"
-               loading="lazy" decoding="async">
+            loading="lazy" decoding="async">
         </figure>
       </section>
 
-      {# 2 — photo left / text right #}
-      <section class="nj-product-row nj-product-row-flip">
+      {# 2 — copy + full-width panoramic shot #}
+      <section class="nj-product-feature">
         <div class="nj-product-copy">
-          <h2>Portfolio, marks &amp; greeks</h2>
+          <h2>What-if</h2>
           <p>
-            Book trades, inspect legs and read official EOD marks: unit and position
-            PV, greeks and PnL. The journal is built so you can challenge a number
-            against the same engine that produced it — analytic Black–Scholes, CRR
-            binomial or Monte Carlo where it fits.
+            On a live trade you can bump a single risk factor — spot, implied vol,
+            rate, dividend yield or time to expiry — and reprice without touching
+            the official mark. Shocked PV and greeks sit next to the EOD baseline
+            so you see what that move does to the position, and how it would
+            ripple through the book.
           </p>
           <p>
-            Quant Lab is the public sandbox: vanillas, binaries, forwards, American
-            options, rates conversion, path demos and a toy hypo portfolio. Your own
-            inputs, nothing persisted, no live book data.
+            Same market inputs the overnight engine used; nothing is written back.
+            Reset and the mark of record is still the mark of record.
           </p>
         </div>
-        <figure class="nj-product-shot nj-product-shot-empty" data-slot="product-trades.png">
-          <span>
-            Drop screenshot
-            <code>web/static/img/product-trades.png</code>
-            <em>Trades list or trade detail with MTM / greeks</em>
-          </span>
+        <figure class="nj-product-shot nj-product-shot-wide">
+          <img src="{% static 'img/what-if.jpg' %}?v=1"
+               alt="What-if on a live trade — bump implied vol, see shocked PV versus the official mark"
+               width="1103" height="228" loading="lazy" decoding="async">
         </figure>
       </section>
 
@@ -121,13 +119,13 @@
         </div>
         <div class="nj-product-collage" aria-label="Trade market data and volatility surface">
           <figure class="nj-product-collage-card nj-product-collage-back">
-            <img src="{% static 'img/vol-surf.jpg' %}?v=1" alt="Implied volatility surface"
-                 loading="lazy" decoding="async">
+            <img src="{% static 'img/vol-surf.jpg' %}?v=1" alt="Implied volatility surface" loading="lazy"
+              decoding="async">
             <figcaption>Vol surface</figcaption>
           </figure>
           <figure class="nj-product-collage-card nj-product-collage-front">
-            <img src="{% static 'img/market-data.jpg' %}?v=1" alt="Trade detail with market data inputs"
-                 loading="lazy" decoding="async">
+            <img src="{% static 'img/market-data.jpg' %}?v=1" alt="Trade detail with market data inputs" loading="lazy"
+              decoding="async">
             <figcaption>Trade · market data</figcaption>
           </figure>
         </div>
@@ -144,16 +142,13 @@
             the marks — not in a separate spreadsheet.
           </p>
         </div>
-        <figure class="nj-product-shot nj-product-shot-empty" data-slot="product-exposure.png">
-          <span>
-            Drop screenshot
-            <code>web/static/img/product-exposure.png</code>
-            <em>Exposure / EE–PFE chart</em>
-          </span>
+        <figure class="nj-product-shot">
+          <img src="{% static 'img/exposure.jpg' %}?v=1" alt="CCR exposure profile — EE and PFE by pillar with trade attribution"
+               loading="lazy" decoding="async">
         </figure>
       </section>
 
-      {# 5 — text left / photo right #}
+      {# 5 — text left / photo scatter right #}
       <section class="nj-product-row">
         <div class="nj-product-copy">
           <h2>Stack</h2>
@@ -164,12 +159,73 @@
             the live book, overnight MTM and market views stay behind sign-in.
           </p>
         </div>
-        <figure class="nj-product-shot nj-product-shot-empty" data-slot="product-lab.png">
-          <span>
-            Drop screenshot
-            <code>web/static/img/product-lab.png</code>
-            <em>Quant Lab pricing or CRR tree</em>
-          </span>
+        <div class="nj-product-scatter" aria-label="Technology atmosphere — blackboard, data center, laptop">
+          <figure class="nj-product-scatter-card nj-product-scatter-primary">
+            <img src="{% static 'img/black-board.jpg' %}?v=1" alt="" width="900" height="1200" loading="lazy" decoding="async">
+          </figure>
+          <figure class="nj-product-scatter-card nj-product-scatter-top">
+            <img src="{% static 'img/data-center.jpg' %}?v=1" alt="" width="1200" height="900" loading="lazy" decoding="async">
+          </figure>
+          <figure class="nj-product-scatter-card nj-product-scatter-bot">
+            <img src="{% static 'img/laptop.jpg' %}?v=1" alt="" width="1600" height="1000" loading="lazy" decoding="async">
+          </figure>
+        </div>
+      </section>
+
+      {# 6 — photo left / text right #}
+      <section class="nj-product-row nj-product-row-flip">
+        <div class="nj-product-copy">
+          <h2>Development</h2>
+          <p>
+            Two servers, one repo. <strong>Dev</strong> is where the journal gets
+            broken on purpose. <strong>Prod</strong> is the live book — same code,
+            after CI/CD. A merge to <code>main</code> ships itself: GitHub Actions
+            SSHs in, rebuilds the C++ engine, syncs Python, migrates, restarts.
+            The application is developed in that spirit — not a laptop demo that
+            later “gets deployed”.
+          </p>
+        </div>
+        <figure class="nj-product-shot nj-product-shot-photo">
+          <img src="{% static 'img/port.jpg' %}?v=1" alt="Container ship at port — ship to production"
+               width="800" height="1200" loading="lazy" decoding="async">
+        </figure>
+      </section>
+
+      {# 7 — text left / photo right #}
+      <section class="nj-product-row">
+        <div class="nj-product-copy">
+          <h2>Local SQLite</h2>
+          <p>
+            The book lives in a local SQL file — not a warehouse in the cloud.
+            Production trades, Massive market data, official MTM and EE / PFE
+            exposure are all written there: the same store the C++ engine
+            persists and the Django journal reads.
+          </p>
+          <p>
+            One file, one source of truth. Open it, query a mark, and see the
+            trade next to the market that priced it.
+          </p>
+        </div>
+        <figure class="nj-product-shot nj-product-shot-photo nj-product-shot-photo-land">
+          <img src="{% static 'img/library.jpg' %}?v=1" alt="Library stacks — the local SQLite book"
+               width="1200" height="900" loading="lazy" decoding="async">
+        </figure>
+      </section>
+
+      {# 8 — photo left / text right #}
+      <section class="nj-product-row nj-product-row-flip">
+        <div class="nj-product-copy">
+          <h2>Unit &amp; integration tests</h2>
+          <p>
+            The C++ engine and the journal have solid unit and integration
+            coverage — pricers, bootstraps, MTM persistence, exposure. That is
+            how the methodology stays honest: a wrong formula or a silent
+            regression is caught before it hits the book.
+          </p>
+        </div>
+        <figure class="nj-product-shot nj-product-shot-photo">
+          <img src="{% static 'img/mikroskop.jpg' %}?v=1" alt="Microscope — unit and integration tests catch the error"
+               width="800" height="1200" loading="lazy" decoding="async">
         </figure>
       </section>
 
