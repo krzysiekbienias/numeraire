@@ -11,7 +11,9 @@ register = template.Library()
 @register.simple_tag
 def app_version():
     """Product version from settings (works even if context processors lag a reload)."""
-    return getattr(settings, 'APP_VERSION', '0.4.2')
+    ver = getattr(settings, 'APP_VERSION', '0.5.7')
+    label = str(getattr(settings, 'APP_VERSION_LABEL', '') or '').strip()
+    return f'{ver} ({label})' if label else ver
 
 # Model theta is ∂V/∂t per calendar year (QuantLib / architecture.md).
 # Desk UI shows calendar-day decay for comparison with PV / daily PnL.
