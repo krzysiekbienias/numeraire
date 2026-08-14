@@ -5,6 +5,9 @@ Fetch US Treasury constant-maturity par yields from FRED (DGS*) and upsert into 
 Requires: FRED_API_KEY in environment or repo-root `.env`.
 Optional: FRED_BASE_URL (default https://api.stlouisfed.org/fred).
 
+Transient FRED failures (HTTP 429/502/503/504, timeout) retry with 5s / 15s / 30s
+backoff. A clean response is never retried; 4xx still fails immediately.
+
 Example:
   python3 scripts/fetch_fred_treasury_par_yields.py --as-of 2026-05-27
   python3 scripts/fetch_fred_treasury_par_yields.py --as-of 2026-05-27 --dry-run
@@ -15,8 +18,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import sqlite3
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +33,9 @@ from typing import Any, Mapping, Sequence
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CURVE_CONFIG = REPO_ROOT / "configs" / "fred_usd_treasury_par_curve.json"
 DEFAULT_FRED_BASE = "https://api.stlouisfed.org/fred"
+# Transient provider failures only (502 this morning). Success never retries.
+_RETRYABLE_HTTP = {429, 502, 503, 504}
+_RETRY_BACKOFF_SEC = (5, 15, 30)
 
 
 def _load_dotenv(path: Path) -> None:
@@ -56,6 +64,50 @@ def _parse_as_of(s: str) -> str:
     return s
 
 
+def _is_retryable_url_error(exc: urllib.error.URLError) -> bool:
+    reason = exc.reason
+    if isinstance(reason, (TimeoutError, socket.timeout, ConnectionError)):
+        return True
+    msg = str(reason).lower()
+    return "timed out" in msg or "temporarily unavailable" in msg
+
+
+def _fred_get_json(url: str, series_id: str) -> dict[str, Any]:
+    """GET one FRED series page. Retry only on gateway / timeout; 4xx dies immediately."""
+    req = urllib.request.Request(url, headers={"User-Agent": "numeraire-fetch-fred/1.0"})
+    attempts = 1 + len(_RETRY_BACKOFF_SEC)
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")[:500]
+            retry = e.code in _RETRYABLE_HTTP and attempt < attempts - 1
+            if retry:
+                wait = _RETRY_BACKOFF_SEC[attempt]
+                print(
+                    f"warn: FRED HTTP {e.code} for {series_id}; "
+                    f"retry in {wait}s ({attempt + 1}/{attempts})",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+                continue
+            _die(f"FRED HTTP {e.code} for {series_id}: {body}")
+        except urllib.error.URLError as e:
+            retry = _is_retryable_url_error(e) and attempt < attempts - 1
+            if retry:
+                wait = _RETRY_BACKOFF_SEC[attempt]
+                print(
+                    f"warn: FRED request failed for {series_id}: {e}; "
+                    f"retry in {wait}s ({attempt + 1}/{attempts})",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+                continue
+            _die(f"FRED request failed for {series_id}: {e}")
+    _die(f"FRED request failed for {series_id}: retries exhausted")
+
+
 def _fred_observation(
     base_url: str,
     api_key: str,
@@ -72,15 +124,7 @@ def _fred_observation(
         }
     )
     url = f"{base_url.rstrip('/')}/series/observations?{params}"
-    req = urllib.request.Request(url, headers={"User-Agent": "numeraire-fetch-fred/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")[:500]
-        _die(f"FRED HTTP {e.code} for {series_id}: {body}")
-    except urllib.error.URLError as e:
-        _die(f"FRED request failed for {series_id}: {e}")
+    payload = _fred_get_json(url, series_id)
 
     observations = payload.get("observations") or []
     if not observations:
