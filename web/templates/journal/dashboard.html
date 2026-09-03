@@ -41,7 +41,7 @@
       <div class="nj-metric">
         <div class="label">PV total</div>
         <div class="value {% if mtm.pv_total and mtm.pv_total < 0 %}nj-pnl-neg{% elif mtm.pv_total and mtm.pv_total > 0 %}nj-pnl-pos{% endif %}">
-          {% if mtm.pv_total != None %}{{ mtm.pv_total|nj_num:2 }}{% else %}—{% endif %}
+          {% if mtm.pv_total != None %}{{ mtm.pv_total|nj_num:0 }}{% else %}—{% endif %}
         </div>
         <div class="hint">{% if mtm.legs %}{{ mtm.legs }} marked legs{% else %}no marks{% endif %}</div>
       </div>
@@ -50,7 +50,7 @@
       <div class="nj-metric">
         <div class="label">Daily P&amp;L</div>
         <div class="value {% if mtm.pnl_daily and mtm.pnl_daily < 0 %}nj-pnl-neg{% elif mtm.pnl_daily and mtm.pnl_daily > 0 %}nj-pnl-pos{% endif %}">
-          {% if mtm.pnl_daily != None %}{{ mtm.pnl_daily|nj_num:2 }}{% else %}—{% endif %}
+          {% if mtm.pnl_daily != None %}{{ mtm.pnl_daily|nj_num:0 }}{% else %}—{% endif %}
         </div>
         <div class="hint">sum of pnl_daily @ as_of</div>
       </div>
@@ -58,14 +58,14 @@
     <div class="col-6 col-xl-3">
       <div class="nj-metric">
         <div class="label">Delta total</div>
-        <div class="value">{% if mtm.delta_total != None %}{{ mtm.delta_total|nj_num:2 }}{% else %}—{% endif %}</div>
+        <div class="value">{% if mtm.delta_total != None %}{{ mtm.delta_total|nj_num:0 }}{% else %}—{% endif %}</div>
         <div class="hint">position-scaled</div>
       </div>
     </div>
     <div class="col-6 col-xl-3">
       <div class="nj-metric">
         <div class="label">Vega total</div>
-        <div class="value">{% if mtm.vega_total != None %}{{ mtm.vega_total|nj_num:2 }}{% else %}—{% endif %}</div>
+        <div class="value">{% if mtm.vega_total != None %}{{ mtm.vega_total|nj_num:0 }}{% else %}—{% endif %}</div>
         <div class="hint">position-scaled</div>
       </div>
     </div>
@@ -154,7 +154,7 @@
                     <td><code>{{ b.portfolio_id }}</code></td>
                     <td class="nj-num">{{ b.legs }}</td>
                     <td class="nj-num {% if b.pv_total and b.pv_total < 0 %}nj-pnl-neg{% elif b.pv_total and b.pv_total > 0 %}nj-pnl-pos{% endif %}">
-                      {% if b.pv_total != None %}{{ b.pv_total|nj_num:2 }}{% else %}—{% endif %}
+                      {% if b.pv_total != None %}{{ b.pv_total|nj_num:0 }}{% else %}—{% endif %}
                     </td>
                   </tr>
                   {% for s in b.strategies %}
@@ -162,7 +162,7 @@
                       <td class="ps-3 text-secondary">{{ s.strategy_type }}</td>
                       <td class="nj-num">{{ s.legs }}</td>
                       <td class="nj-num {% if s.pv_total and s.pv_total < 0 %}nj-pnl-neg{% elif s.pv_total and s.pv_total > 0 %}nj-pnl-pos{% endif %}">
-                        {% if s.pv_total != None %}{{ s.pv_total|nj_num:2 }}{% else %}—{% endif %}
+                        {% if s.pv_total != None %}{{ s.pv_total|nj_num:0 }}{% else %}—{% endif %}
                       </td>
                     </tr>
                   {% endfor %}
@@ -201,7 +201,7 @@
                     <td><code>{{ e.pricing_engine }}</code></td>
                     <td class="nj-num">{{ e.legs }}</td>
                     <td class="nj-num {% if e.pv_total and e.pv_total < 0 %}nj-pnl-neg{% elif e.pv_total and e.pv_total > 0 %}nj-pnl-pos{% endif %}">
-                      {% if e.pv_total != None %}{{ e.pv_total|nj_num:2 }}{% else %}—{% endif %}
+                      {% if e.pv_total != None %}{{ e.pv_total|nj_num:0 }}{% else %}—{% endif %}
                     </td>
                     <td class="nj-num">{{ e.share|nj_num:0 }}%</td>
                   </tr>
@@ -239,7 +239,7 @@
                   <tr>
                     <td>{{ s.as_of|date:"Y-m-d" }}</td>
                     <td>{{ s.underlying_id }}</td>
-                    <td class="nj-num">{{ s.spot_used|nj_num:2 }}</td>
+                    <td class="nj-num">{{ s.spot_used|nj_num:0 }}</td>
                     <td class="nj-num">{{ s.point_count|default:"—" }}</td>
                   </tr>
                 {% endfor %}
