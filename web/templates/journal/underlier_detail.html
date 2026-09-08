@@ -5,7 +5,10 @@
 {% block page_title %}{{ ticker }}{% endblock %}
 {% block page_subtitle %}
   <p class="muted">
-    {{ kind }} · adjusted 1d · {{ bar_count }} bar{{ bar_count|pluralize }}
+    <a href="{% url 'journal:market_data' %}">Market Data</a>
+    · <a href="{% url 'journal:market_equities' %}">Equities</a>
+    · <a href="{% url 'journal:underlier_list' %}">spots</a>
+    · {{ kind }} · adjusted 1d · {{ bar_count }} bar{{ bar_count|pluralize }}
     {% if requested_ticker and requested_ticker != ticker %}
       · resolved from {{ requested_ticker }}
     {% endif %}
@@ -14,7 +17,7 @@
 
 {% block topbar_actions %}
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'journal:underlier_list' %}">
-    <i class="bi bi-arrow-left"></i> All underliers
+    <i class="bi bi-arrow-left"></i> All spots
   </a>
 {% endblock %}
 

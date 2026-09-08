@@ -1,6 +1,8 @@
 from datetime import date, timedelta
 
-from django.test import SimpleTestCase
+from django.contrib.auth import get_user_model
+from django.test import Client, SimpleTestCase, TestCase
+from django.urls import reverse
 
 from journal.commodity_curves import load_tenor_history
 from journal.commodity_curve_backtest import (
@@ -80,3 +82,114 @@ class CommodityCurveHelpersTest(SimpleTestCase):
         self.assertEqual(load_tenor_history('', ''), [])
         self.assertEqual(load_tenor_history('NG', ''), [])
         self.assertEqual(load_tenor_history('', 'NGV26'), [])
+
+
+class CalibrationHelpersTest(SimpleTestCase):
+    def test_param_groups_and_factor_product_codes(self):
+        from journal.calibration import model_label, param_group, param_label, source_label
+        from journal.calibration import _product_from_factor
+
+        self.assertEqual(param_group('mean_reversion'), 'dynamics')
+        self.assertEqual(param_group('curve_short_level'), 'curve')
+        self.assertEqual(param_group('vol_fit_rmse'), 'fit')
+        self.assertEqual(param_label('mean_reversion'), 'Mean reversion κ')
+        self.assertEqual(model_label('gabillon_2f'), 'Gabillon 2F')
+        self.assertEqual(source_label('historical'), 'historical EOD')
+        self.assertEqual(_product_from_factor('CL_SHORT'), 'CL')
+        self.assertEqual(_product_from_factor('NG_M3'), 'NG')
+        self.assertEqual(_product_from_factor('AAPL'), 'AAPL')
+
+    def test_param_view_picks_one_underlier_and_one_scalar(self):
+        from journal.calibration import select_param_view
+
+        detail = {
+            'param_blocks': [
+                {
+                    'curve': 'CL',
+                    'sections': [
+                        {
+                            'label': 'Dynamics',
+                            'rows': [
+                                {
+                                    'name': 'mean_reversion',
+                                    'label': 'Mean reversion κ',
+                                    'value': 1.6,
+                                    'is_int': False,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    'curve': 'NG',
+                    'sections': [
+                        {
+                            'label': 'Fit quality',
+                            'rows': [
+                                {
+                                    'name': 'vol_fit_rmse',
+                                    'label': 'Vol fit RMSE',
+                                    'value': 0.02,
+                                    'is_int': False,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ]
+        }
+        ng = select_param_view(detail, {'param_curve': 'NG'})
+        self.assertEqual(ng['curve'], 'NG')
+        self.assertIsNone(ng['selected'])
+        one = select_param_view(detail, {'param_curve': 'NG', 'param_name': 'vol_fit_rmse'})
+        self.assertEqual(one['selected']['value'], 0.02)
+        fallback = select_param_view(detail, {'param_curve': 'ZZ'})
+        self.assertEqual(fallback['curve'], 'CL')
+
+
+class JournalHubNavTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('nav', password='nav-pass')
+        self.client.login(username='nav', password='nav-pass')
+
+    def test_guest_is_sent_to_login_from_market_and_risk(self):
+        anon = Client()
+        for name in ('market_data', 'market_equities', 'risk', 'calibration'):
+            response = anon.get(reverse(f'journal:{name}'))
+            self.assertEqual(response.status_code, 302, name)
+            self.assertIn('/accounts/login/', response['Location'])
+
+        lab = anon.get(reverse('journal:quant_lab'))
+        self.assertEqual(lab.status_code, 200)
+        nav = lab.content.decode().split('aria-label="Primary"', 1)[1].split('</nav>', 1)[0]
+        self.assertIn('bi-flask', nav)
+        self.assertNotIn('bi-lightning-charge', nav)
+        self.assertNotIn('Market Data', nav)
+        self.assertNotIn('bi-umbrella', nav)
+
+    def test_signed_in_sidebar_uses_hubs_and_lab_flask(self):
+        response = self.client.get(reverse('journal:market_data'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('Market Data', html)
+        self.assertIn('Risk', html)
+        self.assertIn('bi-flask', html)
+        self.assertIn('bi-umbrella', html)
+        self.assertNotIn('bi-lightning-charge', html)
+        self.assertIn('Futures curves', html)
+        self.assertIn('Discount curve', html)
+        self.assertNotIn('>Commodity curves<', html)
+        self.assertNotIn('>Underliers<', html)
+
+    def test_equities_and_risk_hubs_render_tiles(self):
+        equities = self.client.get(reverse('journal:market_equities'))
+        self.assertEqual(equities.status_code, 200)
+        self.assertContains(equities, 'Vol surfaces')
+        self.assertContains(equities, 'Spots')
+        risk = self.client.get(reverse('journal:risk'))
+        self.assertEqual(risk.status_code, 200)
+        self.assertContains(risk, 'Exposure')
+        self.assertContains(risk, 'Calibration')
+        self.assertContains(risk, 'beacon.jpg')
+        self.assertContains(risk, 'celownik.jpg')
+        self.assertContains(risk, 'bi-umbrella')

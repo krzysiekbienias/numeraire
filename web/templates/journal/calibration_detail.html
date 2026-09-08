@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% load journal_fmt %}
+
+{% block title %}Calibration{% endblock %}
+{% block page_title %}Calibration{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    <a href="{% url 'journal:risk' %}">Risk</a>
+    · persisted snapshots · model, source, history window
+    {% if snapshot %}
+      · <strong>{{ snapshot.scope_key }}</strong>
+      · {{ model_label }}
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if scope_keys %}
+    <form method="get" action="{% url 'journal:calibration' %}" class="nj-asof-form nj-asof-form-wrap">
+      <label class="nj-asof-label" for="id_scope_key">book</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_scope_key" name="scope_key"
+              onchange="this.form.submit()">
+        {% for k in scope_keys %}
+          <option value="{{ k }}" {% if scope_key == k %}selected{% endif %}>{{ k }}</option>
+        {% endfor %}
+      </select>
+      <label class="nj-asof-label" for="id_model">model</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_model" name="model"
+              onchange="this.form.submit()">
+        {% for opt in model_options %}
+          <option value="{{ opt.code }}" {% if model == opt.code %}selected{% endif %}>{{ opt.label }}</option>
+        {% endfor %}
+      </select>
+      <label class="nj-asof-label" for="id_source">source</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_source" name="source"
+              onchange="this.form.submit()">
+        {% for opt in source_options %}
+          <option value="{{ opt.code }}" {% if source == opt.code %}selected{% endif %}>{{ opt.label }}</option>
+        {% endfor %}
+      </select>
+      {% if available_as_of %}
+        <label class="nj-asof-label" for="id_as_of">as_of</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_as_of" name="as_of"
+                onchange="this.form.submit()">
+          {% for d in available_as_of %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      {% if param_view %}
+        <input type="hidden" name="param_curve" value="{{ param_view.curve }}">
+        <input type="hidden" name="param_name" value="{{ param_view.param_name }}">
+      {% endif %}
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="alert alert-warning">
+      Could not read the Numeraire database: <code>{{ db_error }}</code>
+    </div>
+  {% elif not snapshot %}
+    <div class="nj-empty">No calibration snapshots in the database yet.</div>
+  {% else %}
+
+  <div class="alert alert-secondary py-2 small mb-3" role="status">
+    Snapshot <strong>#{{ snapshot.calibration_id }}</strong>
+    · {{ snapshot.calibration_scope }} <code>{{ snapshot.scope_key }}</code>
+    · {{ model_label }} / {{ source_label }}
+    · fitted <strong>{{ snapshot.as_of|date:"Y-m-d" }}</strong>
+    · {{ snapshot.num_factors }} factor{{ snapshot.num_factors|pluralize }}
+    {% if detail.products %}
+      · underliers {{ detail.products|join:", " }}
+    {% endif %}
+    {% if snapshot.history_start and snapshot.history_end %}
+      <br>
+      History {{ snapshot.history_start|date:"Y-m-d" }}
+      → {{ snapshot.history_end|date:"Y-m-d" }}
+      {% if snapshot.lookback_calendar_days %}
+        · {{ snapshot.lookback_calendar_days }}d lookback
+      {% endif %}
+      {% if snapshot.num_return_observations %}
+        · {{ snapshot.num_return_observations }} return days
+      {% endif %}
+      {% if snapshot.vol_annualization_days %}
+        · vol × √{{ snapshot.vol_annualization_days }}
+      {% endif %}
+      {% if snapshot.eod_adjusted != None %}
+        · {{ snapshot.eod_adjusted|yesno:"adjusted EOD,raw EOD" }}
+      {% endif %}
+    {% endif %}
+    {% if snapshot.produced_by %}
+      · {{ snapshot.produced_by }}
+    {% endif %}
+    {% if snapshot.calculated_at %}
+      · wrote {{ snapshot.calculated_at }}
+    {% endif %}
+    {% if snapshot.remarks %}
+      <br>{{ snapshot.remarks }}
+    {% endif %}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="nj-metric">
+        <div class="label">Model</div>
+        <div class="value">{{ model_label }}</div>
+        <div class="hint">{{ source_label }} · {{ snapshot.calibration_scope }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="nj-metric">
+        <div class="label">Scope</div>
+        <div class="value">{{ snapshot.scope_key }}</div>
+        <div class="hint">as_of {{ snapshot.as_of|date:"Y-m-d" }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="nj-metric">
+        <div class="label">Factors</div>
+        <div class="value">{{ snapshot.num_factors }}</div>
+        <div class="hint">{% if detail.products %}{{ detail.products|join:" · " }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="nj-metric">
+        <div class="label">History</div>
+        <div class="value">{% if snapshot.lookback_calendar_days %}{{ snapshot.lookback_calendar_days }}d{% else %}—{% endif %}</div>
+        <div class="hint">
+          {% if snapshot.history_start %}
+            {{ snapshot.history_start|date:"Y-m-d" }} → {{ snapshot.history_end|date:"Y-m-d" }}
+          {% else %}
+            not a historical window
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if snapshots|length > 1 %}
+  <div class="nj-panel mb-3">
+    <div class="nj-panel-head">
+      <h2>Snapshots this session</h2>
+      <span class="small text-secondary">same book / model / source / as_of</span>
+    </div>
+    <div class="nj-panel-body tight">
+      <table class="table table-sm mb-0 nj-clickable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Wrote</th>
+            <th class="nj-num">Factors</th>
+            <th>Batch</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in snapshots %}
+            <tr {% if row.calibration_id == snapshot.calibration_id %}class="table-active"{% endif %}
+                onclick="window.location='{% url 'journal:calibration' %}?scope_key={{ scope_key }}&amp;model={{ model }}&amp;source={{ source }}&amp;as_of={{ as_of|date:'Y-m-d' }}&amp;calibration_id={{ row.calibration_id }}{% if param_view %}&amp;param_curve={{ param_view.curve }}&amp;param_name={{ param_view.param_name }}{% endif %}'">
+              <td>{{ row.calibration_id }}</td>
+              <td class="small text-secondary">{{ row.calculated_at }}</td>
+              <td class="nj-num">{{ row.num_factors }}</td>
+              <td class="small"><code>{{ row.batch_run_id|default:"—" }}</code></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="nj-panel mb-3">
+    <div class="nj-panel-head">
+      <h2>Factors</h2>
+      <span class="small text-secondary">what this snapshot actually drives</span>
+    </div>
+    <div class="nj-panel-body tight">
+      <div class="nj-scroll-table nj-scroll-table-lg">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th class="nj-num">#</th>
+              <th>Factor</th>
+              <th class="nj-num">Level</th>
+              <th class="nj-num">Vol</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in detail.factors %}
+              <tr>
+                <td class="nj-num text-secondary">{{ f.factor_index }}</td>
+                <td><code>{{ f.factor_id }}</code></td>
+                <td class="nj-num">{% if f.factor_level != None %}{{ f.factor_level|nj_num:4 }}{% else %}—{% endif %}</td>
+                <td class="nj-num">{{ f.volatility|floatformat:3 }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% if param_view %}
+  <div class="nj-panel mb-3">
+    <div class="nj-panel-head">
+      <h2>Parameters</h2>
+      <form method="get" action="{% url 'journal:calibration' %}" class="nj-asof-form">
+        <input type="hidden" name="scope_key" value="{{ scope_key }}">
+        <input type="hidden" name="model" value="{{ model }}">
+        <input type="hidden" name="source" value="{{ source }}">
+        {% if as_of %}<input type="hidden" name="as_of" value="{{ as_of|date:'Y-m-d' }}">{% endif %}
+        {% if snapshot %}<input type="hidden" name="calibration_id" value="{{ snapshot.calibration_id }}">{% endif %}
+        <label class="nj-asof-label" for="id_param_curve">underlier</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_param_curve" name="param_curve"
+                onchange="this.form.param_name.value=''; this.form.submit()">
+          {% for c in param_view.curves %}
+            <option value="{{ c }}" {% if param_view.curve == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+        <label class="nj-asof-label" for="id_param_name">param</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_param_name" name="param_name"
+                onchange="this.form.submit()" style="min-width:12rem">
+          <option value="" {% if not param_view.param_name %}selected{% endif %}>all groups</option>
+          {% for opt in param_view.param_options %}
+            <option value="{{ opt.name }}" {% if param_view.param_name == opt.name %}selected{% endif %}>
+              {{ opt.group }} · {{ opt.label }}
+            </option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+    <div class="nj-panel-body">
+      {% if param_view.selected %}
+        <div class="nj-metric">
+          <div class="label">{{ param_view.selected.group }} · {{ param_view.curve }}</div>
+          <div class="value">
+            {% if param_view.selected.is_int %}
+              {{ param_view.selected.value|floatformat:0 }}
+            {% else %}
+              {{ param_view.selected.value|floatformat:4 }}
+            {% endif %}
+          </div>
+          <div class="hint">{{ param_view.selected.label }}</div>
+        </div>
+      {% else %}
+        {% for section in param_view.block.sections %}
+          <details class="nj-calib-fold"{% if forloop.first %} open{% endif %}>
+            <summary>{{ section.label }}</summary>
+            <table class="table table-sm mb-0">
+              <tbody>
+                {% for p in section.rows %}
+                  <tr>
+                    <td>{{ p.label }}</td>
+                    <td class="nj-num">
+                      {% if p.is_int %}{{ p.value|floatformat:0 }}{% else %}{{ p.value|floatformat:4 }}{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </details>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if detail.corr_rows %}
+  <div class="nj-panel mb-3">
+    <div class="nj-panel-head">
+      <h2>Correlations</h2>
+      <span class="small text-secondary">ρ · same factor order as above</span>
+    </div>
+    <div class="nj-panel-body tight">
+      <div class="nj-scroll-table nj-scroll-table-lg">
+        <table class="table table-sm mb-0 nj-corr-table">
+          <thead>
+            <tr>
+              <th></th>
+              {% for lab in detail.corr_labels %}
+                <th class="nj-num small">{{ lab }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in detail.corr_rows %}
+              <tr>
+                <th class="small">{{ row.label }}</th>
+                {% for rho in row.values %}
+                  <td class="nj-num">{% if rho != None %}{{ rho|floatformat:2 }}{% else %}—{% endif %}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+{% endblock %}

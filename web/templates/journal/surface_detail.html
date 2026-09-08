@@ -5,6 +5,9 @@
 {% block page_title %}Vol surface{% endblock %}
 {% block page_subtitle %}
   <p class="muted">
+    <a href="{% url 'journal:market_data' %}">Market Data</a>
+    · <a href="{% url 'journal:market_equities' %}">Equities</a>
+    ·
     {% if underlying_id and as_of %}
       <strong>{{ underlying_id }}</strong>
       · surface as_of <strong>{{ as_of|date:"Y-m-d" }}</strong>

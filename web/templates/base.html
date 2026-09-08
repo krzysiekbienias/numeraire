@@ -10,8 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="{% static 'css/journal.css' %}?v=44" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="{% static 'css/journal.css' %}?v=47" rel="stylesheet">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -37,27 +37,15 @@
         </a>
         <a href="{% url 'journal:quant_lab' %}"
            class="{% if request.resolver_match.url_name == 'quant_lab' or request.resolver_match.url_name == 'quant_lab_pricing' or request.resolver_match.url_name == 'quant_lab_pricing_equities' or request.resolver_match.url_name == 'quant_lab_pricing_commodities' or request.resolver_match.url_name == 'hypo_portfolio' or request.resolver_match.url_name == 'simulation_lab' or request.resolver_match.url_name == 'rates_conversion_lab' %}active{% endif %}">
-          <i class="bi bi-lightning-charge"></i> Quant Lab
+          <i class="bi bi-flask"></i> Quant Lab
         </a>
-        <a href="{% url 'journal:underlier_list' %}"
-           class="{% if request.resolver_match.url_name == 'underlier_list' or request.resolver_match.url_name == 'underlier_detail' %}active{% endif %}">
-          <i class="bi bi-graph-up"></i> Underliers
+        <a href="{% url 'journal:market_data' %}"
+           class="{% if request.resolver_match.url_name == 'market_data' or request.resolver_match.url_name == 'market_equities' or request.resolver_match.url_name == 'underlier_list' or request.resolver_match.url_name == 'underlier_detail' or request.resolver_match.url_name == 'curves' or request.resolver_match.url_name == 'commodity_curves' or request.resolver_match.url_name == 'commodity_curve_backtest' or request.resolver_match.url_name == 'surfaces' %}active{% endif %}">
+          <i class="bi bi-graph-up"></i> Market Data
         </a>
-        <a href="{% url 'journal:curves' %}"
-           class="{% if request.resolver_match.url_name == 'curves' %}active{% endif %}">
-          <i class="bi bi-bezier2"></i> Curves
-        </a>
-        <a href="{% url 'journal:commodity_curves' %}"
-           class="{% if request.resolver_match.url_name == 'commodity_curves' or request.resolver_match.url_name == 'commodity_curve_backtest' %}active{% endif %}">
-          <i class="bi bi-graph-up-arrow"></i> Commodity curves
-        </a>
-        <a href="{% url 'journal:exposure' %}"
-           class="{% if request.resolver_match.url_name == 'exposure' %}active{% endif %}">
-          <i class="bi bi-activity"></i> Exposure
-        </a>
-        <a href="{% url 'journal:surfaces' %}"
-           class="{% if request.resolver_match.url_name == 'surfaces' %}active{% endif %}">
-          <i class="bi bi-box"></i> Surfaces
+        <a href="{% url 'journal:risk' %}"
+           class="{% if request.resolver_match.url_name == 'risk' or request.resolver_match.url_name == 'exposure' or request.resolver_match.url_name == 'calibration' %}active{% endif %}">
+          <i class="bi bi-umbrella"></i> Risk
         </a>
         <a href="{% url 'journal:inventory' %}"
            class="{% if request.resolver_match.url_name == 'inventory' %}active{% endif %}">
@@ -70,7 +58,7 @@
         {% else %}
         <a href="{% url 'journal:quant_lab' %}"
            class="{% if request.resolver_match.url_name == 'quant_lab' or request.resolver_match.url_name == 'quant_lab_pricing' or request.resolver_match.url_name == 'quant_lab_pricing_equities' or request.resolver_match.url_name == 'quant_lab_pricing_commodities' or request.resolver_match.url_name == 'hypo_portfolio' or request.resolver_match.url_name == 'simulation_lab' or request.resolver_match.url_name == 'rates_conversion_lab' %}active{% endif %}">
-          <i class="bi bi-lightning-charge"></i> Quant Lab
+          <i class="bi bi-flask"></i> Quant Lab
         </a>
         <a href="{% url 'journal:product' %}"
            class="{% if request.resolver_match.url_name == 'product' %}active{% endif %}">

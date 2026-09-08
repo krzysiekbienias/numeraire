@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% load journal_fmt %}
 
-{% block title %}Commodity curves{% endblock %}
-{% block page_title %}Commodity curves{% endblock %}
+{% block title %}Futures curves{% endblock %}
+{% block page_title %}Futures curves{% endblock %}
 {% block page_subtitle %}
   <p class="muted">
+    <a href="{% url 'journal:market_data' %}">Market Data</a>
+    ·
     {% if product_code and as_of %}
       3D settlement field for <strong>{{ product_code }}</strong>
       · day <strong>{{ as_of|date:"Y-m-d" }}</strong>

@@ -31,6 +31,7 @@ from journal.booking import (
     write_bundle,
 )
 from journal.forms import CalendarTradeForm, NewTradeForm
+from journal.calibration import build_calibration_page
 from journal.curves import (
     curve_discount_for_maturity,
     discount_factor_from_zero,
@@ -1234,6 +1235,58 @@ class QuantLabHubView(TemplateView):
     """Public Quant Lab landing — pick Pricing (or signed-in workspaces)."""
 
     template_name = 'journal/quant_lab_hub.html'
+
+
+class MarketDataHubView(TemplateView):
+    """Signed-in market-data landing — futures, equities, discount curve."""
+
+    template_name = 'journal/market_data_hub.html'
+
+
+class MarketEquitiesHubView(TemplateView):
+    """Equity cash spots and vol surfaces."""
+
+    template_name = 'journal/market_equities_hub.html'
+
+
+class RiskHubView(TemplateView):
+    """Signed-in risk landing — CCR exposure first."""
+
+    template_name = 'journal/risk_hub.html'
+
+
+class CalibrationView(TemplateView):
+    """Persisted GBM / Gabillon snapshots — what was fitted, on which window."""
+
+    template_name = 'journal/calibration_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            context.update(build_calibration_page(self.request.GET))
+        except OperationalError as exc:
+            context['db_error'] = str(exc)
+            context.update(
+                {
+                    'snapshots': [],
+                    'snapshot': None,
+                    'detail': None,
+                    'scope_keys': [],
+                    'models': [],
+                    'sources': [],
+                    'available_as_of': [],
+                    'scope_key': None,
+                    'model': None,
+                    'source': None,
+                    'as_of': None,
+                    'model_options': [],
+                    'source_options': [],
+                    'model_label': '',
+                    'source_label': '',
+                    'param_view': None,
+                }
+            )
+        return context
 
 
 @method_decorator(login_not_required, name='dispatch')

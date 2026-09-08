@@ -5,6 +5,8 @@
 {% block page_title %}Exposure{% endblock %}
 {% block page_subtitle %}
   <p class="muted">
+    <a href="{% url 'journal:risk' %}">Risk</a>
+    ·
     {% if portfolio_id and as_of %}
       Portfolio <strong>{{ portfolio_id }}</strong>
       · exposure as_of <strong>{{ as_of|date:"Y-m-d" }}</strong>

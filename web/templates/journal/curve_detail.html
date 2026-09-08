@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Curves{% endblock %}
-{% block page_title %}Curves{% endblock %}
+{% block title %}Discount curve{% endblock %}
+{% block page_title %}Discount curve{% endblock %}
 {% block page_subtitle %}
   <p class="muted">
+    <a href="{% url 'journal:market_data' %}">Market Data</a>
+    ·
     {% if as_of and curve_id %}
       Discount / yield for <strong>{{ curve_id }}</strong>
       · curve day <strong>{{ as_of|date:"Y-m-d" }}</strong>

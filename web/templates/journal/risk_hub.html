@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Risk{% endblock %}
+{% block page_title %}Risk{% endblock %}
+{% block page_subtitle %}
+<p class="muted">
+  CCR on the live book — official FO mark, then the model that drives EE / PFE
+</p>
+{% endblock %}
+
+{% block content %}
+<div class="nj-lab-hub nj-lab-hub-asset">
+  <a class="nj-lab-tile" href="{% url 'journal:exposure' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/beacon.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">CCR</span>
+      <h2>Exposure</h2>
+      <p>Expected exposure and PFE 95% / 97.5% by pillar · only days with official MTM</p>
+      <span class="nj-lab-tile-cta">Open exposure <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+
+  <a class="nj-lab-tile" href="{% url 'journal:calibration' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/celownik.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Model</span>
+      <h2>Calibration</h2>
+      <p>GBM and Gabillon snapshots · what was fitted, on which history window</p>
+      <span class="nj-lab-tile-cta">Open calibration <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+</div>
+{% endblock %}

@@ -608,6 +608,25 @@ class CalibrationParam(models.Model):
         return f'{self.param_name}={self.param_value}'
 
 
+class CalibrationCorrelation(models.Model):
+    """Sparse upper-triangle factor correlations for a snapshot."""
+
+    pk = models.CompositePrimaryKey('calibration_id', 'factor_i', 'factor_j')
+    calibration_id = models.IntegerField()
+    factor_i = models.IntegerField()
+    factor_j = models.IntegerField()
+    rho = models.FloatField()
+
+    class Meta:
+        managed = False
+        db_table = 'calibration_correlation'
+        ordering = ['calibration_id', 'factor_i', 'factor_j']
+        verbose_name = 'Calibration correlation'
+
+    def __str__(self):
+        return f'ρ[{self.factor_i},{self.factor_j}]={self.rho}'
+
+
 class CatalogInstrumentType(models.Model):
     """Reference codes for equity instrument types (seed / UI inventory)."""
 

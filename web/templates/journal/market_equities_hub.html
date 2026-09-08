@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Equities · Market Data{% endblock %}
+{% block page_title %}Equities{% endblock %}
+{% block page_subtitle %}
+<p class="muted">
+  <a href="{% url 'journal:market_data' %}">Market Data</a>
+  · spots and vol surfaces
+</p>
+{% endblock %}
+
+{% block content %}
+<div class="nj-lab-hub nj-lab-hub-asset">
+  <a class="nj-lab-tile" href="{% url 'journal:underlier_list' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/new-york-ex.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Cash</span>
+      <h2>Spots</h2>
+      <p>Equity and index daily closes · <code>equity_daily_eod</code> / <code>index_daily_eod</code></p>
+      <span class="nj-lab-tile-cta">Open spots <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+
+  <a class="nj-lab-tile" href="{% url 'journal:surfaces' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/vol-surf.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Vol</span>
+      <h2>Vol surfaces</h2>
+      <p>Implied BS EOD points in 3D · per underlying</p>
+      <span class="nj-lab-tile-cta">Open surfaces <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+</div>
+{% endblock %}

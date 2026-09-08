@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Market Data{% endblock %}
+{% block page_title %}Market Data{% endblock %}
+{% block page_subtitle %}
+<p class="muted">
+  Futures strips, equity spots &amp; vol, discount curve — from the overnight ingest
+</p>
+{% endblock %}
+
+{% block content %}
+<div class="nj-lab-hub nj-lab-hub-three">
+  <a class="nj-lab-tile" href="{% url 'journal:commodity_curves' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/ship.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Commodities</span>
+      <h2>Futures curves</h2>
+      <p>Listed energy &amp; metals strips · occupancy session · simulated vs realized</p>
+      <span class="nj-lab-tile-cta">Open futures <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+
+  <a class="nj-lab-tile" href="{% url 'journal:market_equities' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/lab-equities.jpg' %}?v=1')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Equities</span>
+      <h2>Equities</h2>
+      <p>Cash / index closes · implied vol surfaces</p>
+      <span class="nj-lab-tile-cta">Open equities <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+
+  <a class="nj-lab-tile" href="{% url 'journal:curves' %}">
+    <div class="nj-lab-tile-media" style="background-image: url('{% static 'img/doniczka.jpg' %}?v=6')"></div>
+    <div class="nj-lab-tile-shade"></div>
+    <div class="nj-lab-tile-body">
+      <span class="nj-lab-tile-kicker">Rates</span>
+      <h2>Discount curve</h2>
+      <p>Treasury par quotes · bootstrapped discount factors</p>
+      <span class="nj-lab-tile-cta">Open curve <i class="bi bi-arrow-right"></i></span>
+    </div>
+  </a>
+</div>
+<p class="nj-lab-hub-note small text-secondary mt-3 mb-0">
+  Tile photos: drop files on
+  <code>web/static/img/market-futures.jpg</code>,
+  <code>market-equities.jpg</code>,
+  <code>market-discount.jpg</code>
+  anytime.
+</p>
+{% endblock %}

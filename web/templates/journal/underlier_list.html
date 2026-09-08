@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% load journal_fmt %}
 
-{% block title %}Underliers{% endblock %}
-{% block page_title %}Underliers{% endblock %}
+{% block title %}Equity spots{% endblock %}
+{% block page_title %}Equity spots{% endblock %}
 {% block page_subtitle %}
   <p class="muted">
-    Daily closes from <code>equity_daily_eod</code> / <code>index_daily_eod</code>
+    <a href="{% url 'journal:market_data' %}">Market Data</a>
+    · <a href="{% url 'journal:market_equities' %}">Equities</a>
+    · daily closes from <code>equity_daily_eod</code> / <code>index_daily_eod</code>
     · {{ equity_count }} equity · {{ index_count }} index
   </p>
 {% endblock %}
