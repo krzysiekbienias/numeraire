@@ -20,17 +20,23 @@
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/vanilla_equity_option_product.hpp>
+#include <numeraire/quant/cholesky.hpp>
 #include <numeraire/quant/cox_ross_rubinstein.hpp>
 #include <numeraire/quant/interest_rate_transforms.hpp>
 #include <numeraire/schedule/date.hpp>
+#include <numeraire/simulation/curve_lab.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
+#include <numeraire/simulation/gabillon_evolution.hpp>
+#include <numeraire/simulation/gabillon_spec.hpp>
 #include <numeraire/simulation/gbm_evolution.hpp>
 #include <numeraire/simulation/gbm_spec.hpp>
 #include <numeraire/simulation/random_engine.hpp>
 #include <numeraire/simulation/scenario_buffer.hpp>
 #include <numeraire/utils/exception.hpp>
+#include <array>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace py = pybind11;
 
@@ -420,6 +426,10 @@ constexpr std::size_t kMaxCrrTreeDumpSteps = 12;
 
 constexpr std::size_t kMaxLabSimPaths = 100;
 constexpr std::size_t kMaxLabSimIntervals = 250;
+/// The curve lab reports quantiles and realized vols rather than a raw fan, so it needs
+/// far more paths than the GBM sandbox to read steadily — only a handful come back drawn.
+constexpr std::size_t kMaxLabCurvePaths = 20000;
+constexpr std::size_t kMaxLabCurveContracts = 60;
 constexpr int kMinLabHorizonDays = 7;
 constexpr int kMaxLabHorizonDays = 730;
 
@@ -546,6 +556,182 @@ constexpr int kMaxLabHorizonDays = 730;
     }
 }
 
+[[nodiscard]] py::dict SimulateGabillonCurve(const std::vector<std::string>& tickers,
+                                             const std::vector<double>& settlement_years,
+                                             const std::vector<double>& anchor_prices,
+                                             const double mean_reversion,
+                                             const double short_vol,
+                                             const double long_vol,
+                                             const double factor_correlation,
+                                             const std::size_t n_paths,
+                                             const std::uint64_t seed,
+                                             const int horizon_days,
+                                             const std::size_t n_intervals,
+                                             const std::size_t fan_contract,
+                                             const std::size_t fan_paths,
+                                             const std::size_t curve_draws) {
+    const std::size_t n_contracts = tickers.size();
+    if (n_contracts == 0U) {
+        throw py::value_error("the curve needs at least one contract");
+    }
+    if (settlement_years.size() != n_contracts || anchor_prices.size() != n_contracts) {
+        throw py::value_error("tickers, settlement_years and anchor_prices must be the same length");
+    }
+    if (n_contracts > kMaxLabCurveContracts) {
+        throw py::value_error("at most " + std::to_string(kMaxLabCurveContracts) + " contracts per run");
+    }
+    for (std::size_t c = 0; c < n_contracts; ++c) {
+        if (!(anchor_prices[c] > 0.0)) {
+            throw py::value_error("contract '" + tickers[c] + "' has a non-positive settle");
+        }
+        if (settlement_years[c] < 0.0) {
+            throw py::value_error("contract '" + tickers[c] + "' settles before the valuation date");
+        }
+    }
+    if (mean_reversion < 0.0) {
+        throw py::value_error("mean_reversion must be non-negative");
+    }
+    if (short_vol < 0.0 || long_vol < 0.0) {
+        throw py::value_error("factor vols must be non-negative");
+    }
+    if (factor_correlation < -1.0 || factor_correlation > 1.0) {
+        throw py::value_error("factor_correlation must be in -1..1");
+    }
+    if (n_paths == 0 || n_paths > kMaxLabCurvePaths) {
+        throw py::value_error("n_paths must be in 1.." + std::to_string(kMaxLabCurvePaths));
+    }
+    if (horizon_days < kMinLabHorizonDays || horizon_days > kMaxLabHorizonDays) {
+        throw py::value_error("horizon_days must be in " + std::to_string(kMinLabHorizonDays) + ".." +
+                              std::to_string(kMaxLabHorizonDays));
+    }
+    if (n_intervals == 0 || n_intervals > kMaxLabSimIntervals) {
+        throw py::value_error("n_intervals must be in 1.." + std::to_string(kMaxLabSimIntervals));
+    }
+    if (fan_contract >= n_contracts) {
+        throw py::value_error("fan_contract must index one of the " + std::to_string(n_contracts) + " contracts");
+    }
+
+    try {
+        const std::array<double, 4> correlation_matrix{1.0, factor_correlation, factor_correlation, 1.0};
+        const auto correlation = numeraire::quant::CholeskyDecompose(correlation_matrix, 2U);
+        if (correlation.status != numeraire::quant::CholeskyStatus::kOk) {
+            throw py::value_error("factor correlation " + std::to_string(factor_correlation) +
+                                  " does not admit a Cholesky factor");
+        }
+
+        numeraire::simulation::GabillonSimulationSpec spec;
+        spec.curves.push_back(numeraire::simulation::GabillonCurveParams{
+                .product_code = "LAB",
+                .mean_reversion = mean_reversion,
+                .short_factor_vol = short_vol,
+                .long_factor_vol = long_vol,
+        });
+        spec.cholesky = correlation.factor;
+        spec.contracts.reserve(n_contracts);
+        for (std::size_t c = 0; c < n_contracts; ++c) {
+            spec.contracts.push_back(numeraire::simulation::GabillonContract{
+                    .contract_ticker = tickers[c],
+                    .curve_index = 0U,
+                    .settlement_years = settlement_years[c],
+                    .anchor_price = anchor_prices[c],
+            });
+        }
+
+        const numeraire::schedule::Date valuation{.year = 2026, .month = 1, .day = 2};
+        const numeraire::simulation::ExposureTimeGrid grid = MakeUniformLabGrid(valuation, horizon_days, n_intervals);
+
+        numeraire::simulation::ScenarioBuffer buffer(spec.NumFactors(), grid.NumSteps(), n_paths);
+        numeraire::simulation::MersenneTwisterEngine engine(seed);
+        numeraire::simulation::EvolveGabillonCurves(buffer, grid, spec, engine);
+        const numeraire::simulation::CurveLabResult summary =
+                numeraire::simulation::SummarizeCurveLab(buffer, grid, spec);
+
+        py::list contracts;
+        for (const numeraire::simulation::CurveLabContractStat& stat : summary.contracts) {
+            py::dict row;
+            row["ticker"] = stat.contract_ticker;
+            row["settlement_years"] = stat.settlement_years;
+            row["anchor"] = stat.anchor_price;
+            row["diffusion_years"] = stat.diffusion_years;
+            row["mean_terminal"] = stat.mean_terminal;
+            row["p5"] = stat.p5;
+            row["p50"] = stat.p50;
+            row["p95"] = stat.p95;
+            row["realized_vol"] = stat.realized_vol;
+            row["model_vol"] = stat.model_vol;
+            contracts.append(std::move(row));
+        }
+
+        py::list times;
+        for (const auto& node : grid.nodes) {
+            times.append(node.year_fraction);
+        }
+
+        const std::size_t shown = std::min(fan_paths, n_paths);
+        py::list fan;
+        for (std::size_t p = 0; p < shown; ++p) {
+            py::list series;
+            for (std::size_t step = 0; step < grid.NumSteps(); ++step) {
+                series.append(buffer.At(fan_contract, step, p));
+            }
+            fan.append(std::move(series));
+        }
+
+        // The whole curve as one path saw it at the horizon, rather than a quantile taken
+        // across paths. A band answers "how wide is the distribution"; a single draw is
+        // the only thing that shows what one plausible curve actually looks like —
+        // neighbouring contracts moving together, the seasonal shape still standing.
+        const std::size_t last_step = grid.NumSteps() - 1U;
+        py::list curves;
+        for (std::size_t p = 0; p < std::min(curve_draws, n_paths); ++p) {
+            py::list curve;
+            for (std::size_t c = 0; c < n_contracts; ++c) {
+                curve.append(buffer.At(c, last_step, p));
+            }
+            curves.append(std::move(curve));
+        }
+
+        // Averaged over every path, not just the drawn ones: this is the line that has to
+        // come out flat for a futures price, and a 40-path mean would only show noise.
+        py::list mean_path;
+        for (std::size_t step = 0; step < grid.NumSteps(); ++step) {
+            double sum = 0.0;
+            for (std::size_t p = 0; p < n_paths; ++p) {
+                sum += buffer.At(fan_contract, step, p);
+            }
+            mean_path.append(sum / static_cast<double>(n_paths));
+        }
+
+        py::dict out;
+        out["ok"] = true;
+        out["model"] = "gabillon_2f";
+        out["engine"] = "c++_evolve_gabillon_curves";
+        out["grid_name"] = "uniform_lab";
+        out["horizon_days"] = horizon_days;
+        out["horizon_years"] = grid.nodes.back().year_fraction;
+        out["n_paths"] = static_cast<int>(n_paths);
+        out["n_steps"] = static_cast<int>(grid.NumSteps());
+        out["n_intervals"] = static_cast<int>(n_intervals);
+        out["seed"] = static_cast<int>(seed);
+        out["mean_reversion"] = mean_reversion;
+        out["short_vol"] = short_vol;
+        out["long_vol"] = long_vol;
+        out["factor_correlation"] = factor_correlation;
+        out["worst_martingale_drift"] = summary.worst_martingale_drift;
+        out["contracts"] = contracts;
+        out["times"] = times;
+        out["fan_contract"] = static_cast<int>(fan_contract);
+        out["fan"] = fan;
+        out["mean_path"] = mean_path;
+        out["curves"] = curves;
+        return out;
+    } catch (const numeraire::ValidationError& e) {
+        throw py::value_error(e.what());
+    } catch (const numeraire::NumeraireException& e) {
+        throw std::runtime_error(e.what());
+    }
+}
+
 }  // namespace
 
 PYBIND11_MODULE(numeraire_cpp, m) {
@@ -660,6 +846,35 @@ Simulate sandbox GBM paths on a uniform toy time grid (not the prod CCR schedule
 horizon_days: fixed lab horizon (e.g. 14 / 30 / 90 / 180 / 365).
 n_intervals: equal steps across that horizon.
 Stubs: bachelier, hull_white, heston.
+)pbdoc");
+    m.def("simulate_gabillon_curve",
+          &SimulateGabillonCurve,
+          py::arg("tickers"),
+          py::arg("settlement_years"),
+          py::arg("anchor_prices"),
+          py::arg("mean_reversion") = 1.0,
+          py::arg("short_vol") = 0.50,
+          py::arg("long_vol") = 0.20,
+          py::arg("factor_correlation") = 0.30,
+          py::arg("n_paths") = 2000,
+          py::arg("seed") = 42,
+          py::arg("horizon_days") = 90,
+          py::arg("n_intervals") = 48,
+          py::arg("fan_contract") = 0,
+          py::arg("fan_paths") = 40,
+          py::arg("curve_draws") = 0,
+          R"pbdoc(
+Evolve one commodity forward curve under the two-factor Gabillon dynamics.
+
+Runs the production kernel (EvolveGabillonCurves) on a uniform lab grid, so the paths
+carry the same mean reversion and Samuelson decay the exposure batch uses. Each contract
+keeps its own delivery month and starts on the settle passed in, which is what makes a
+seasonal strip reproduce today's shape exactly.
+
+tickers / settlement_years / anchor_prices: the strip, one entry per dated contract.
+Returns per-contract terminal quantiles, realized vs model vol, the martingale drift
+check, a small drawn fan for `fan_contract`, and `curve_draws` whole curves as single
+paths saw them at the horizon.
 )pbdoc");
 
     m.def("discount_factor_from_continuous_zero",

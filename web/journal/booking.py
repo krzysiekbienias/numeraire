@@ -6,8 +6,8 @@ and shells out to that script — it stays the only code that INSERTs into
 `products` / `trades` / `trade_legs`. New trades land as `PENDING`; the C++
 `dev_main --price-booking` fills `execution_price` and promotes them to `LIVE`.
 
-Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS, FUT); everything
-else in `catalog_instrument_type` stays read-only inventory.
+Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS, FUT, CAL);
+everything else in `catalog_instrument_type` stays read-only inventory.
 
 Deletion follows the same rule: `scripts/delete_trade.py` does the DELETE, the
 Journal only asks for it. The bundle stays in `trades/incoming/`, so a deleted trade
@@ -74,6 +74,8 @@ class BookableInstrument:
     extension: str = 'equity'
     # Commodity futures: pick listed contract ticker (tenor) from futures_contract.
     has_contract_ticker: bool = False
+    # Two listed outrights, one trade header (calendar / later strip).
+    is_calendar: bool = False
 
 
 PLAIN_VANILLA_EUROPEAN = BookableInstrument(
@@ -168,12 +170,34 @@ COMMODITY_FUTURES_OUTRIGHT = BookableInstrument(
     has_contract_ticker=True,
 )
 
+COMMODITY_CALENDAR = BookableInstrument(
+    code='CAL',
+    label='CAL — Commodity calendar spread',
+    instrument_type='commodity_futures_outright',
+    strategy_type='COMMODITY_CALENDAR',
+    product_prefix='FUT_OUTRIGHT',
+    asset_kind='COMMODITY',
+    has_option_type=False,
+    has_strike=False,
+    has_expiry=True,
+    underlier_asset_class='COMMODITY',
+    strike_label='Strike',
+    strike_help='',
+    default_contract_size=1000.0,
+    default_settlement='PHYSICAL',
+    contract_size_help='Futures multiplier (e.g. 1000 bbl for CL). Same size on both legs.',
+    extension='commodity',
+    has_contract_ticker=True,
+    is_calendar=True,
+)
+
 BOOKABLE = (
     PLAIN_VANILLA_EUROPEAN,
     EQUITY_FORWARD,
     EQUITY_SPOT,
     INDEX_SPOT,
     COMMODITY_FUTURES_OUTRIGHT,
+    COMMODITY_CALENDAR,
 )
 
 
@@ -580,6 +604,109 @@ def build_bundle(
             'structured_params': {},
         }
     return bundle
+
+
+def _commodity_product_entry(
+    spec: BookableInstrument,
+    *,
+    product_id: str,
+    cleaned: dict,
+    ticker: str,
+    expiry_date,
+    tick_size,
+) -> dict:
+    expiry_iso = expiry_date.isoformat() if expiry_date is not None else None
+    return {
+        'product_id': product_id,
+        'asset_kind': spec.asset_kind,
+        'underlying_id': cleaned['underlying_id'],
+        'expiry_date': expiry_iso,
+        'settlement': cleaned['settlement'],
+        'currency': cleaned['currency'],
+        'contract_size': cleaned['contract_size'],
+        'day_count': 'Actual365Fixed',
+        'calendar': 'UnitedStates',
+        'commodity': {
+            'instrument_type': spec.instrument_type,
+            'product_code': cleaned['product_code'],
+            'contract_ticker': ticker,
+            'contract_month': None,
+            'settlement_date': expiry_iso,
+            'multiplier': cleaned.get('contract_size'),
+            'tick_size': tick_size,
+            'tick_value': None,
+            'option_type': None,
+            'strike': None,
+            'exercise_style': None,
+            'option_ticker': None,
+            'underlying_contract_ticker': None,
+            'structured_params': {},
+        },
+    }
+
+
+def build_calendar_bundle(
+    spec: BookableInstrument,
+    *,
+    trade_id: str,
+    cleaned: dict,
+    booked_by: str = '',
+) -> dict:
+    """Two listed outrights, one trade — the importer `products[]` shape."""
+    now = datetime.now()
+    who = f' by {booked_by}' if booked_by else ''
+    near_id = cleaned['near_product_id']
+    far_id = cleaned['far_product_id']
+    qty = cleaned['quantity']
+    commission = cleaned['commission_per_contract']
+    return {
+        '_comment': (
+            f'Booked from the Numeraire Journal{who} at {now:%Y-%m-%d %H:%M:%S}. '
+            f'Calendar: {cleaned["near_ticker"]} / {cleaned["far_ticker"]}. '
+            f'Import → PENDING; price with: dev_main --price-booking {trade_id}'
+        ),
+        'products': [
+            _commodity_product_entry(
+                spec,
+                product_id=near_id,
+                cleaned=cleaned,
+                ticker=cleaned['near_ticker'],
+                expiry_date=cleaned['near_expiry_date'],
+                tick_size=cleaned.get('near_tick_size'),
+            ),
+            _commodity_product_entry(
+                spec,
+                product_id=far_id,
+                cleaned=cleaned,
+                ticker=cleaned['far_ticker'],
+                expiry_date=cleaned['far_expiry_date'],
+                tick_size=cleaned.get('far_tick_size'),
+            ),
+        ],
+        'trade': {
+            'trade_id': trade_id,
+            'portfolio_id': cleaned['portfolio_id'],
+            'strategy_type': cleaned['strategy_type'],
+            'booking_timestamp': f'{now:%Y-%m-%d %H:%M:%S}',
+            'trade_date': cleaned['trade_date'].isoformat(),
+            'legs': [
+                {
+                    'product_id': near_id,
+                    'direction': cleaned['near_direction'],
+                    'quantity': qty,
+                    'execution_price': None,
+                    'commission_per_contract': commission,
+                },
+                {
+                    'product_id': far_id,
+                    'direction': cleaned['far_direction'],
+                    'quantity': qty,
+                    'execution_price': None,
+                    'commission_per_contract': commission,
+                },
+            ],
+        },
+    }
 
 
 

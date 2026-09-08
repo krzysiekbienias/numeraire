@@ -1,8 +1,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <numeraire/database/historical_calibration_types.hpp>
-#include <numeraire/database/sqlite_historical_calibration_repository.hpp>
+#include <numeraire/database/calibration_types.hpp>
+#include <numeraire/database/sqlite_calibration_repository.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/schedule/date.hpp>
@@ -20,11 +20,11 @@
 namespace numeraire::simulation {
 namespace {
 
-using numeraire::database::HistoricalCalibrationCholeskyWrite;
-using numeraire::database::HistoricalCalibrationCorrelationWrite;
-using numeraire::database::HistoricalCalibrationFactorWrite;
-using numeraire::database::HistoricalCalibrationHeaderWrite;
-using numeraire::database::SqliteHistoricalCalibrationRepository;
+using numeraire::database::CalibrationCholeskyWrite;
+using numeraire::database::CalibrationCorrelationWrite;
+using numeraire::database::CalibrationFactorWrite;
+using numeraire::database::CalibrationHeaderWrite;
+using numeraire::database::SqliteCalibrationRepository;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
 
@@ -53,29 +53,28 @@ using numeraire::utils::ResolveDatabasePath;
     return std::string{raw};
 }
 
-[[nodiscard]] std::vector<HistoricalCalibrationFactorWrite> ToFactorWrites(
-        const HistoricalCalibrationResult& result) {
-    std::vector<HistoricalCalibrationFactorWrite> out;
+[[nodiscard]] std::vector<CalibrationFactorWrite> ToFactorWrites(const HistoricalCalibrationResult& result) {
+    std::vector<CalibrationFactorWrite> out;
     out.reserve(result.factor_ids.size());
     for (std::size_t i = 0; i < result.factor_ids.size(); ++i) {
-        out.push_back(HistoricalCalibrationFactorWrite{
+        out.push_back(CalibrationFactorWrite{
                 .factor_index = static_cast<int>(i),
-                .underlying_id = result.factor_ids[i],
-                .spot_as_of = result.spots_as_of[i],
+                .factor_id = result.factor_ids[i],
+                .factor_level = result.spots_as_of[i],
                 .volatility = result.volatilities[i],
         });
     }
     return out;
 }
 
-[[nodiscard]] std::vector<HistoricalCalibrationCorrelationWrite> ToCorrelationWrites(
+[[nodiscard]] std::vector<CalibrationCorrelationWrite> ToCorrelationWrites(
         const HistoricalCalibrationResult& result) {
     const std::size_t n = result.factor_ids.size();
-    std::vector<HistoricalCalibrationCorrelationWrite> out;
+    std::vector<CalibrationCorrelationWrite> out;
     out.reserve((n * (n + 1)) / 2);
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t j = i; j < n; ++j) {
-            out.push_back(HistoricalCalibrationCorrelationWrite{
+            out.push_back(CalibrationCorrelationWrite{
                     .factor_i = static_cast<int>(i),
                     .factor_j = static_cast<int>(j),
                     .rho = result.correlation[(i * n) + j],
@@ -85,14 +84,13 @@ using numeraire::utils::ResolveDatabasePath;
     return out;
 }
 
-[[nodiscard]] std::vector<HistoricalCalibrationCholeskyWrite> ToCholeskyWrites(
-        const HistoricalCalibrationResult& result) {
+[[nodiscard]] std::vector<CalibrationCholeskyWrite> ToCholeskyWrites(const HistoricalCalibrationResult& result) {
     const std::size_t n = result.cholesky.n;
-    std::vector<HistoricalCalibrationCholeskyWrite> out;
+    std::vector<CalibrationCholeskyWrite> out;
     out.reserve((n * (n + 1)) / 2);
     for (std::size_t row = 0; row < n; ++row) {
         for (std::size_t col = 0; col <= row; ++col) {
-            out.push_back(HistoricalCalibrationCholeskyWrite{
+            out.push_back(CalibrationCholeskyWrite{
                     .row_i = static_cast<int>(row),
                     .col_j = static_cast<int>(col),
                     .l_value = result.cholesky.lower[(row * n) + col],
@@ -111,6 +109,7 @@ HistoricalCalibrationBuildStats BuildHistoricalCalibrationEod(const HistoricalCa
     config.min_return_observations = params.min_return_observations;
     config.vol_annualization_days = params.vol_annualization_days;
     config.adjusted = params.adjusted;
+    config.commodity_pillars = params.commodity_pillars;
 
     const std::optional<std::string_view> portfolio_id =
             params.scope_key == "ALL" ? std::nullopt : std::optional<std::string_view>{params.scope_key};
@@ -125,20 +124,22 @@ HistoricalCalibrationBuildStats BuildHistoricalCalibrationEod(const HistoricalCa
     const HistoricalCalibrationResult result =
             CalibrateBookFromDatabase(params.database_file_path, config, portfolio_id);
 
-    HistoricalCalibrationHeaderWrite header{};
+    CalibrationHeaderWrite header{};
+    header.model = database::calibration_model::kGbm;
+    header.source = database::calibration_source::kHistorical;
     header.scope_key = params.scope_key;
     header.as_of = params.as_of;
+    header.num_factors = static_cast<int>(result.factor_ids.size());
     header.history_start = schedule::FormatIsoDate(result.history_start);
     header.history_end = schedule::FormatIsoDate(result.history_end);
     header.lookback_calendar_days = params.lookback_calendar_days;
     header.min_return_observations = static_cast<int>(params.min_return_observations);
     header.vol_annualization_days = params.vol_annualization_days;
     header.eod_adjusted = params.adjusted;
-    header.num_factors = static_cast<int>(result.factor_ids.size());
     header.num_return_observations = static_cast<int>(result.num_return_observations);
     header.batch_run_id = params.batch_run_id;
 
-    SqliteHistoricalCalibrationRepository repo(params.database_file_path);
+    SqliteCalibrationRepository repo(params.database_file_path);
     const long calibration_id = repo.UpsertSnapshot(header,
                                                    ToFactorWrites(result),
                                                    ToCorrelationWrites(result),
@@ -154,13 +155,17 @@ HistoricalCalibrationBuildStats BuildHistoricalCalibrationEod(const HistoricalCa
 void PrintHistoricalCalibrationEodBuildUsageLines() {
     Logger::NumError(
             "  dev_main --calibrate-historical-gbm --as-of YYYY-MM-DD "
-            "[--book PORTFOLIO_ID] [--lookback-days N] [--min-return-obs N]\n"
+            "[--book PORTFOLIO_ID] [--lookback-days N] [--min-return-obs N] [--pillars N]\n"
             "    Historical EOD GBM calibration (vol + correlation + Cholesky) for LIVE book legs.\n"
             "    `--book` scopes factors to one `trades.portfolio_id`; omit for all portfolios (`scope_key=ALL`).\n"
+            "    Each equity underlying is one factor; each commodity curve expands into constant-maturity\n"
+            "    pillars CL_M1..CL_MN (`--pillars`, default 6) built from roll-adjusted futures returns.\n"
             "    Env defaults (CLI overrides): NUMERAIRE_CALIB_AS_OF, NUMERAIRE_CALIB_BOOK, "
             "NUMERAIRE_CALIB_LOOKBACK_DAYS, NUMERAIRE_CALIB_MIN_RETURN_OBS, "
-            "NUMERAIRE_CALIB_VOL_ANNUALIZATION_DAYS, NUMERAIRE_CALIB_EOD_ADJUSTED.\n"
-            "    Writes `historical_calibration` + factor / correlation / Cholesky child tables.");
+            "NUMERAIRE_CALIB_VOL_ANNUALIZATION_DAYS, NUMERAIRE_CALIB_EOD_ADJUSTED, "
+            "NUMERAIRE_CALIB_COMMODITY_PILLARS.\n"
+            "    Writes `calibration_snapshot` (model=gbm, source=historical) + factor / correlation / "
+            "Cholesky child tables.");
 }
 
 int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -171,6 +176,7 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
     int min_return_obs = EnvInt("NUMERAIRE_CALIB_MIN_RETURN_OBS", 60);
     int vol_annualization_days = EnvInt("NUMERAIRE_CALIB_VOL_ANNUALIZATION_DAYS", 252);
     int eod_adjusted = EnvInt("NUMERAIRE_CALIB_EOD_ADJUSTED", 1);
+    int commodity_pillars = EnvInt("NUMERAIRE_CALIB_COMMODITY_PILLARS", 6);
     if (const std::optional<std::string> book_env = EnvNonEmptyString("NUMERAIRE_CALIB_BOOK")) {
         book = *book_env;
     }
@@ -202,6 +208,12 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
                 return 1;
             }
             min_return_obs = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--pillars") == 0) {
+            if (i + 1 >= argc) {
+                Logger::NumError("--pillars requires a positive integer.");
+                return 1;
+            }
+            commodity_pillars = std::atoi(argv[++i]);
         }
     }
 
@@ -240,6 +252,10 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
         Logger::NumError("NUMERAIRE_CALIB_EOD_ADJUSTED must be 0 or 1.");
         return 1;
     }
+    if (commodity_pillars <= 0) {
+        Logger::NumError("--pillars must be > 0.");
+        return 1;
+    }
 
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     database::BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
@@ -253,6 +269,7 @@ int TryRunHistoricalCalibrationEodBuild(const int argc, char** argv, const numer
     params.min_return_observations = static_cast<std::size_t>(min_return_obs);
     params.vol_annualization_days = vol_annualization_days;
     params.adjusted = eod_adjusted;
+    params.commodity_pillars = commodity_pillars;
 
     Logger::NumInfo("calibrate-historical-gbm → SQLite {} scope_key={} as_of={} lookback_days={}.",
                     db_path.string(),

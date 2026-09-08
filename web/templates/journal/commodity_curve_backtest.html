@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block title %}Curve backtest · {{ product_code }}{% endblock %}
+{% block page_title %}Simulated vs realized curve{% endblock %}
+{% block page_subtitle %}
+  <p class="muted">
+    <a href="{% url 'journal:commodity_curves' %}">Commodity curves</a>
+    · Gabillon 2F evolved from a past session
+    · compared with the settles that printed
+  </p>
+{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+        integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+        crossorigin="anonymous">
+{% endblock %}
+
+{% block topbar_actions %}
+  {% if products %}
+    <form method="get" action="{% url 'journal:commodity_curve_backtest' %}" class="nj-asof-form">
+      <label class="nj-asof-label" for="id_product_code">product</label>
+      <select class="form-select form-select-sm nj-asof-select" id="id_product_code" name="product_code"
+              onchange="this.form.submit()" style="min-width:6rem">
+        {% for code in products %}
+          <option value="{{ code }}" {% if product_code == code %}selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+      {% if available_as_of %}
+        <label class="nj-asof-label" for="id_origin_as_of">from</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_origin_as_of" name="origin_as_of"
+                onchange="this.form.submit()">
+          {% for d in available_as_of %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if origin_as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      {% if target_choices %}
+        <label class="nj-asof-label" for="id_target_as_of">to</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_target_as_of" name="target_as_of"
+                onchange="this.form.submit()">
+          {% for d in target_choices %}
+            <option value="{{ d|date:'Y-m-d' }}" {% if target_as_of == d %}selected{% endif %}>
+              {{ d|date:"Y-m-d" }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      {% if draws %}
+        <label class="nj-asof-label" for="id_draw">draw</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_draw" name="draw"
+                onchange="this.form.submit()" style="min-width:5rem">
+          {% for d in draws %}
+            <option value="{{ d }}" {% if draw == d %}selected{% endif %}>#{{ d }}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
+      {% if draws %}
+        <label class="nj-asof-label" for="id_band">band</label>
+        <select class="form-select form-select-sm nj-asof-select" id="id_band" name="band"
+                onchange="this.form.submit()" style="min-width:5rem">
+          <option value="1" {% if show_band %}selected{% endif %}>on</option>
+          <option value="0" {% if not show_band %}selected{% endif %}>off</option>
+        </select>
+      {% endif %}
+      {% if allow_lookahead %}
+        <input type="hidden" name="allow_lookahead" value="1">
+      {% endif %}
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if db_error %}
+    <div class="nj-panel mb-3">
+      <div class="nj-panel-body">
+        <p class="small text-secondary mb-0">Database unavailable: {{ db_error }}</p>
+      </div>
+    </div>
+  {% else %}
+
+    {% if notice %}
+      <div class="nj-panel mb-3">
+        <div class="nj-panel-body">
+          <p class="mb-0">{{ notice }}</p>
+          {% if lookahead_available and not allow_lookahead %}
+            <p class="small text-secondary mb-0 mt-2">
+              Only interested in seeing the comparison work? You can
+              <a href="?product_code={{ product_code }}&origin_as_of={{ origin_as_of|date:'Y-m-d' }}&target_as_of={{ target_as_of|date:'Y-m-d' }}&allow_lookahead=1">
+                borrow a later fit</a> — the numbers then use parameters nobody had on
+              {{ origin_as_of|date:"Y-m-d" }}, so treat them as a wiring check rather than evidence.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if calibration and calibration.is_lookahead %}
+      <div class="nj-panel mb-3">
+        <div class="nj-panel-body">
+          <p class="mb-0">
+            <strong>Look-ahead.</strong> The only fit available for {{ product_code }} is dated
+            {{ calibration.as_of|date:"Y-m-d" }}, after the {{ origin_as_of|date:"Y-m-d" }} origin,
+            so this run used parameters that did not exist yet. Calibrate the origin day
+            (<code>dev_main --calibrate-gabillon --as-of {{ origin_as_of|date:"Y-m-d" }} --book {{ calibration.scope_key }}</code>)
+            for a comparison that means something, then drop the
+            <a href="?product_code={{ product_code }}&origin_as_of={{ origin_as_of|date:'Y-m-d' }}&target_as_of={{ target_as_of|date:'Y-m-d' }}">look-ahead</a>.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if calibration %}
+      <div class="nj-panel mb-3">
+        <div class="nj-panel-head">
+          <h2>Gabillon two-factor · {{ product_code }}</h2>
+          <span class="small text-secondary">
+            <code>{{ calibration.model }}</code>
+            · calibration #{{ calibration.calibration_id }}
+            · scope {{ calibration.scope_key }}
+            · fitted {{ calibration.as_of|date:"Y-m-d" }}
+            {% if calibration.vol_fit_pillars %}
+              · {{ calibration.vol_fit_pillars }} vol pillars
+            {% endif %}
+            {% if calibration.history_start %}
+              on {{ calibration.history_start|date:"Y-m-d" }}–{{ calibration.history_end|date:"Y-m-d" }}
+            {% endif %}
+          </span>
+        </div>
+        <div class="nj-panel-body">
+          <div class="row g-3">
+            <div class="col-6 col-xl-3">
+              <div class="nj-metric nj-metric-compact">
+                <div class="label">κ · mean reversion</div>
+                <div class="value">{{ calibration.mean_reversion|floatformat:3 }}</div>
+                <div class="hint">how fast risk hands over to the long factor</div>
+              </div>
+            </div>
+            <div class="col-6 col-xl-3">
+              <div class="nj-metric nj-metric-compact">
+                <div class="label">σ<sub>S</sub> · short factor</div>
+                <div class="value">{{ calibration.short_vol|floatformat:3 }}</div>
+                <div class="hint">what the prompt contract is worth in vol</div>
+              </div>
+            </div>
+            <div class="col-6 col-xl-3">
+              <div class="nj-metric nj-metric-compact">
+                <div class="label">σ<sub>L</sub> · long factor</div>
+                <div class="value">{{ calibration.long_vol|floatformat:3 }}</div>
+                <div class="hint">where deferred deliveries settle down to</div>
+              </div>
+            </div>
+            <div class="col-6 col-xl-3">
+              <div class="nj-metric nj-metric-compact">
+                <div class="label">ρ · between factors</div>
+                <div class="value">{{ calibration.factor_correlation|floatformat:3 }}</div>
+                <div class="hint">
+                  {% if calibration.vol_fit_rmse %}
+                    fit residual {{ calibration.vol_fit_rmse|floatformat:4 }} vol
+                    {% if calibration.vol_fit_pillars %}
+                      · {{ calibration.vol_fit_pillars }} pillars
+                    {% endif %}
+                  {% else %}
+                    short against long shock
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="nj-quant-edu mt-3">
+            <span class="nj-quant-edu-label">what these four numbers do</span>
+            <div class="nj-quant-edu-math">\[
+              \frac{dF(t,T)}{F(t,T)} = \sigma_S e^{-\kappa (T-t)}\,dW^S_t
+                + \sigma_L\left(1 - e^{-\kappa (T-t)}\right) dW^L_t,
+              \qquad d\langle W^S, W^L\rangle_t = \rho\,dt
+            \]</div>
+            <p class="small text-secondary mb-0">
+              A delivery {{ calibration.mean_reversion|floatformat:2 }} years out has already
+              handed most of its weight to the long factor, which is why the back of the curve
+              breathes less than the prompt. Note what is missing: there is no drift term. The
+              model's forecast of every future settle is exactly today's settle, so it never
+              predicted the move below — it only claims how far the move could plausibly go.
+            </p>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if result %}
+      <div class="nj-panel mb-3">
+        <div class="nj-panel-head">
+          <h2>{{ product_code }} on {{ target_as_of|date:"Y-m-d" }} · simulation #{{ draw }}</h2>
+          <span class="small text-secondary">
+            {{ result.engine }}
+            · started {{ origin_as_of|date:"Y-m-d" }}
+            · {{ result.horizon_days }}d ahead
+            · seed {{ result.seed }}
+            {% if result.n_dropped %}· {{ result.n_dropped }} expired on the way{% endif %}
+          </span>
+        </div>
+        <div class="nj-panel-body">
+          {{ chart|json_script:"backtest-data" }}
+          <div id="backtest-chart" class="nj-chart" style="height:460px" aria-label="One simulated curve against the realized curve"></div>
+          <p class="small text-secondary mb-0 mt-2">
+            <span style="color:#fbbf24">Gold</span> = the curve that actually settled on
+            {{ target_as_of|date:"Y-m-d" }}.
+            <span style="color:#2dd4bf">Teal</span> = one curve the model produced over the same
+            {{ result.horizon_days }} days, starting from the {{ origin_as_of|date:"Y-m-d" }} strip.
+            Grey dashed = where that strip started, which is also the model's entire forecast.
+            {% if show_band %}
+              The wash behind them is where 90% of {{ result.n_paths }} paths landed.
+            {% endif %}
+            Flip <em>draw</em> in the toolbar for a different simulated world.
+          </p>
+        </div>
+      </div>
+
+      <div class="nj-panel mb-3">
+        <div class="nj-panel-body">
+          <p class="mb-1">
+            This draw sits <strong>{{ result.mean_gap_pct|floatformat:1 }}%</strong> away from the
+            realized curve on average, at most {{ result.max_gap_pct|floatformat:1 }}%, across
+            {{ result.n_compared }} contracts.
+            {% if show_band %}
+              Meanwhile <strong>{{ result.n_inside }} of {{ result.n_compared }}</strong>
+              ({{ result.coverage_pct|floatformat:0 }}%) of those settles landed inside the 5–95
+              band.
+            {% endif %}
+          </p>
+          <p class="small text-secondary mb-0">
+            Those two numbers answer different questions, and only the second one grades the model.
+            A single draw is not supposed to land on the realized curve — one path out of a
+            distribution has no reason to, so a large gap there means nothing. What the draw is
+            good for is family resemblance: the contracts move as a curve rather than each on
+            their own, and the seasonal shape survives the trip. Whether the model was
+            <em>right</em> is the band's job: if the widths are honest roughly nineteen settles in
+            twenty should fall inside it. Neighbouring deliveries move together, so read that as
+            one verdict on the curve rather than {{ result.n_compared }} independent ones.
+          </p>
+        </div>
+      </div>
+
+      <div class="nj-panel mb-3">
+        <div class="nj-panel-head">
+          <h2>Per-contract</h2>
+          <span class="small text-secondary">
+            draw #{{ draw }} against the settles that printed
+            {% if show_band %}· band from {{ result.n_paths }} paths{% endif %}
+          </span>
+        </div>
+        <div class="nj-panel-body">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Contract</th>
+                <th>Expiry</th>
+                <th class="text-end">Started at</th>
+                <th class="text-end">Simulated</th>
+                <th class="text-end">Realized</th>
+                <th class="text-end">Gap</th>
+                {% if show_band %}
+                  <th class="text-end">5–95 band</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>{{ r.ticker }}</td>
+                  <td class="small text-secondary">{{ r.expiry|default:'—' }}</td>
+                  <td class="text-end nj-num text-secondary">{{ r.anchor|floatformat:4 }}</td>
+                  <td class="text-end nj-num">{{ r.simulated|floatformat:4 }}</td>
+                  <td class="text-end nj-num"><strong>{{ r.realized|floatformat:4 }}</strong></td>
+                  <td class="text-end nj-num">{{ r.gap_pct|floatformat:1 }}%</td>
+                  {% if show_band %}
+                    <td class="text-end nj-num {% if not r.inside_band %}nj-pnl-neg{% else %}text-secondary{% endif %}">
+                      {{ r.p5|floatformat:3 }}–{{ r.p95|floatformat:3 }}
+                    </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+          integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+          crossorigin="anonymous"></script>
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+          crossorigin="anonymous"
+          onload="renderMathInElement(document.body, {
+            delimiters: [
+              {left: '\\[', right: '\\]', display: true},
+              {left: '\\(', right: '\\)', display: false}
+            ],
+            throwOnError: false
+          });"></script>
+  {% if result %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script>
+      (function () {
+        if (typeof echarts === 'undefined') return;
+        const raw = document.getElementById('backtest-data');
+        const host = document.getElementById('backtest-chart');
+        if (!raw || !host) return;
+        let data;
+        try { data = JSON.parse(raw.textContent); } catch (e) { return; }
+        if (!data.length) return;
+        const showBand = {{ show_band|yesno:"true,false" }};
+
+        const chart = echarts.init(host, null, { renderer: 'canvas' });
+        chart.setOption({
+          animationDuration: 320,
+          backgroundColor: 'transparent',
+          grid: { left: 62, right: 24, top: 34, bottom: 60 },
+          legend: {
+            show: true, top: 0, right: 8,
+            data: showBand
+              ? ['5–95 band', 'started at', 'realized', 'simulated']
+              : ['started at', 'realized', 'simulated'],
+            textStyle: { color: '#94a3b8', fontSize: 11 },
+          },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'line', lineStyle: { color: '#475569' } },
+            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+            borderColor: '#334155',
+            textStyle: { color: '#e2e8f0', fontSize: 12 },
+            formatter: (items) => {
+              if (!items || !items.length) return '';
+              const p = data[items[0].dataIndex];
+              const gap = 100 * (p.simulated - p.realized) / p.realized;
+              const inside = p.realized >= p.p5 && p.realized <= p.p5 + p.band;
+              return '<div style="margin-bottom:4px"><b>' + p.ticker + '</b> · τ ' +
+                p.tau.toFixed(2) + 'y</div>' +
+                'started at ' + p.anchor.toFixed(3) + '<br>' +
+                'realized <b>' + p.realized.toFixed(3) + '</b><br>' +
+                'simulated ' + p.simulated.toFixed(3) + '<br>' +
+                'gap ' + (gap >= 0 ? '+' : '') + gap.toFixed(1) + '%<br>' +
+                '5–95 ' + p.p5.toFixed(3) + '–' + (p.p5 + p.band).toFixed(3) +
+                ' · ' + (inside ? 'realized inside' : '<b>realized outside</b>');
+            },
+          },
+          xAxis: {
+            type: 'category',
+            data: data.map((p) => p.ticker),
+            name: 'delivery',
+            nameLocation: 'middle',
+            nameGap: 42,
+            nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+            axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 45 },
+            axisLine: { lineStyle: { color: '#334155' } },
+          },
+          yAxis: {
+            type: 'value', scale: true, name: 'settle',
+            nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+            axisLabel: { color: '#94a3b8', fontSize: 10 },
+            splitLine: { lineStyle: { color: '#1e293b' } },
+            axisLine: { show: false },
+          },
+          series: [
+            ...(showBand ? [
+              {
+                name: 'band-floor', type: 'line', stack: 'band', symbol: 'none',
+                lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 },
+                data: data.map((p) => p.p5), z: 1, silent: true,
+                tooltip: { show: false }, legendHoverLink: false,
+              },
+              {
+                name: '5–95 band', type: 'line', stack: 'band', symbol: 'none',
+                lineStyle: { opacity: 0 },
+                areaStyle: { color: 'rgba(45, 212, 191, 0.14)' },
+                data: data.map((p) => p.band), z: 1, silent: true,
+              },
+            ] : []),
+            {
+              name: 'started at', type: 'line', symbol: 'none',
+              lineStyle: { width: 1.4, color: '#64748b', type: 'dashed' },
+              itemStyle: { color: '#64748b' },
+              data: data.map((p) => p.anchor), z: 2,
+            },
+            {
+              name: 'realized', type: 'line', symbolSize: 6,
+              lineStyle: { width: 2.6, color: '#fbbf24' }, itemStyle: { color: '#fbbf24' },
+              data: data.map((p) => p.realized), z: 4,
+            },
+            {
+              name: 'simulated', type: 'line', symbolSize: 5,
+              lineStyle: { width: 2.2, color: '#2dd4bf' }, itemStyle: { color: '#2dd4bf' },
+              data: data.map((p) => p.simulated), z: 3,
+            },
+          ],
+        });
+        const resize = () => chart.resize();
+        window.addEventListener('resize', resize);
+        requestAnimationFrame(resize);
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

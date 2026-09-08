@@ -1,5 +1,6 @@
 #include <numeraire/simulation/historical_calibrator.hpp>
 
+#include <numeraire/database/futures_pillar_returns.hpp>
 #include <numeraire/database/underlying_daily_closes.hpp>
 #include <numeraire/quant/cholesky.hpp>
 #include <numeraire/quant/nearest_correlation.hpp>
@@ -126,6 +127,63 @@ void ValidateConfig(const HistoricalCalibratorConfig& config) {
     return config;
 }
 
+/// Annualized vols, Pearson correlation, PSD repair and Cholesky, shared by the
+/// close-history and return-history entry points.
+void FillVolCorrelationAndCholesky(const std::vector<std::vector<double>>& returns_by_factor,
+                                   const HistoricalCalibratorConfig& cfg,
+                                   const std::string& context,
+                                   HistoricalCalibrationResult& result) {
+    const std::size_t n = returns_by_factor.size();
+    const double annualization_scale = std::sqrt(static_cast<double>(cfg.vol_annualization_days));
+    result.volatilities.resize(n);
+    for (std::size_t f = 0; f < n; ++f) {
+        const double daily_vol = SampleStdev(returns_by_factor[f], Mean(returns_by_factor[f]));
+        result.volatilities[f] = daily_vol * annualization_scale;
+    }
+
+    result.correlation.assign(n * n, 0.0);
+    for (std::size_t i = 0; i < n; ++i) {
+        result.correlation[(i * n) + i] = 1.0;
+        for (std::size_t j = 0; j < i; ++j) {
+            const double rho = PearsonCorrelation(returns_by_factor[i], returns_by_factor[j]);
+            result.correlation[(i * n) + j] = rho;
+            result.correlation[(j * n) + i] = rho;
+        }
+    }
+
+    auto nearest = quant::NearestCorrelationHigham(result.correlation, n);
+    if (nearest.status != quant::NearestCorrelationStatus::kOk) {
+        throw ValidationError(context + ": nearest correlation repair failed.");
+    }
+    result.correlation = nearest.matrix;
+
+    constexpr int kMaxCholeskyAttempts = 8;
+    constexpr double kOffDiagShrink = 1.0 - 1.0e-8;
+    quant::CholeskyResult chol;
+    for (int attempt = 0; attempt < kMaxCholeskyAttempts; ++attempt) {
+        chol = quant::CholeskyDecompose(result.correlation, n);
+        if (chol.status == quant::CholeskyStatus::kOk) {
+            break;
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            for (std::size_t j = 0; j < n; ++j) {
+                if (i != j) {
+                    result.correlation[(i * n) + j] *= kOffDiagShrink;
+                }
+            }
+        }
+        nearest = quant::NearestCorrelationHigham(result.correlation, n);
+        if (nearest.status != quant::NearestCorrelationStatus::kOk) {
+            throw ValidationError(context + ": nearest correlation repair failed.");
+        }
+        result.correlation = nearest.matrix;
+    }
+    if (chol.status != quant::CholeskyStatus::kOk) {
+        throw ValidationError(context + ": Cholesky decomposition failed.");
+    }
+    result.cholesky = chol.factor;
+}
+
 }  // namespace
 
 HistoricalCalibrationResult CalibrateFromPriceHistory(
@@ -202,54 +260,70 @@ HistoricalCalibrationResult CalibrateFromPriceHistory(
     result.history_start = schedule::ParseIsoDate(*common_dates.begin());
     result.history_end = schedule::ParseIsoDate(*common_dates.rbegin());
 
-    const double annualization_scale = std::sqrt(static_cast<double>(cfg.vol_annualization_days));
-    result.volatilities.resize(n);
+    FillVolCorrelationAndCholesky(returns_by_factor, cfg, "CalibrateFromPriceHistory", result);
+    return result;
+}
+
+HistoricalCalibrationResult CalibrateFromReturnHistory(const std::vector<FactorReturnHistory>& factors,
+                                                       const HistoricalCalibratorConfig& config) {
+    const HistoricalCalibratorConfig cfg = WithValidatedAsOf(config);
+    if (factors.empty()) {
+        throw ValidationError("CalibrateFromReturnHistory: factors must not be empty.");
+    }
+
+    std::set<std::string> common_dates;
+    bool first = true;
+    for (const FactorReturnHistory& factor : factors) {
+        std::set<std::string> factor_dates;
+        for (const FactorReturnObservation& observation : factor.returns) {
+            factor_dates.insert(observation.as_of);
+        }
+        if (first) {
+            common_dates = std::move(factor_dates);
+            first = false;
+        } else {
+            std::set<std::string> intersection;
+            std::set_intersection(common_dates.begin(), common_dates.end(), factor_dates.begin(),
+                                  factor_dates.end(), std::inserter(intersection, intersection.begin()));
+            common_dates = std::move(intersection);
+        }
+    }
+    if (common_dates.size() < cfg.min_return_observations) {
+        throw ValidationError("CalibrateFromReturnHistory: insufficient aligned log-return observations (" +
+                              std::to_string(common_dates.size()) + " < " +
+                              std::to_string(cfg.min_return_observations) + ").");
+    }
+
+    const std::size_t n = factors.size();
+    HistoricalCalibrationResult result;
+    result.factor_ids.reserve(n);
+    result.spots_as_of.reserve(n);
+    std::vector<std::vector<double>> returns_by_factor(n);
+
     for (std::size_t f = 0; f < n; ++f) {
-        const double daily_vol = SampleStdev(returns_by_factor[f], Mean(returns_by_factor[f]));
-        result.volatilities[f] = daily_vol * annualization_scale;
+        const FactorReturnHistory& factor = factors[f];
+        if (factor.level_as_of <= 0.0) {
+            throw ValidationError("CalibrateFromReturnHistory: missing positive level for factor=" +
+                                  factor.factor_id);
+        }
+        result.factor_ids.push_back(factor.factor_id);
+        result.spots_as_of.push_back(factor.level_as_of);
+
+        std::map<std::string, double> by_date;
+        for (const FactorReturnObservation& observation : factor.returns) {
+            by_date[observation.as_of] = observation.log_return;
+        }
+        returns_by_factor[f].reserve(common_dates.size());
+        for (const std::string& date : common_dates) {
+            returns_by_factor[f].push_back(by_date.at(date));
+        }
     }
 
-    result.correlation.assign(n * n, 0.0);
-    for (std::size_t i = 0; i < n; ++i) {
-        result.correlation[(i * n) + i] = 1.0;
-        for (std::size_t j = 0; j < i; ++j) {
-            const double rho = PearsonCorrelation(returns_by_factor[i], returns_by_factor[j]);
-            result.correlation[(i * n) + j] = rho;
-            result.correlation[(j * n) + i] = rho;
-        }
-    }
+    result.num_return_observations = common_dates.size();
+    result.history_start = schedule::ParseIsoDate(*common_dates.begin());
+    result.history_end = schedule::ParseIsoDate(*common_dates.rbegin());
 
-    auto nearest = quant::NearestCorrelationHigham(result.correlation, n);
-    if (nearest.status != quant::NearestCorrelationStatus::kOk) {
-        throw ValidationError("CalibrateFromPriceHistory: nearest correlation repair failed.");
-    }
-    result.correlation = nearest.matrix;
-
-    constexpr int kMaxCholeskyAttempts = 8;
-    constexpr double kOffDiagShrink = 1.0 - 1.0e-8;
-    quant::CholeskyResult chol;
-    for (int attempt = 0; attempt < kMaxCholeskyAttempts; ++attempt) {
-        chol = quant::CholeskyDecompose(result.correlation, n);
-        if (chol.status == quant::CholeskyStatus::kOk) {
-            break;
-        }
-        for (std::size_t i = 0; i < n; ++i) {
-            for (std::size_t j = 0; j < n; ++j) {
-                if (i != j) {
-                    result.correlation[(i * n) + j] *= kOffDiagShrink;
-                }
-            }
-        }
-        nearest = quant::NearestCorrelationHigham(result.correlation, n);
-        if (nearest.status != quant::NearestCorrelationStatus::kOk) {
-            throw ValidationError("CalibrateFromPriceHistory: nearest correlation repair failed.");
-        }
-        result.correlation = nearest.matrix;
-    }
-    if (chol.status != quant::CholeskyStatus::kOk) {
-        throw ValidationError("CalibrateFromPriceHistory: Cholesky decomposition failed.");
-    }
-    result.cholesky = chol.factor;
+    FillVolCorrelationAndCholesky(returns_by_factor, cfg, "CalibrateFromReturnHistory", result);
     return result;
 }
 
@@ -279,19 +353,109 @@ HistoricalCalibrationResult CalibrateFromDatabase(const std::string& database_fi
     return CalibrateFromPriceHistory(factor_ids, closes_by_factor, cfg);
 }
 
+namespace {
+
+/// One equity / index underlying becomes one factor: consecutive closes differenced
+/// into returns, anchored on its close on `as_of`.
+[[nodiscard]] FactorReturnHistory LoadEquityFactor(const std::string& database_file_path,
+                                                   const std::string& underlying_id,
+                                                   const std::string& from_iso,
+                                                   const std::string& to_iso,
+                                                   const HistoricalCalibratorConfig& cfg) {
+    const std::vector<database::DailyCloseObservation> series = database::LoadUnderlyingDailyClosesRange(
+            database_file_path, underlying_id, from_iso, to_iso, cfg.adjusted);
+    if (series.empty()) {
+        throw ValidationError("CalibrateBookFromDatabase: no EOD history for equity underlying=" + underlying_id +
+                              " in [" + from_iso + ", " + to_iso + "].");
+    }
+    const std::optional<double> level = CloseOnDate(series, to_iso);
+    if (!level.has_value() || *level <= 0.0) {
+        throw ValidationError("CalibrateBookFromDatabase: no positive close on as_of=" + to_iso +
+                              " for equity underlying=" + underlying_id + ".");
+    }
+
+    FactorReturnHistory factor;
+    factor.factor_id = underlying_id;
+    factor.level_as_of = *level;
+    factor.returns.reserve(series.size());
+    for (std::size_t i = 1; i < series.size(); ++i) {
+        if (series[i - 1].close <= 0.0 || series[i].close <= 0.0) {
+            continue;
+        }
+        factor.returns.push_back(FactorReturnObservation{
+                .as_of = series[i].as_of,
+                .log_return = std::log(series[i].close / series[i - 1].close),
+        });
+    }
+    return factor;
+}
+
+/// One commodity curve becomes a strip of constant-maturity pillar factors, so the
+/// legs of a calendar spread are driven by different (highly but not perfectly
+/// correlated) factors instead of collapsing onto one.
+void AppendCommodityPillarFactors(const std::string& database_file_path,
+                                  const std::string& product_code,
+                                  const std::string& from_iso,
+                                  const std::string& to_iso,
+                                  const HistoricalCalibratorConfig& cfg,
+                                  std::vector<FactorReturnHistory>& out) {
+    const std::vector<database::FuturesPillarSeries> pillars = database::LoadFuturesPillarReturns(
+            database_file_path, product_code, from_iso, to_iso, cfg.commodity_pillars);
+    if (pillars.empty()) {
+        throw ValidationError("CalibrateBookFromDatabase: no futures pillar history for commodity underlying=" +
+                              product_code + " in [" + from_iso + ", " + to_iso + "].");
+    }
+
+    for (const database::FuturesPillarSeries& pillar : pillars) {
+        if (pillar.last_date != to_iso) {
+            throw ValidationError("CalibrateBookFromDatabase: " + pillar.factor_id + " has no session on as_of=" +
+                                  to_iso + " (latest is " + pillar.last_date + ").");
+        }
+        FactorReturnHistory factor;
+        factor.factor_id = pillar.factor_id;
+        factor.level_as_of = pillar.level_on_last_date;
+        factor.returns.reserve(pillar.returns.size());
+        for (const database::PillarReturn& observation : pillar.returns) {
+            factor.returns.push_back(FactorReturnObservation{
+                    .as_of = observation.as_of,
+                    .log_return = observation.log_return,
+            });
+        }
+        out.push_back(std::move(factor));
+    }
+}
+
+}  // namespace
+
 HistoricalCalibrationResult CalibrateBookFromDatabase(const std::string& database_file_path,
                                                       const HistoricalCalibratorConfig& config,
                                                       const std::optional<std::string_view> portfolio_id) {
-    const std::vector<std::string> factor_ids =
-            database::ListDistinctBookUnderlyingIds(database_file_path, std::string_view{"LIVE"}, portfolio_id);
-    if (factor_ids.empty()) {
+    const HistoricalCalibratorConfig cfg = WithValidatedAsOf(config);
+    const std::vector<database::BookUnderlying> underlyings =
+            database::ListBookUnderlyings(database_file_path, std::string_view{"LIVE"}, portfolio_id);
+    if (underlyings.empty()) {
         if (portfolio_id.has_value()) {
             throw ValidationError("CalibrateBookFromDatabase: portfolio has no underlyings: portfolio_id=" +
                                   std::string(*portfolio_id));
         }
         throw ValidationError("CalibrateBookFromDatabase: book has no underlyings.");
     }
-    return CalibrateFromDatabase(database_file_path, factor_ids, config);
+
+    const std::string from_iso =
+            schedule::FormatIsoDate(schedule::AddCalendarDays(cfg.as_of, -cfg.lookback_calendar_days));
+    const std::string to_iso = schedule::FormatIsoDate(cfg.as_of);
+
+    std::vector<FactorReturnHistory> factors;
+    factors.reserve(underlyings.size());
+    for (const database::BookUnderlying& underlying : underlyings) {
+        if (underlying.asset_kind == "COMMODITY") {
+            AppendCommodityPillarFactors(database_file_path, underlying.underlying_id, from_iso, to_iso, cfg,
+                                         factors);
+        } else {
+            factors.push_back(LoadEquityFactor(database_file_path, underlying.underlying_id, from_iso, to_iso, cfg));
+        }
+    }
+    return CalibrateFromReturnHistory(factors, cfg);
 }
 
 }  // namespace numeraire::simulation

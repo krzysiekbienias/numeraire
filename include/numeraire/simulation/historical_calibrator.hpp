@@ -21,6 +21,27 @@ struct HistoricalCalibratorConfig {
     int adjusted = 1;
     /// Annualization factor for historical vol (`sigma_daily * sqrt(N)`).
     int vol_annualization_days = 252;
+    /// Constant-maturity pillars calibrated per commodity curve (M1..Mn).
+    int commodity_pillars = 6;
+};
+
+/// One single-session log-return of a factor.
+struct FactorReturnObservation {
+    std::string as_of;
+    double log_return{0.0};
+};
+
+/// A factor's history as single-session log-returns plus its level on `as_of`.
+///
+/// Returns rather than closes, because a commodity pillar has no continuous price
+/// series — it hops between contracts on every roll. Reducing both asset kinds to
+/// returns is what lets equities and commodity curves land in one correlated
+/// calibration.
+struct FactorReturnHistory {
+    std::string factor_id;
+    double level_as_of{0.0};
+    /// Ascending by date; may have holes relative to other factors.
+    std::vector<FactorReturnObservation> returns;
 };
 
 struct HistoricalCalibrationResult {
@@ -41,6 +62,12 @@ struct HistoricalCalibrationResult {
 [[nodiscard]] HistoricalCalibrationResult CalibrateFromPriceHistory(
         const std::vector<std::string>& factor_ids,
         const std::unordered_map<std::string, std::vector<database::DailyCloseObservation>>& closes_by_factor,
+        const HistoricalCalibratorConfig& config);
+
+/// Calibrate vol / correlation / Cholesky from per-factor return series (no DB I/O).
+/// Factors are aligned on the dates where all of them report a return.
+[[nodiscard]] HistoricalCalibrationResult CalibrateFromReturnHistory(
+        const std::vector<FactorReturnHistory>& factors,
         const HistoricalCalibratorConfig& config);
 
 /// Calibrate explicit factor list using EOD history loaded from SQLite on `[as_of - lookback, as_of]`.

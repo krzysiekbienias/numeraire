@@ -105,5 +105,9 @@ viz/.venv/
 web/web_app.sqlite3
 web/staticfiles/
 
+# --- dev-only scripts (not for prod) ----------------------------------------
+scripts/backfill_mtm_dev.sh
+scripts/backfill_exposure_dev.sh
+
 # ---- exports ---
 exports

@@ -354,6 +354,68 @@ TEST(SqliteTradeLegMtmRepositoryTest, LookupPriorOfficialMarkEmptyArgsThrows) {
     fs::remove(path);
 }
 
+TEST(SqliteTradeLegMtmRepositoryTest, HasOfficialMarkRequiresIsOfficialOnAsOf) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+    EXPECT_FALSE(repo.HasOfficialMark("TRD_001_L1", "2025-08-10"));
+
+    numeraire::database::TradeLegMtmEodRow row{};
+    row.as_of = "2025-08-10";
+    row.trade_id = "TRD_001";
+    row.leg_id = "TRD_001_L1";
+    row.underlying_spot = 240.0;
+    row.risk_free_rate = 0.03;
+    row.implied_vol_used = 0.20;
+    row.years_to_maturity = 0.25;
+    row.pv_unit = 5.5;
+    row.pv_total = 550.0;
+    FillPositionGreekTotals(row);
+    row.pricing_engine = "analytic_black_scholes";
+    row.is_official = false;
+    repo.Upsert(row);
+    EXPECT_FALSE(repo.HasOfficialMark("TRD_001_L1", "2025-08-10"));
+
+    row.is_official = true;
+    repo.Upsert(row);
+    EXPECT_TRUE(repo.HasOfficialMark("TRD_001_L1", "2025-08-10"));
+    EXPECT_FALSE(repo.HasOfficialMark("TRD_001_L1", "2025-08-11"));
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegMtmRepositoryTest, LiveLegsMissingOfficialMtmGatesExposure) {
+    std::string const path = TempSqlitePath();
+    SeedMinimalTrade(path);
+
+    numeraire::database::SqliteTradeLegMtmRepository repo(path);
+    const auto missing_before = repo.LiveLegsMissingOfficialMtm("BOOK_1", "2025-08-10");
+    ASSERT_EQ(missing_before.size(), 1U);
+    EXPECT_EQ(missing_before.front(), "TRD_001_L1");
+    EXPECT_TRUE(repo.LiveLegsMissingOfficialMtm("BOOK_OTHER", "2025-08-10").empty());
+
+    numeraire::database::TradeLegMtmEodRow row{};
+    row.as_of = "2025-08-10";
+    row.trade_id = "TRD_001";
+    row.leg_id = "TRD_001_L1";
+    row.underlying_spot = 240.0;
+    row.risk_free_rate = 0.03;
+    row.implied_vol_used = 0.20;
+    row.years_to_maturity = 0.25;
+    row.pv_unit = 5.5;
+    row.pv_total = 550.0;
+    FillPositionGreekTotals(row);
+    row.pricing_engine = "analytic_black_scholes";
+    row.is_official = true;
+    repo.Upsert(row);
+
+    EXPECT_TRUE(repo.LiveLegsMissingOfficialMtm("BOOK_1", "2025-08-10").empty());
+    EXPECT_EQ(repo.LiveLegsMissingOfficialMtm("BOOK_1", "2025-08-11").size(), 1U);
+
+    fs::remove(path);
+}
+
 TEST(SqliteTradeLegMtmRepositoryTest, EmptyRequiredFieldsThrows) {
     std::string const path = TempSqlitePath();
     SeedMinimalTrade(path);

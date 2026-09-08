@@ -15,6 +15,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from journal.booking import (
     bookable_instruments,
     build_bundle,
+    build_calendar_bundle,
     commodity_product_code,
     delete_preview,
     futures_contract_choices,
@@ -29,7 +30,7 @@ from journal.booking import (
     underlier_choices,
     write_bundle,
 )
-from journal.forms import NewTradeForm
+from journal.forms import CalendarTradeForm, NewTradeForm
 from journal.curves import (
     curve_discount_for_maturity,
     discount_factor_from_zero,
@@ -51,6 +52,7 @@ from journal.exposure import (
 )
 from journal.hypo_portfolio import build_hypo_lab_context, parse_instruments, parse_market_scenario, price_hypo_run
 from journal.quant_lab import build_quant_lab
+from journal.commodity_curve_backtest import build_curve_backtest
 from journal.simulation_lab import build_simulation_lab
 from journal.inventory import is_priceable, pricing_notes
 from journal.market import (
@@ -306,8 +308,9 @@ class TradeListView(ListView):
 
 
 class TradeNewView(TemplateView):
-    """Book a single-leg trade by handing a bundle to `import_trade_bundle.py`.
+    """Book a trade by handing a bundle to `import_trade_bundle.py`.
 
+    Single-leg instruments and CAL (two outright legs) share this view.
     The Journal never INSERTs into the catalog itself — see `journal.booking`.
     """
 
@@ -353,9 +356,10 @@ class TradeNewView(TemplateView):
             'contract_choices': contract_choices,
             'initial': initial,
         }
+        form_cls = CalendarTradeForm if spec.is_calendar else NewTradeForm
         if data is not None:
-            return NewTradeForm(spec, data, **kwargs)
-        return NewTradeForm(spec, **kwargs)
+            return form_cls(spec, data, **kwargs)
+        return form_cls(spec, **kwargs)
 
     def get(self, request, *args, **kwargs):
         spec = get_instrument(request.GET.get('instrument'))
@@ -396,13 +400,21 @@ class TradeNewView(TemplateView):
             )
 
         trade_id = next_trade_id()
-        bundle = build_bundle(
-            spec,
-            trade_id=trade_id,
-            product_id=form.product_id,
-            cleaned=form.cleaned_data,
-            booked_by=request.user.get_username(),
-        )
+        if spec.is_calendar:
+            bundle = build_calendar_bundle(
+                spec,
+                trade_id=trade_id,
+                cleaned=form.cleaned_data,
+                booked_by=request.user.get_username(),
+            )
+        else:
+            bundle = build_bundle(
+                spec,
+                trade_id=trade_id,
+                product_id=form.product_id,
+                cleaned=form.cleaned_data,
+                booked_by=request.user.get_username(),
+            )
         try:
             bundle_path = write_bundle(trade_id, bundle)
         except OSError as exc:
@@ -997,6 +1009,20 @@ class CommodityCurveView(TemplateView):
                     'latest_as_of': None,
                 }
             )
+        return context
+
+
+class CommodityCurveBacktestView(TemplateView):
+    """Curve simulated forward from a past session against the settles that printed."""
+
+    template_name = 'journal/commodity_curve_backtest.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        try:
+            context.update(build_curve_backtest(self.request.GET))
+        except OperationalError as exc:
+            context['db_error'] = str(exc)
         return context
 
 

@@ -128,6 +128,31 @@ def _as_of_axis(d: date, origin: date) -> float:
     return _years_between(origin, d)
 
 
+def load_tenor_history(product_code: str, ticker: str) -> list[dict[str, Any]]:
+    """Every printed settle of one dated contract, oldest first."""
+    if not product_code or not ticker:
+        return []
+    bars = (
+        FuturesDailyEod.objects.filter(
+            product_code=product_code,
+            ticker=ticker,
+            settlement_price__isnull=False,
+        )
+        .values('as_of', 'settlement_price', 'close', 'volume')
+        .order_by('as_of')
+    )
+    return [
+        {
+            'as_of': (b['as_of'].isoformat() if hasattr(b['as_of'], 'isoformat') else str(b['as_of'])[:10]),
+            'settle': float(b['settlement_price']),
+            'close': float(b['close']) if b['close'] is not None else None,
+            'volume': float(b['volume']) if b['volume'] is not None else None,
+            'ticker': ticker,
+        }
+        for b in bars
+    ]
+
+
 def load_strip(product_code: str, as_of: date) -> list[dict[str, Any]]:
     """Settlement strip for one product / session day, ordered by expiry."""
     bars = list(
@@ -201,6 +226,7 @@ def load_commodity_curve_bundle(
             'cloud': [],
             'strip': [],
             'tenor_path': [],
+            'tenor_history': [],
             'tickers': [],
             'coverage_days': 0,
             'first_as_of': None,
@@ -277,6 +303,7 @@ def load_commodity_curve_bundle(
         [p for p in cloud if p['ticker'] == selected_ticker],
         key=lambda p: p['as_of'],
     )
+    tenor_history = load_tenor_history(product_code, selected_ticker or '')
 
     return {
         'product_code': product_code,
@@ -286,6 +313,7 @@ def load_commodity_curve_bundle(
         'strip': strip_chart,
         'strip_rows': strip_rows,
         'tenor_path': tenor_path,
+        'tenor_history': tenor_history,
         'tickers': all_tickers,
         'coverage_days': len(available),
         'cloud_days': len(window_chrono),

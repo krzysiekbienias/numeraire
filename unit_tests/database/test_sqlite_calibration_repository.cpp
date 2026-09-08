@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include <numeraire/database/historical_calibration_types.hpp>
-#include <numeraire/database/sqlite_historical_calibration_repository.hpp>
+#include <numeraire/database/calibration_types.hpp>
+#include <numeraire/database/sqlite_calibration_repository.hpp>
 #include <numeraire/database/underlying_daily_closes.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/format_iso_date.hpp>
@@ -20,12 +20,12 @@ namespace fs = std::filesystem;
 
 namespace {
 
-using numeraire::database::HistoricalCalibrationCholeskyWrite;
-using numeraire::database::HistoricalCalibrationCorrelationWrite;
-using numeraire::database::HistoricalCalibrationFactorWrite;
-using numeraire::database::HistoricalCalibrationHeaderWrite;
+using numeraire::database::CalibrationCholeskyWrite;
+using numeraire::database::CalibrationCorrelationWrite;
+using numeraire::database::CalibrationFactorWrite;
+using numeraire::database::CalibrationHeaderWrite;
 using numeraire::database::ListDistinctBookUnderlyingIds;
-using numeraire::database::SqliteHistoricalCalibrationRepository;
+using numeraire::database::SqliteCalibrationRepository;
 using numeraire::schedule::AddCalendarDays;
 using numeraire::schedule::FormatIsoDate;
 using numeraire::schedule::ParseIsoDate;
@@ -115,50 +115,52 @@ void SeedCorrelatedHistory(SQLite::Database& db, const numeraire::schedule::Date
 
 }  // namespace
 
-TEST(SqliteHistoricalCalibrationRepositoryTest, UpsertReplacesOfficialKey) {
+TEST(SqliteCalibrationRepositoryTest, UpsertReplacesOfficialKey) {
     const fs::path path = UniqueSqlitePath();
     {
         SQLite::Database db(path.string(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
         db.exec(ReadSchemaFile());
     }
 
-    HistoricalCalibrationHeaderWrite header{};
+    CalibrationHeaderWrite header{};
     header.scope_key = "BOOK_1";
     header.as_of = "2026-01-15";
     header.history_start = "2024-01-16";
     header.history_end = "2026-01-15";
     header.lookback_calendar_days = 504;
     header.min_return_observations = 60;
+    header.vol_annualization_days = 252;
+    header.eod_adjusted = 1;
     header.num_factors = 1;
     header.num_return_observations = 120;
     header.batch_run_id = "ut-1";
 
-    const std::vector<HistoricalCalibrationFactorWrite> factors{
-            {.factor_index = 0, .underlying_id = "AAPL", .spot_as_of = 190.0, .volatility = 0.22},
+    const std::vector<CalibrationFactorWrite> factors{
+            {.factor_index = 0, .factor_id = "AAPL", .factor_level = 190.0, .volatility = 0.22},
     };
-    const std::vector<HistoricalCalibrationCorrelationWrite> correlations{
+    const std::vector<CalibrationCorrelationWrite> correlations{
             {.factor_i = 0, .factor_j = 0, .rho = 1.0},
     };
-    const std::vector<HistoricalCalibrationCholeskyWrite> cholesky{
+    const std::vector<CalibrationCholeskyWrite> cholesky{
             {.row_i = 0, .col_j = 0, .l_value = 1.0},
     };
 
-    SqliteHistoricalCalibrationRepository repo(path.string());
+    SqliteCalibrationRepository repo(path.string());
     const long first_id = repo.UpsertSnapshot(header, factors, correlations, cholesky);
     header.batch_run_id = "ut-2";
-    const std::vector<HistoricalCalibrationFactorWrite> factors_v2{
-            {.factor_index = 0, .underlying_id = "AAPL", .spot_as_of = 190.0, .volatility = 0.25},
+    const std::vector<CalibrationFactorWrite> factors_v2{
+            {.factor_index = 0, .factor_id = "AAPL", .factor_level = 190.0, .volatility = 0.25},
     };
     const long second_id = repo.UpsertSnapshot(header, factors_v2, correlations, cholesky);
     EXPECT_NE(first_id, second_id);
 
     SQLite::Database db(path.string(), SQLite::OPEN_READONLY);
-    SQLite::Statement count(db, "SELECT COUNT(*) FROM historical_calibration WHERE scope_key = 'BOOK_1'");
+    SQLite::Statement count(db, "SELECT COUNT(*) FROM calibration_snapshot WHERE scope_key = 'BOOK_1'");
     ASSERT_TRUE(count.executeStep());
     EXPECT_EQ(count.getColumn(0).getInt(), 1);
 
     SQLite::Statement vol(db,
-                          "SELECT volatility FROM historical_calibration_factor WHERE calibration_id = ?");
+                          "SELECT volatility FROM calibration_factor WHERE calibration_id = ?");
     vol.bind(1, second_id);
     ASSERT_TRUE(vol.executeStep());
     EXPECT_DOUBLE_EQ(vol.getColumn(0).getDouble(), 0.25);
@@ -200,13 +202,13 @@ TEST(HistoricalCalibrationEodBuildTest, PortfolioScopeFiltersFactorsAndPersists)
     SQLite::Database db(path.string(), SQLite::OPEN_READONLY);
     SQLite::Statement header(
             db,
-            "SELECT calibration_id, scope_key, num_factors FROM historical_calibration WHERE scope_key = 'BOOK_1'");
+            "SELECT calibration_id, scope_key, num_factors FROM calibration_snapshot WHERE scope_key = 'BOOK_1'");
     ASSERT_TRUE(header.executeStep());
     EXPECT_EQ(header.getColumn(1).getString(), std::string("BOOK_1"));
     EXPECT_EQ(header.getColumn(2).getInt(), 1);
 
     SQLite::Statement factors(db,
-                              "SELECT underlying_id FROM historical_calibration_factor WHERE calibration_id = ?");
+                              "SELECT factor_id FROM calibration_factor WHERE calibration_id = ?");
     factors.bind(1, header.getColumn(0).getInt64());
     ASSERT_TRUE(factors.executeStep());
     EXPECT_EQ(factors.getColumn(0).getString(), std::string("AAPL"));

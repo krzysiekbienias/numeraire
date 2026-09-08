@@ -32,6 +32,7 @@ add_library(numeraire_simulation STATIC
         gbm_spec.cpp
         scenario_dump.cpp
         scenario_slice_market_data.cpp
+        commodity_curve_resolver.cpp
         path_pricing_market_config.cpp
         exposure_metrics.cpp
         leg_exposure_dump.cpp
@@ -39,6 +40,10 @@ add_library(numeraire_simulation STATIC
         path_pricer.cpp
         path_pricing_rules.cpp
         historical_calibrator.cpp
+        curve_lab.cpp
+        gabillon_calibration_builder.cpp
+        gabillon_evolution.cpp
+        gabillon_spec.cpp
         historical_calibration_eod_builder.cpp
         historical_calibration_loader.cpp
         historical_gbm_simulate.cpp

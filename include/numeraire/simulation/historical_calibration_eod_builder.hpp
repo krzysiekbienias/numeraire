@@ -17,6 +17,8 @@ struct HistoricalCalibrationBuildParams {
     std::size_t min_return_observations{60};
     int vol_annualization_days{252};
     int adjusted{1};
+    /// Constant-maturity pillars calibrated per commodity curve in the book (M1..Mn).
+    int commodity_pillars{6};
 };
 
 struct HistoricalCalibrationBuildStats {
@@ -25,7 +27,7 @@ struct HistoricalCalibrationBuildStats {
     std::size_t num_return_observations{0};
 };
 
-/// Calibrate from SQLite EOD history and persist `historical_calibration_*` tables.
+/// Calibrate from SQLite EOD history and persist `calibration_snapshot` + child tables.
 [[nodiscard]] HistoricalCalibrationBuildStats BuildHistoricalCalibrationEod(
         const HistoricalCalibrationBuildParams& params);
 

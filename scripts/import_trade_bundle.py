@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Insert product + (products_equity | products_commodity) + trade + trade_legs.
+"""Insert product(s) + (products_equity | products_commodity) + trade + trade_legs.
 
 Uses only the Python standard library. Expects schema from sql/schema_v1.sql
 (tables must exist — apply the schema manually or via your bootstrap).
 
-Validates `product.expiry_date >= trade.trade_date` before any INSERT (rejects
-expired-at-trade-date instruments with a clear error).
+Validates each `product.expiry_date >= trade.trade_date` before any INSERT
+(rejects expired-at-trade-date instruments with a clear error).
 
-Bundle shape: exactly one of `equity` or `commodity` extension objects.
+Bundle shapes:
+  - single product: top-level `product` plus exactly one of `equity` / `commodity`
+  - multi-product (calendar): `products` array; each item is the product fields
+    plus its own `equity` or `commodity`. Legs must name a `product_id` from
+    that list. Same trade_id, different listed tenors.
 
 Examples:
   NUMERAIRE_DB_PATH=db.sqlite3 python3 scripts/import_trade_bundle.py trades/incoming/my_trade.json
@@ -140,12 +144,12 @@ def _trade_exists(conn: sqlite3.Connection, trade_id: str) -> bool:
     return cur.fetchone() is not None
 
 
-def _canonical_product_id(product: Mapping[str, Any]) -> str:
+def _canonical_product_id(product: Mapping[str, Any], *, label: str = "product") -> str:
     if "product_id" not in product:
-        _die('product: missing key "product_id"')
+        _die(f'{label}: missing key "product_id"')
     pid = str(product["product_id"]).strip()
     if not pid:
-        _die("product.product_id: required (set once under product — copied to equity and legs)")
+        _die(f"{label}.product_id: required")
     return pid
 
 
@@ -158,28 +162,29 @@ def _resolve_product_id_field(
     raw = holder.get("product_id", None)
     if _is_blank(raw):
         holder["product_id"] = canonical_pid
-        notes.append(f"{label}.product_id ← product.product_id ({canonical_pid!r})")
+        notes.append(f"{label}.product_id ← {canonical_pid!r}")
         return
     other = str(raw).strip()
     if other != canonical_pid:
-        _die(
-            f"{label}.product_id ({other!r}) must match product.product_id ({canonical_pid!r})"
-        )
+        _die(f"{label}.product_id ({other!r}) must match {canonical_pid!r}")
     holder["product_id"] = other
 
 
 def normalize_bundle(
-    product: dict[str, Any],
-    extension: dict[str, Any],
-    extension_label: str,
+    items: list[tuple[dict[str, Any], str, dict[str, Any]]],
     trade: dict[str, Any],
 ) -> list[str]:
-    """Fill product_id / leg_id from product.trade; error on conflicting product_id."""
+    """Fill product_id / leg_id; legs may name any product in this bundle."""
     notes: list[str] = []
-    canonical_pid = _canonical_product_id(product)
-    product["product_id"] = canonical_pid
-
-    _resolve_product_id_field(extension, extension_label, canonical_pid, notes)
+    pids: list[str] = []
+    for i, (product, extension_label, extension) in enumerate(items):
+        label = "product" if len(items) == 1 else f"products[{i}]"
+        pid = _canonical_product_id(product, label=label)
+        product["product_id"] = pid
+        _resolve_product_id_field(extension, f"{label}.{extension_label}", pid, notes)
+        if pid in pids:
+            _die(f"{label}.product_id: duplicate {pid!r} in this bundle")
+        pids.append(pid)
 
     if "trade_id" not in trade or _is_blank(trade.get("trade_id")):
         _die("trade.trade_id: required")
@@ -190,11 +195,26 @@ def normalize_bundle(
     if not isinstance(legs_raw, list) or len(legs_raw) == 0:
         _die('trade.legs: expected a non-empty array')
 
+    allowed = set(pids)
     for i, leg in enumerate(legs_raw):
         if not isinstance(leg, dict):
             _die(f"trade.legs[{i}]: expected JSON object")
         label = f"trade.legs[{i}]"
-        _resolve_product_id_field(leg, label, canonical_pid, notes)
+        raw = leg.get("product_id", None)
+        if _is_blank(raw):
+            if len(pids) == 1:
+                leg["product_id"] = pids[0]
+                notes.append(f"{label}.product_id ← {pids[0]!r}")
+            else:
+                _die(f"{label}.product_id: required when the bundle has multiple products")
+        else:
+            other = str(raw).strip()
+            if other not in allowed:
+                _die(
+                    f"{label}.product_id ({other!r}) must be one of this bundle's "
+                    f"products: {', '.join(pids)}"
+                )
+            leg["product_id"] = other
 
         if _is_blank(leg.get("leg_id")):
             leg_id = f"{trade_id}_L{i + 1}"
@@ -272,9 +292,36 @@ def _collect_json_paths(
     return out
 
 
+def _extension_from_holder(
+    holder: Mapping[str, Any], label: str
+) -> tuple[str, dict[str, Any]]:
+    has_equity = "equity" in holder and holder.get("equity") is not None
+    has_commodity = "commodity" in holder and holder.get("commodity") is not None
+    if has_equity == has_commodity:
+        _die(f"{label}: must contain exactly one of 'equity' or 'commodity'")
+    if has_commodity:
+        return "commodity", dict(_require_mapping(holder.get("commodity"), f"{label}.commodity"))
+    return "equity", dict(_require_mapping(holder.get("equity"), f"{label}.equity"))
+
+
+def _product_item_from_holder(
+    holder: Mapping[str, Any], label: str
+) -> tuple[dict[str, Any], str, dict[str, Any]]:
+    extension_label, extension = _extension_from_holder(holder, label)
+    product = {
+        key: value
+        for key, value in holder.items()
+        if key not in ("equity", "commodity")
+    }
+    mp = _missing_keys(product, REQUIRED_PRODUCT_KEYS)
+    if mp:
+        _die(f"{label}: missing keys: {mp}")
+    return product, extension_label, extension
+
+
 def load_bundle(
     path: Path,
-) -> tuple[Mapping[str, Any], str, Mapping[str, Any], Mapping[str, Any], list[str]]:
+) -> tuple[list[tuple[dict[str, Any], str, dict[str, Any]]], dict[str, Any], list[str]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except OSError as e:
@@ -283,29 +330,37 @@ def load_bundle(
         _die(f"invalid JSON in {path}: {e}")
 
     root = _require_mapping(data, "root")
-    product = dict(_require_mapping(root.get("product"), "product"))
     trade = dict(_require_mapping(root.get("trade"), "trade"))
 
-    has_equity = "equity" in root and root.get("equity") is not None
-    has_commodity = "commodity" in root and root.get("commodity") is not None
-    if has_equity == has_commodity:
-        _die(f"{path.name}: bundle must contain exactly one of 'equity' or 'commodity'")
-
-    if has_commodity:
-        extension_label = "commodity"
-        extension = dict(_require_mapping(root.get("commodity"), "commodity"))
+    has_products = "products" in root and root.get("products") is not None
+    has_product = "product" in root and root.get("product") is not None
+    if has_products and has_product:
+        _die(f"{path.name}: use either 'product' or 'products', not both")
+    if has_products:
+        raw_list = root.get("products")
+        if not isinstance(raw_list, list) or len(raw_list) == 0:
+            _die("products: expected a non-empty array")
+        items = [
+            _product_item_from_holder(
+                _require_mapping(raw, f"products[{i}]"), f"products[{i}]"
+            )
+            for i, raw in enumerate(raw_list)
+        ]
+    elif has_product:
+        product = dict(_require_mapping(root.get("product"), "product"))
+        extension_label, extension = _extension_from_holder(root, path.name)
+        mp = _missing_keys(product, REQUIRED_PRODUCT_KEYS)
+        if mp:
+            _die(f"product: missing keys: {mp}")
+        items = [(product, extension_label, extension)]
     else:
-        extension_label = "equity"
-        extension = dict(_require_mapping(root.get("equity"), "equity"))
+        _die(f"{path.name}: missing 'product' or 'products'")
 
-    mp = _missing_keys(product, REQUIRED_PRODUCT_KEYS)
-    if mp:
-        _die(f"product: missing keys: {mp}")
     mt = _missing_keys(trade, REQUIRED_TRADE_KEYS)
     if mt:
         _die(f"trade: missing keys: {mt}")
 
-    auto_notes = normalize_bundle(product, extension, extension_label, trade)
+    auto_notes = normalize_bundle(items, trade)
 
     legs_raw = trade["legs"]
     for i, leg in enumerate(legs_raw):
@@ -316,7 +371,7 @@ def load_bundle(
             _die(f"{label}: missing keys: {ml}")
         _normalize_leg_direction_db(str(lg["direction"]))
 
-    return product, extension_label, extension, trade, auto_notes
+    return items, trade, auto_notes
 
 
 def _optional_str(d: Mapping[str, Any], key: str) -> str | None:
@@ -432,12 +487,12 @@ def _parse_commission(lg: Mapping[str, Any], quantity: float, leg_id: str) -> fl
     return commission
 
 
-def insert_bundle(
-    conn: sqlite3.Connection,
+def _insert_one_product(
+    cur: sqlite3.Cursor,
     product: Mapping[str, Any],
     extension_label: str,
     extension: Mapping[str, Any],
-    trade: Mapping[str, Any],
+    trade_date: str,
 ) -> None:
     pid = product["product_id"]
     instrument_type = extension.get("instrument_type", "plain_vanilla_european_option")
@@ -475,13 +530,12 @@ def insert_bundle(
                 "(null allowed for equity_forward / equity_spot / index_spot only)"
             )
 
-    trade_date = _require_non_blank_str(trade, "trade_date", "trade")
     if is_spot:
         expiry_raw = product.get("expiry_date", None)
         expiry_date = None if _is_blank(expiry_raw) else str(expiry_raw).strip()
     else:
         expiry_date = _require_non_blank_str(product, "expiry_date", "product")
-        _require_expiry_on_or_after_trade_date(expiry_date, trade_date, pid)
+        _require_expiry_on_or_after_trade_date(expiry_date, trade_date, str(pid))
 
     asset_kind = str(product["asset_kind"]).strip().upper()
     if is_commodity:
@@ -503,7 +557,6 @@ def insert_bundle(
 
     settlement = _parse_settlement(product.get("settlement", None), "product")
 
-    cur = conn.cursor()
     cur.execute(
         """
         INSERT OR IGNORE INTO products (
@@ -579,6 +632,17 @@ def insert_bundle(
             (pid, option_type, strike, str(instrument_type), str(exercise_style), structured_params),
         )
 
+
+def insert_items(
+    conn: sqlite3.Connection,
+    items: list[tuple[Mapping[str, Any], str, Mapping[str, Any]]],
+    trade: Mapping[str, Any],
+) -> None:
+    trade_date = _require_non_blank_str(trade, "trade_date", "trade")
+    cur = conn.cursor()
+    for product, extension_label, extension in items:
+        _insert_one_product(cur, product, extension_label, extension, trade_date)
+
     tid = str(trade["trade_id"])
     booking_timestamp = _optional_str(trade, "booking_timestamp")
     updated_at = _optional_str(trade, "updated_at")
@@ -653,6 +717,16 @@ def insert_bundle(
         )
 
 
+def insert_bundle(
+    conn: sqlite3.Connection,
+    product: Mapping[str, Any],
+    extension_label: str,
+    extension: Mapping[str, Any],
+    trade: Mapping[str, Any],
+) -> None:
+    insert_items(conn, [(product, extension_label, extension)], trade)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import product + equity + trade + legs from JSON into SQLite.")
     parser.add_argument(
@@ -706,7 +780,7 @@ def main() -> None:
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         for path in paths:
-            product, extension_label, extension, trade, auto_notes = load_bundle(path)
+            items, trade, auto_notes = load_bundle(path)
             for note in auto_notes:
                 print(f"  {note}")
             tid = str(trade["trade_id"])
@@ -716,7 +790,7 @@ def main() -> None:
                 continue
             try:
                 conn.execute("BEGIN")
-                insert_bundle(conn, product, extension_label, extension, trade)
+                insert_items(conn, items, trade)
                 conn.commit()
             except sqlite3.IntegrityError as e:
                 conn.rollback()
@@ -727,9 +801,10 @@ def main() -> None:
                 conn.rollback()
                 _die(f"{path}: SQLite error: {e}")
             n_legs = len(trade["legs"])  # type: ignore[arg-type]
+            pids = ", ".join(str(product["product_id"]) for product, _, _ in items)
             print(
-                f"OK: {path.name} -> trade {trade['trade_id']!r} product {product['product_id']!r} "
-                f"({extension_label}, {n_legs} leg(s))"
+                f"OK: {path.name} -> trade {trade['trade_id']!r} product {pids} "
+                f"({n_legs} leg(s))"
             )
             imported += 1
     finally:

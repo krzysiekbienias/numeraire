@@ -16,16 +16,18 @@ LatestMode = Literal["latest_on_or_before", "exact"]
 
 _CALIBRATION_LIST_SQL = """
 SELECT calibration_id, scope_key, as_of, num_factors, calculated_at
-FROM historical_calibration
+FROM calibration_snapshot
 WHERE calibration_scope = 'book'
   AND scope_key = ?
+  AND model = ?
+  AND source = ?
 ORDER BY as_of DESC
 """
 
-_CALIBRATION_HEADER_SQL = """
-SELECT
+_HEADER_COLUMNS = """
     calibration_id,
-    calibration_method,
+    model,
+    source,
     calibration_scope,
     scope_key,
     as_of,
@@ -35,44 +37,43 @@ SELECT
     num_factors,
     num_return_observations,
     calculated_at
-FROM historical_calibration
+"""
+
+_CALIBRATION_HEADER_SQL = f"""
+SELECT
+{_HEADER_COLUMNS}
+FROM calibration_snapshot
 WHERE calibration_scope = 'book'
   AND scope_key = ?
+  AND model = ?
+  AND source = ?
   AND as_of <= ?
 ORDER BY as_of DESC
 LIMIT 1
 """
 
-_CALIBRATION_HEADER_EXACT_SQL = """
+_CALIBRATION_HEADER_EXACT_SQL = f"""
 SELECT
-    calibration_id,
-    calibration_method,
-    calibration_scope,
-    scope_key,
-    as_of,
-    history_start,
-    history_end,
-    lookback_calendar_days,
-    num_factors,
-    num_return_observations,
-    calculated_at
-FROM historical_calibration
+{_HEADER_COLUMNS}
+FROM calibration_snapshot
 WHERE calibration_scope = 'book'
   AND scope_key = ?
+  AND model = ?
+  AND source = ?
   AND as_of = ?
 LIMIT 1
 """
 
 _FACTORS_SQL = """
-SELECT factor_index, underlying_id, spot_as_of, volatility
-FROM historical_calibration_factor
+SELECT factor_index, factor_id, factor_level, volatility
+FROM calibration_factor
 WHERE calibration_id = ?
 ORDER BY factor_index
 """
 
 _CORRELATION_SQL = """
 SELECT factor_i, factor_j, rho
-FROM historical_calibration_correlation
+FROM calibration_correlation
 WHERE calibration_id = ?
 ORDER BY factor_i, factor_j
 """
@@ -81,9 +82,11 @@ ORDER BY factor_i, factor_j
 def list_calibration_dates(
     scope_key: str = "BOOK_1",
     *,
+    model: str = "gbm",
+    source: str = "historical",
     db_path: str | None = None,
 ) -> list[str]:
-    df = read_sql(_CALIBRATION_LIST_SQL, (scope_key,), db_path=db_path)
+    df = read_sql(_CALIBRATION_LIST_SQL, (scope_key, model, source), db_path=db_path)
     return df["as_of"].astype(str).tolist()
 
 
@@ -93,6 +96,8 @@ def load_historical_calibration(
     *,
     valuation_as_of: str | None = None,
     mode: LatestMode = "latest_on_or_before",
+    model: str = "gbm",
+    source: str = "historical",
     db_path: str | None = None,
 ) -> tuple[pd.Series, pd.DataFrame, pd.DataFrame]:
     """
@@ -105,22 +110,30 @@ def load_historical_calibration(
     valuation_as_of
         When set with ``mode='latest_on_or_before'``, picks the newest calibration with
         ``calibration.as_of <= valuation_as_of`` (same rule as C++ simulate).
+    model, source
+        Pick one snapshot out of the (model, source) grid stored for the same scope and
+        date, e.g. ``('gbm', 'historical')`` or ``('gabillon_2f', 'implied')``.
     """
     if mode == "exact":
         if not as_of:
             raise ValueError("as_of is required when mode='exact'.")
-        header_df = read_sql(_CALIBRATION_HEADER_EXACT_SQL, (scope_key, as_of), db_path=db_path)
+        header_df = read_sql(
+            _CALIBRATION_HEADER_EXACT_SQL, (scope_key, model, source, as_of), db_path=db_path
+        )
     else:
         ref = valuation_as_of or as_of
         if not ref:
             raise ValueError("Provide valuation_as_of or as_of for latest_on_or_before lookup.")
-        header_df = read_sql(_CALIBRATION_HEADER_SQL, (scope_key, ref), db_path=db_path)
+        header_df = read_sql(
+            _CALIBRATION_HEADER_SQL, (scope_key, model, source, ref), db_path=db_path
+        )
 
     if header_df.empty:
         path = resolve_db_path(db_path)
         raise ValueError(
-            f"No historical_calibration for scope_key={scope_key!r} "
-            f"(as_of={as_of!r}, valuation_as_of={valuation_as_of!r}, mode={mode!r}) in {path}"
+            f"No calibration_snapshot for scope_key={scope_key!r} model={model!r} "
+            f"source={source!r} (as_of={as_of!r}, valuation_as_of={valuation_as_of!r}, "
+            f"mode={mode!r}) in {path}"
         )
 
     header = header_df.iloc[0]
@@ -135,8 +148,8 @@ def correlation_matrix_from_sparse(
     factors: pd.DataFrame,
     correlations: pd.DataFrame,
 ) -> tuple[np.ndarray, list[str]]:
-    """Reconstruct symmetric correlation matrix with underlying labels."""
-    labels = factors.sort_values("factor_index")["underlying_id"].astype(str).tolist()
+    """Reconstruct symmetric correlation matrix with factor labels."""
+    labels = factors.sort_values("factor_index")["factor_id"].astype(str).tolist()
     n = len(labels)
     if n == 0:
         raise ValueError("factors must not be empty.")
@@ -144,7 +157,7 @@ def correlation_matrix_from_sparse(
     matrix = np.eye(n, dtype=float)
     index_by_label = {label: idx for idx, label in enumerate(labels)}
     factor_index_to_label = {
-        int(row.factor_index): str(row.underlying_id) for row in factors.itertuples(index=False)
+        int(row.factor_index): str(row.factor_id) for row in factors.itertuples(index=False)
     }
 
     for row in correlations.itertuples(index=False):
@@ -176,7 +189,7 @@ def plot_correlation_heatmap(
     annotate: bool = True,
     figsize: tuple[float, float] = (8, 6.5),
 ) -> Figure:
-    """Symmetric correlation heatmap with underlying ids on both axes."""
+    """Symmetric correlation heatmap with factor ids on both axes."""
     n = len(labels)
     if matrix.shape != (n, n):
         raise ValueError("matrix shape must match labels length.")
@@ -188,8 +201,8 @@ def plot_correlation_heatmap(
     ax.set_yticks(range(n))
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_yticklabels(labels)
-    ax.set_xlabel("Underlying")
-    ax.set_ylabel("Underlying")
+    ax.set_xlabel("Factor")
+    ax.set_ylabel("Factor")
 
     if annotate:
         for i in range(n):
@@ -222,11 +235,11 @@ def plot_factor_volatility_bars(
 
     df = factors.sort_values("factor_index").copy()
     fig, ax = plt.subplots(figsize=figsize)
-    bars = ax.bar(df["underlying_id"], df["volatility"], color="steelblue", alpha=0.85)
+    bars = ax.bar(df["factor_id"], df["volatility"], color="steelblue", alpha=0.85)
     ax.bar_label(bars, labels=[f"{v:.1%}" for v in df["volatility"]], fontsize=8)
 
     ax.set_ylabel("Annualized volatility")
-    ax.set_xlabel("Underlying")
+    ax.set_xlabel("Factor")
     ax.set_title(title or "Historical GBM factor volatilities")
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
@@ -245,10 +258,10 @@ def plot_calibration_overview(
     fig, axes = plt.subplots(1, 2, figsize=figsize)
 
     df = factors.sort_values("factor_index")
-    bars = axes[0].bar(df["underlying_id"], df["volatility"], color="steelblue", alpha=0.85)
+    bars = axes[0].bar(df["factor_id"], df["volatility"], color="steelblue", alpha=0.85)
     axes[0].bar_label(bars, labels=[f"{v:.1%}" for v in df["volatility"]], fontsize=8)
     axes[0].set_ylabel("Annualized volatility")
-    axes[0].set_xlabel("Underlying")
+    axes[0].set_xlabel("Factor")
     axes[0].set_title("Factor volatilities")
     axes[0].grid(True, axis="y", alpha=0.3)
 

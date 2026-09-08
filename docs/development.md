@@ -159,7 +159,7 @@ Two cron jobs (booking is **manual** in `dev_main`, not cron):
 | Script | Role |
 |--------|------|
 | [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) | **All Polygon ingest** — `market_data_prep_scope` + equity catch-up for book underlyings not in scope |
-| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **Risk engine** — FO MTM for `LIVE` trades, then CCR exposure via [`daily_book_exposure.sh`](../scripts/daily_book_exposure.sh) (`--simulate --price-paths --persist-exposure` → `trade_leg_exposure_eod`: EE, PFE 95%, PFE 97.5%) |
+| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **Risk engine** — FO MTM for `LIVE` trades, then CCR exposure via [`daily_book_exposure.sh`](../scripts/daily_book_exposure.sh) (`--simulate --price-paths --persist-exposure` → `trade_leg_exposure_eod`: EE, PFE 95%, PFE 97.5%). Persist is refused unless every LIVE leg already has official MTM on that `as_of`. |
 
 [`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) is **deprecated** (wrapper: prep → book MTM → exposure).
 

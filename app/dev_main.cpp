@@ -27,6 +27,8 @@
 #include <numeraire/database/vol_surface_eod_read.hpp>
 #include <numeraire/database/discount_curve_eod_builder.hpp>
 #include <numeraire/database/vol_surface_eod_builder.hpp>
+#include <numeraire/simulation/curve_lab.hpp>
+#include <numeraire/simulation/gabillon_calibration_builder.hpp>
 #include <numeraire/simulation/historical_calibration_eod_builder.hpp>
 #include <numeraire/simulation/historical_gbm_simulate.hpp>
 #include <numeraire/enums/model_type.hpp>
@@ -85,6 +87,10 @@ using numeraire::database::TryRunOptionUniverseEodBuild;
 using numeraire::database::TryRunVolSurfaceEodBuild;
 using numeraire::simulation::PrintHistoricalCalibrationEodBuildUsageLines;
 using numeraire::simulation::PrintHistoricalGbmSimulateUsageLines;
+using numeraire::simulation::PrintCurveLabUsageLines;
+using numeraire::simulation::PrintGabillonCalibrationUsageLines;
+using numeraire::simulation::TryRunCurveLab;
+using numeraire::simulation::TryRunGabillonCalibration;
 using numeraire::simulation::TryRunHistoricalCalibrationEodBuild;
 using numeraire::simulation::TryRunHistoricalGbmSimulate;
 using numeraire::market_data::MarketSnapshot;
@@ -557,7 +563,9 @@ void PrintUsage() {
     PrintDiscountCurveEodBuildUsageLines();
     PrintVolSurfaceEodBuildUsageLines();
     PrintHistoricalCalibrationEodBuildUsageLines();
+    PrintGabillonCalibrationUsageLines();
     PrintHistoricalGbmSimulateUsageLines();
+    PrintCurveLabUsageLines();
 }
 
 [[nodiscard]] std::vector<std::string> LoadTradeIdsFromJsonFile(const std::filesystem::path& path) {
@@ -1170,9 +1178,17 @@ int main(const int argc, char** argv) {
         if (historical_calibration_rc >= 0) {
             return historical_calibration_rc;
         }
+        const int gabillon_calibration_rc = TryRunGabillonCalibration(argc, argv, cfg);
+        if (gabillon_calibration_rc >= 0) {
+            return gabillon_calibration_rc;
+        }
         const int simulate_rc = TryRunHistoricalGbmSimulate(argc, argv, cfg);
         if (simulate_rc >= 0) {
             return simulate_rc;
+        }
+        const int curve_lab_rc = TryRunCurveLab(argc, argv, cfg);
+        if (curve_lab_rc >= 0) {
+            return curve_lab_rc;
         }
 
         const std::filesystem::path db_path = ResolveDatabasePath(cfg);

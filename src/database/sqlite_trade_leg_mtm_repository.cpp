@@ -8,6 +8,7 @@
 #include <numeraire/utils/exception.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace numeraire::database {
 
@@ -121,11 +122,24 @@ constexpr const char* kLookupPriorOfficialMarkSql =
         "WHERE leg_id = ? AND pricing_engine = ? AND as_of < ? "
         "ORDER BY as_of DESC LIMIT 1";
 
+constexpr const char* kHasOfficialMarkSql =
+        "SELECT 1 FROM trade_leg_mtm_eod WHERE leg_id = ? AND as_of = ? AND is_official = 1 LIMIT 1";
+
+constexpr const char* kLiveLegsMissingOfficialMtmSql =
+        "SELECT l.leg_id FROM trades t "
+        "JOIN trade_legs l ON l.trade_id = t.trade_id "
+        "LEFT JOIN trade_leg_mtm_eod m "
+        "  ON m.leg_id = l.leg_id AND m.as_of = ? AND m.is_official = 1 "
+        "WHERE t.portfolio_id = ? AND upper(trim(t.status)) = 'LIVE' AND m.leg_id IS NULL "
+        "ORDER BY l.leg_id";
+
 struct SqliteTradeLegMtmRepository::Impl {
     std::unique_ptr<SQLite::Database> db;
     std::unique_ptr<SQLite::Statement> archive_insert;
     std::unique_ptr<SQLite::Statement> upsert;
     std::unique_ptr<SQLite::Statement> lookup_prior_official;
+    std::unique_ptr<SQLite::Statement> has_official_mark;
+    std::unique_ptr<SQLite::Statement> live_legs_missing_official;
 };
 
 SqliteTradeLegMtmRepository::SqliteTradeLegMtmRepository(const std::string& database_file_path)
@@ -138,6 +152,9 @@ SqliteTradeLegMtmRepository::SqliteTradeLegMtmRepository(const std::string& data
         impl_->upsert = std::make_unique<SQLite::Statement>(*impl_->db, kUpsertSql);
         impl_->lookup_prior_official =
                 std::make_unique<SQLite::Statement>(*impl_->db, kLookupPriorOfficialMarkSql);
+        impl_->has_official_mark = std::make_unique<SQLite::Statement>(*impl_->db, kHasOfficialMarkSql);
+        impl_->live_legs_missing_official =
+                std::make_unique<SQLite::Statement>(*impl_->db, kLiveLegsMissingOfficialMtmSql);
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"SqliteTradeLegMtmRepository: "} + e.what());
     }
@@ -244,6 +261,51 @@ std::optional<PriorOfficialMtmMark> SqliteTradeLegMtmRepository::LookupPriorOffi
         throw;
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"SqliteTradeLegMtmRepository::LookupPriorOfficialMark: "} + e.what());
+    }
+}
+
+bool SqliteTradeLegMtmRepository::HasOfficialMark(const std::string_view leg_id, const std::string_view as_of) const {
+    if (leg_id.empty() || as_of.empty()) {
+        throw ValidationError("HasOfficialMark: leg_id and as_of must be non-empty");
+    }
+
+    try {
+        SQLite::Statement& st = *impl_->has_official_mark;
+        st.reset();
+        st.clearBindings();
+        st.bind(1, std::string(leg_id));
+        st.bind(2, std::string(as_of));
+        return st.executeStep();
+    } catch (ValidationError const&) {
+        throw;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(std::string{"SqliteTradeLegMtmRepository::HasOfficialMark: "} + e.what());
+    }
+}
+
+std::vector<std::string> SqliteTradeLegMtmRepository::LiveLegsMissingOfficialMtm(
+        const std::string_view portfolio_id, const std::string_view as_of) const {
+    if (portfolio_id.empty() || as_of.empty()) {
+        throw ValidationError("LiveLegsMissingOfficialMtm: portfolio_id and as_of must be non-empty");
+    }
+
+    try {
+        SQLite::Statement& st = *impl_->live_legs_missing_official;
+        st.reset();
+        st.clearBindings();
+        st.bind(1, std::string(as_of));
+        st.bind(2, std::string(portfolio_id));
+
+        std::vector<std::string> missing;
+        while (st.executeStep()) {
+            missing.emplace_back(st.getColumn(0).getText());
+        }
+        return missing;
+    } catch (ValidationError const&) {
+        throw;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(
+                std::string{"SqliteTradeLegMtmRepository::LiveLegsMissingOfficialMtm: "} + e.what());
     }
 }
 

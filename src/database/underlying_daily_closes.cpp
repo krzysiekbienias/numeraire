@@ -135,4 +135,83 @@ std::vector<std::string> ListDistinctBookUnderlyingIds(const std::string& databa
     }
 }
 
+std::vector<BookUnderlying> ListBookUnderlyings(const std::string& database_file_path,
+                                                const std::optional<std::string_view> trade_status,
+                                                const std::optional<std::string_view> portfolio_id) {
+    try {
+        SQLite::Database db(database_file_path, SQLite::OPEN_READONLY);
+        std::string sql =
+                "SELECT DISTINCT p.underlying_id, p.asset_kind FROM trade_legs tl "
+                "JOIN products p ON tl.product_id = p.product_id "
+                "JOIN trades t ON tl.trade_id = t.trade_id ";
+        bool has_where = false;
+        if (trade_status.has_value()) {
+            sql += "WHERE t.status = ? ";
+            has_where = true;
+        }
+        if (portfolio_id.has_value()) {
+            sql += has_where ? "AND t.portfolio_id = ? " : "WHERE t.portfolio_id = ? ";
+        }
+        sql += "ORDER BY p.asset_kind ASC, p.underlying_id ASC";
+
+        SQLite::Statement st(db, sql);
+        int bind_idx = 1;
+        if (trade_status.has_value()) {
+            st.bind(bind_idx++, std::string(*trade_status));
+        }
+        if (portfolio_id.has_value()) {
+            st.bind(bind_idx, std::string(*portfolio_id));
+        }
+
+        std::vector<BookUnderlying> out;
+        while (st.executeStep()) {
+            out.push_back(BookUnderlying{
+                    .underlying_id = st.getColumn(0).getString(),
+                    .asset_kind = st.getColumn(1).getString(),
+            });
+        }
+        return out;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(std::string{"list book underlyings with kind: "} + e.what());
+    }
+}
+
+std::vector<BookFuturesContract> ListBookFuturesContracts(const std::string& database_file_path,
+                                                          const std::string_view portfolio_id,
+                                                          const std::optional<std::string_view> trade_status) {
+    try {
+        SQLite::Database db(database_file_path, SQLite::OPEN_READONLY);
+        std::string sql =
+                "SELECT DISTINCT pc.contract_ticker, pc.product_code, "
+                "       COALESCE(pc.settlement_date, p.expiry_date) "
+                "FROM trade_legs tl "
+                "JOIN trades t ON t.trade_id = tl.trade_id "
+                "JOIN products p ON p.product_id = tl.product_id "
+                "JOIN products_commodity pc ON pc.product_id = p.product_id "
+                "WHERE t.portfolio_id = ? ";
+        if (trade_status.has_value()) {
+            sql += "AND t.status = ? ";
+        }
+        sql += "ORDER BY pc.contract_ticker ASC";
+
+        SQLite::Statement st(db, sql);
+        st.bind(1, std::string(portfolio_id));
+        if (trade_status.has_value()) {
+            st.bind(2, std::string(*trade_status));
+        }
+
+        std::vector<BookFuturesContract> out;
+        while (st.executeStep()) {
+            out.push_back(BookFuturesContract{
+                    .contract_ticker = st.getColumn(0).getString(),
+                    .product_code = st.getColumn(1).getString(),
+                    .settlement_date = st.getColumn(2).getString(),
+            });
+        }
+        return out;
+    } catch (SQLite::Exception const& e) {
+        throw PersistenceError(std::string{"list book futures contracts: "} + e.what());
+    }
+}
+
 }  // namespace numeraire::database

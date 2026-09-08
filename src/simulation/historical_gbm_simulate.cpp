@@ -5,14 +5,17 @@
 #include <cstring>
 #include <ctime>
 #include <filesystem>
-#include <numeraire/database/historical_calibration_eod_read.hpp>
+#include <numeraire/database/calibration_snapshot_read.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_trade_leg_exposure_repository.hpp>
+#include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/exposure_grid_config.hpp>
 #include <numeraire/simulation/exposure_metrics.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
+#include <numeraire/simulation/gabillon_evolution.hpp>
+#include <numeraire/simulation/gabillon_spec.hpp>
 #include <numeraire/simulation/gbm_evolution.hpp>
 #include <numeraire/simulation/historical_calibration_loader.hpp>
 #include <numeraire/simulation/historical_gbm_simulate.hpp>
@@ -31,13 +34,15 @@
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/utils/logger.hpp>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace numeraire::simulation {
 namespace {
 
-using numeraire::database::TryLoadLatestHistoricalCalibrationEod;
+using numeraire::database::TryLoadLatestCalibrationSnapshot;
 using numeraire::utils::Logger;
 using numeraire::utils::ResolveDatabasePath;
 
@@ -137,17 +142,22 @@ using numeraire::utils::ResolveDatabasePath;
 
 void PrintHistoricalGbmSimulateUsageLines() {
     Logger::NumError(
-            "  dev_main --simulate --as-of YYYY-MM-DD --book PORTFOLIO_ID [--paths N] [--seed N]\n"
-            "    Multifactor GBM paths from latest `historical_calibration_*` snapshot with "
+            "  dev_main --simulate --as-of YYYY-MM-DD --book PORTFOLIO_ID [--model gbm|gabillon] "
+            "[--paths N] [--seed N]\n"
+            "    Multifactor GBM paths from latest `calibration_snapshot` (model=gbm, source=historical) with "
             "`as_of <= valuation_date` for the portfolio (`scope_key = portfolio_id`).\n"
-            "    Env: NUMERAIRE_SIM_BOOK / NUMERAIRE_CALIB_BOOK, NUMERAIRE_DEV_AS_OF, "
+            "    `--model gabillon` instead reads a `gabillon_2f`/`fit` snapshot and evolves each dated "
+            "futures contract off its own settle as a driftless martingale, so today's curve — seasonal "
+            "humps included — is reproduced exactly and only volatility decays with maturity.\n"
+            "    Env: NUMERAIRE_SIM_MODEL, NUMERAIRE_SIM_BOOK / NUMERAIRE_CALIB_BOOK, NUMERAIRE_DEV_AS_OF, "
             "NUMERAIRE_MC_PATHS, NUMERAIRE_MC_SEED, NUMERAIRE_DEV_RATE, NUMERAIRE_DEV_DIV_YIELD, "
             "NUMERAIRE_DEV_VOL, NUMERAIRE_DEV_DISCOUNT_CURVE_ID, "
             "NUMERAIRE_DUMP_SCENARIOS, NUMERAIRE_DUMP_SCENARIOS_MAX_PATHS, "
             "NUMERAIRE_DUMP_LEG_EXPOSURE, NUMERAIRE_DUMP_LEG_EXPOSURE_MAX_PATHS, "
             "NUMERAIRE_PERSIST_EXPOSURE.\n"
             "    Optional: --price-paths reprices LIVE legs (IV+rate from DB @ as_of); "
-            "--persist-exposure writes EE/PFE to trade_leg_exposure_eod.");
+            "--persist-exposure writes EE/PFE to trade_leg_exposure_eod only when every LIVE "
+            "leg in the book already has an official FO MTM row on that as_of.");
 }
 
 int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::utils::Config& cfg) {
@@ -156,6 +166,7 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
     bool persist_exposure = EnvFlagEnabled("NUMERAIRE_PERSIST_EXPOSURE");
     std::string as_of;
     std::string book;
+    std::string model = EnvNonEmptyString("NUMERAIRE_SIM_MODEL").value_or("gbm");
     int num_paths = EnvInt("NUMERAIRE_MC_PATHS", DefaultPathsFromConfig(cfg));
     int seed = EnvInt("NUMERAIRE_MC_SEED", DefaultSeedFromConfig(cfg));
 
@@ -186,6 +197,12 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
                 return 1;
             }
             num_paths = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--model") == 0) {
+            if (i + 1 >= argc) {
+                Logger::NumError("--model requires gbm or gabillon.");
+                return 1;
+            }
+            model = argv[++i];
         } else if (std::strcmp(argv[i], "--price-paths") == 0) {
             price_paths = true;
         } else if (std::strcmp(argv[i], "--persist-exposure") == 0) {
@@ -228,6 +245,11 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
         Logger::NumError("--paths must be > 0.");
         return 1;
     }
+    if (model != "gbm" && model != "gabillon") {
+        Logger::NumError("--model must be gbm or gabillon (got \"{}\").", model);
+        return 1;
+    }
+    const bool use_gabillon = model == "gabillon";
 
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     database::BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
@@ -239,67 +261,128 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
                         as_of);
     }
 
+    if (persist_exposure && price_paths) {
+        try {
+            const database::SqliteTradeLegMtmRepository mtm_repo(db_path.string());
+            const std::vector<std::string> missing = mtm_repo.LiveLegsMissingOfficialMtm(book, as_of);
+            if (!missing.empty()) {
+                std::ostringstream oss;
+                for (std::size_t i = 0; i < missing.size(); ++i) {
+                    if (i > 0) {
+                        oss << ',';
+                    }
+                    oss << missing[i];
+                }
+                Logger::NumError(
+                        "persist-exposure requires official FO MTM for every LIVE leg in book={} as_of={}. "
+                        "Missing mark(s): {}. Run --as-of MTM first (holiday / missing settle → no exposure).",
+                        book, as_of, oss.str());
+                return 1;
+            }
+        } catch (const std::exception& e) {
+            Logger::NumError("persist-exposure MTM gate failed: {}", e.what());
+            return 1;
+        }
+    }
+
     const double risk_free_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
     const double dividend_yield = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
     const double flat_vol = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
 
-    const std::optional<database::HistoricalCalibrationEodRead> calibration_read =
-            TryLoadLatestHistoricalCalibrationEod(db_path.string(), book, as_of);
-    if (!calibration_read.has_value()) {
-        Logger::NumError(
-                "simulate: no historical_calibration for scope_key={} with as_of <= {}. "
-                "Run --calibrate-historical-gbm --book {} --as-of <month_start> first.",
-                book,
-                as_of,
-                book);
-        return 1;
-    }
-
-    const std::optional<MultiFactorGbmSpec> spec =
-            TryLoadMultiFactorGbmSpecFromDatabase(db_path.string(), book, as_of, risk_free_rate, dividend_yield);
-    if (!spec.has_value()) {
-        Logger::NumError("simulate: failed to build MultiFactorGbmSpec for scope_key={}.", book);
-        return 1;
-    }
-
     const ExposureGridConfig grid_cfg = LoadExposureGridConfig(ResolveExposureGridConfigPath(cfg));
     const schedule::Date valuation_date = schedule::ParseIsoDate(as_of);
     const ExposureTimeGrid time_grid = BuildExposureTimeGrid(grid_cfg, valuation_date, std::nullopt);
-
-    ScenarioBuffer buffer(spec->NumFactors(), time_grid.NumSteps(), static_cast<std::size_t>(num_paths));
-    MersenneTwisterEngine engine(static_cast<std::uint64_t>(seed));
-    EvolveMultiFactorGbm(buffer, time_grid, *spec, engine);
-
-    const bool dumped = DumpMultiFactorScenarioPathsIfEnvSet(
-            buffer, time_grid, std::span<const std::string>(calibration_read->factor_ids));
     const std::size_t terminal_step = time_grid.NumSteps() - 1;
 
+    // Factor identity differs by model: GBM carries constant-maturity pillars, Gabillon
+    // carries the dated contracts themselves. Everything downstream keys off these names.
+    std::vector<std::string> factor_ids;
+    std::vector<double> initial_levels;
+    std::int64_t calibration_id = 0;
+    std::string calibration_as_of;
+    std::optional<GabillonSimulationSpec> gabillon_spec;
+    std::optional<MultiFactorGbmSpec> gbm_spec;
+
+    if (use_gabillon) {
+        gabillon_spec = TryLoadGabillonSpecFromDatabase(db_path.string(), book, as_of);
+        if (!gabillon_spec.has_value()) {
+            Logger::NumError(
+                    "simulate: no gabillon_2f/fit calibration snapshot for scope_key={} with as_of <= {}. "
+                    "Run --calibrate-gabillon --book {} --as-of <session> first.",
+                    book, as_of, book);
+            return 1;
+        }
+        for (const GabillonContract& contract : gabillon_spec->contracts) {
+            factor_ids.push_back(contract.contract_ticker);
+            initial_levels.push_back(contract.anchor_price);
+        }
+        calibration_id = gabillon_spec->calibration_id;
+        calibration_as_of = gabillon_spec->calibration_as_of;
+    } else {
+        const std::optional<database::CalibrationSnapshotRead> calibration_read =
+                TryLoadLatestCalibrationSnapshot(db_path.string(), book, as_of);
+        if (!calibration_read.has_value()) {
+            Logger::NumError(
+                    "simulate: no gbm/historical calibration snapshot for scope_key={} with as_of <= {}. "
+                    "Run --calibrate-historical-gbm --book {} --as-of <month_start> first.",
+                    book,
+                    as_of,
+                    book);
+            return 1;
+        }
+        gbm_spec = TryLoadMultiFactorGbmSpecFromDatabase(db_path.string(), book, as_of, risk_free_rate,
+                                                         dividend_yield);
+        if (!gbm_spec.has_value()) {
+            Logger::NumError("simulate: failed to build MultiFactorGbmSpec for scope_key={}.", book);
+            return 1;
+        }
+        factor_ids = calibration_read->factor_ids;
+        initial_levels = gbm_spec->spots;
+        calibration_id = calibration_read->calibration_id;
+        calibration_as_of = calibration_read->as_of;
+    }
+
+    const std::size_t num_factors = factor_ids.size();
+    ScenarioBuffer buffer(num_factors, time_grid.NumSteps(), static_cast<std::size_t>(num_paths));
+    MersenneTwisterEngine engine(static_cast<std::uint64_t>(seed));
+    if (use_gabillon) {
+        EvolveGabillonCurves(buffer, time_grid, *gabillon_spec, engine);
+    } else {
+        EvolveMultiFactorGbm(buffer, time_grid, *gbm_spec, engine);
+    }
+
+    const bool dumped =
+            DumpMultiFactorScenarioPathsIfEnvSet(buffer, time_grid, std::span<const std::string>(factor_ids));
+
     Logger::NumInfo(
-            "simulate finished: valuation_as_of={} calibration_as_of={} calibration_id={} "
+            "simulate finished: model={} valuation_as_of={} calibration_as_of={} calibration_id={} "
             "scope_key={} factors={} paths={} seed={} grid_steps={} rate={} div_yield={}.",
+            use_gabillon ? "gabillon_2f" : "gbm",
             as_of,
-            calibration_read->as_of,
-            calibration_read->calibration_id,
+            calibration_as_of,
+            calibration_id,
             book,
-            spec->NumFactors(),
+            num_factors,
             num_paths,
             seed,
             time_grid.NumSteps(),
             risk_free_rate,
             dividend_yield);
 
-    for (std::size_t factor = 0; factor < spec->NumFactors(); ++factor) {
+    for (std::size_t factor = 0; factor < num_factors; ++factor) {
         double sum = 0.0;
         for (std::size_t mc_path = 0; mc_path < buffer.NumPaths(); ++mc_path) {
             sum += buffer.At(factor, terminal_step, mc_path);
         }
         const double mean_terminal = sum / static_cast<double>(buffer.NumPaths());
-        Logger::NumInfo("  factor[{}] {} spot0={:.4f} mean_terminal={:.4f} vol={:.4f}",
+        // Futures are martingales, so for Gabillon the mean terminal should sit on the
+        // anchor; drifting off it means the Ito correction and the shocks disagree.
+        Logger::NumInfo("  factor[{}] {} level0={:.4f} mean_terminal={:.4f} drift={:+.3f}%",
                         factor,
-                        calibration_read->factor_ids[factor],
-                        spec->spots[factor],
+                        factor_ids[factor],
+                        initial_levels[factor],
                         mean_terminal,
-                        spec->volatilities[factor]);
+                        100.0 * ((mean_terminal / initial_levels[factor]) - 1.0));
     }
 
     if (dumped) {
@@ -310,7 +393,7 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
 
     if (price_paths) {
         const std::unordered_map<std::string, std::size_t> factor_by_underlying =
-                BuildFactorIndexByUnderlying(calibration_read->factor_ids);
+                BuildFactorIndexByUnderlying(factor_ids);
         const std::vector<PathPricingLegEntry> legs =
                 LoadPathPricingLegsForPortfolio(db_path.string(), book, factor_by_underlying);
 
@@ -319,20 +402,32 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
                 .dividend_yield = dividend_yield,
                 .flat_implied_volatility = flat_vol,
         };
-        const PathPricingMarketConfig market_config = LoadPathPricingMarketConfig(
-                db_path.string(),
-                std::span<const std::string>(calibration_read->factor_ids),
-                as_of,
-                DefaultDiscountCurveId(),
-                flat_fallbacks);
+        const PathPricingMarketConfig market_config =
+                LoadPathPricingMarketConfig(db_path.string(), std::span<const std::string>(factor_ids), as_of,
+                                            DefaultDiscountCurveId(), flat_fallbacks);
+
+        // Under Gabillon the dated contracts are factors in their own right, so there is
+        // nothing to interpolate. A pillar calibration needs each contract placed on the
+        // strip at every grid node. The strip is the one the book was calibrated to:
+        // occupancy is the latest quoted session on or before that snapshot, so later
+        // valuation days reuse it until the book is recalibrated. The factor count is a
+        // safe upper bound on pillars per curve; the resolver keeps only those actually
+        // in the calibrated factor set.
+        std::optional<CommodityCurveResolver> commodity_curves;
+        if (!use_gabillon) {
+            commodity_curves = BuildCommodityCurveResolver(db_path.string(), CollectCommodityContracts(legs),
+                                                           factor_by_underlying, time_grid,
+                                                           schedule::ParseIsoDate(calibration_as_of),
+                                                           static_cast<int>(factor_ids.size()));
+        }
 
         auto pricer = pricers::PricerFactory::Make(numeraire::PricingEngineType::kAnalytic,
                                                    numeraire::ModelType::kBlackScholes);
         LegPathPvBuffer leg_pv(legs.size(), time_grid.NumSteps(), buffer.NumPaths());
         std::vector<std::string> leg_ids;
-        PricePortfolioAlongPaths(buffer, time_grid,
-                                 std::span<const std::string>(calibration_read->factor_ids), legs,
-                                 market_config, *pricer, leg_pv, leg_ids);
+        PricePortfolioAlongPaths(buffer, time_grid, std::span<const std::string>(factor_ids), legs,
+                                 market_config, *pricer, leg_pv, leg_ids,
+                                 commodity_curves.has_value() ? &*commodity_curves : nullptr);
 
         Logger::NumInfo("simulate: path pricing finished legs={} steps={} paths={} quotes={}.",
                         leg_ids.size(),
@@ -390,7 +485,7 @@ int TryRunHistoricalGbmSimulate(const int argc, char** argv, const numeraire::ut
                 row.pfe_975 = metric.pfe_975;
                 row.num_paths = num_paths;
                 row.mc_seed = seed;
-                row.calibration_id = calibration_read->calibration_id;
+                row.calibration_id = calibration_id;
                 row.scope_key = book;
                 row.batch_run_id = batch_run_id;
                 row.pricing_engine = kPathExposurePricingEngine;

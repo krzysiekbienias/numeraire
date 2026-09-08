@@ -295,3 +295,291 @@ class NewTradeForm(forms.Form):
                 + '. Adjust the inputs or book against the existing product terms.',
             )
         return cleaned
+
+
+def _resolve_listed_tenor(
+    form: forms.Form,
+    *,
+    underlying_id: str | None,
+    ticker: str | None,
+    field: str,
+) -> dict | None:
+    """Map underlier + ticker to futures_contract terms. Errors land on `field`."""
+    if not underlying_id or not ticker:
+        return None
+    product_code = commodity_product_code(underlying_id)
+    contract = lookup_futures_contract(product_code, ticker)
+    if contract is None:
+        form.add_error(
+            field,
+            f'No futures_contract row for {product_code}/{ticker} on the latest listing day.',
+        )
+        return None
+    settle_raw = (contract.settlement_date or '').strip()
+    if not settle_raw:
+        form.add_error(
+            field,
+            f'{ticker} has no settlement_date in futures_contract — cannot set expiry.',
+        )
+        return None
+    try:
+        expiry_date = date_cls.fromisoformat(settle_raw)
+    except ValueError:
+        form.add_error(
+            field,
+            f'{ticker} settlement_date {settle_raw!r} is not YYYY-MM-DD.',
+        )
+        return None
+    return {
+        'product_code': product_code,
+        'underlying_id': product_code,
+        'expiry_date': expiry_date,
+        'contract_ticker': contract.ticker,
+        'tick_size': contract.trade_tick_size,
+    }
+
+
+class CalendarTradeForm(forms.Form):
+    """Two listed outrights, one trade: near vs far on the same curve."""
+
+    underlying_id = forms.ChoiceField(
+        label='Underlier',
+        widget=forms.HiddenInput(),
+    )
+    near_ticker = forms.ChoiceField(
+        label='Near tenor',
+        widget=forms.Select(attrs=_SELECT),
+        help_text='Shorter-dated listed contract (front / nearer expiry).',
+    )
+    far_ticker = forms.ChoiceField(
+        label='Far tenor',
+        widget=forms.Select(attrs=_SELECT),
+        help_text='Deferred listed contract on the same underlier.',
+    )
+    settlement = forms.ChoiceField(
+        label='Settlement',
+        choices=(('CASH', 'CASH'), ('PHYSICAL', 'PHYSICAL')),
+        widget=forms.Select(attrs=_SELECT),
+    )
+    contract_size = forms.FloatField(
+        label='Contract size',
+        widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
+    )
+    currency = forms.CharField(
+        label='Currency',
+        max_length=8,
+        initial='USD',
+        widget=forms.TextInput(attrs=_TEXT),
+    )
+    trade_date = forms.DateField(
+        label='Trade date',
+        widget=forms.DateInput(attrs=_DATE, format='%Y-%m-%d'),
+    )
+    portfolio_id = forms.CharField(
+        label='Portfolio',
+        max_length=64,
+        widget=forms.TextInput(attrs={**_TEXT, 'list': 'nj-portfolio-options'}),
+    )
+    strategy_type = forms.CharField(
+        label='Strategy',
+        max_length=64,
+        widget=forms.TextInput(attrs={**_TEXT, 'list': 'nj-strategy-options'}),
+    )
+    direction = forms.ChoiceField(
+        label='Calendar',
+        choices=(
+            ('long', 'long (short near / long far)'),
+            ('short', 'short (long near / short far)'),
+        ),
+        widget=forms.Select(attrs=_SELECT),
+        help_text='Long calendar sells the nearer contract and buys the deferred.',
+    )
+    quantity = forms.FloatField(
+        label='Quantity',
+        widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
+        help_text='Contracts per leg (1:1). Same size on near and far.',
+    )
+    commission_per_contract = forms.FloatField(
+        label='Commission / contract',
+        required=False,
+        initial=0.0,
+        widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
+        help_text='Charged on each leg; total = rate × quantity × 2.',
+    )
+
+    def __init__(
+        self,
+        spec: BookableInstrument,
+        *args,
+        underlier_choices: list[tuple[str, str]] | None = None,
+        contract_choices: list[tuple[str, str]] | None = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.spec = spec
+        self.product_id: str | None = None
+        self.fields['underlying_id'].choices = underlier_choices or []
+        choices = list(contract_choices or [])
+        if choices:
+            blank = [('', f'— {len(choices)} tenors with EOD —')]
+            help_text = (
+                'Tenors that have futures_daily_eod on the latest session for this underlier.'
+            )
+        else:
+            blank = [('', '— pick underlier above first —')]
+            help_text = 'Use the underlier filter above (page reloads). Needs futures_daily_eod rows.'
+        self.fields['near_ticker'].choices = blank + choices
+        self.fields['far_ticker'].choices = blank + choices
+        self.fields['near_ticker'].help_text = help_text
+        self.fields['far_ticker'].help_text = help_text
+        self.fields['contract_size'].initial = spec.default_contract_size
+        self.fields['contract_size'].help_text = spec.contract_size_help
+        self.fields['settlement'].initial = spec.default_settlement
+        self.fields['strategy_type'].initial = spec.strategy_type
+
+        und = None
+        if self.data.get('underlying_id'):
+            und = self.data.get('underlying_id')
+        elif self.initial.get('underlying_id'):
+            und = self.initial.get('underlying_id')
+        if und:
+            mult = default_futures_multiplier(commodity_product_code(str(und)))
+            if mult is not None:
+                self.fields['contract_size'].initial = mult
+
+    def clean_quantity(self) -> float:
+        quantity = self.cleaned_data['quantity']
+        if quantity <= 0:
+            raise forms.ValidationError('Must be positive.')
+        return quantity
+
+    def clean_contract_size(self) -> float:
+        contract_size = self.cleaned_data['contract_size']
+        if contract_size <= 0:
+            raise forms.ValidationError('Must be positive.')
+        return contract_size
+
+    def clean_commission_per_contract(self) -> float:
+        commission = self.cleaned_data.get('commission_per_contract')
+        if commission is None:
+            return 0.0
+        if commission < 0:
+            raise forms.ValidationError('Cannot be negative.')
+        return commission
+
+    def clean_currency(self) -> str:
+        return self.cleaned_data['currency'].strip().upper()
+
+    def clean_portfolio_id(self) -> str:
+        return self.cleaned_data['portfolio_id'].strip()
+
+    def clean_strategy_type(self) -> str:
+        return self.cleaned_data['strategy_type'].strip()
+
+    def clean_near_ticker(self) -> str:
+        return self.cleaned_data['near_ticker'].strip().upper()
+
+    def clean_far_ticker(self) -> str:
+        return self.cleaned_data['far_ticker'].strip().upper()
+
+    def clean(self):
+        cleaned = super().clean()
+        und = cleaned.get('underlying_id')
+        near_ticker = cleaned.get('near_ticker')
+        far_ticker = cleaned.get('far_ticker')
+        trade_date = cleaned.get('trade_date')
+
+        if near_ticker and far_ticker and near_ticker == far_ticker:
+            self.add_error('far_ticker', 'Far tenor must differ from the near tenor.')
+            return cleaned
+
+        near = _resolve_listed_tenor(
+            self, underlying_id=und, ticker=near_ticker, field='near_ticker'
+        )
+        far = _resolve_listed_tenor(
+            self, underlying_id=und, ticker=far_ticker, field='far_ticker'
+        )
+        if near is None or far is None:
+            return cleaned
+
+        if far['expiry_date'] <= near['expiry_date']:
+            self.add_error(
+                'far_ticker',
+                f'Far tenor {far["contract_ticker"]} settles {far["expiry_date"]:%Y-%m-%d}, '
+                f'which is not after near {near["contract_ticker"]} '
+                f'({near["expiry_date"]:%Y-%m-%d}).',
+            )
+            return cleaned
+
+        if trade_date and near['expiry_date'] < trade_date:
+            self.add_error(
+                'near_ticker',
+                f'Expiry {near["expiry_date"]:%Y-%m-%d} is before the trade date '
+                f'{trade_date:%Y-%m-%d} — the near contract would already be dead at booking.',
+            )
+            return cleaned
+
+        cleaned['product_code'] = near['product_code']
+        cleaned['underlying_id'] = near['underlying_id']
+        cleaned['near_ticker'] = near['contract_ticker']
+        cleaned['far_ticker'] = far['contract_ticker']
+        cleaned['near_expiry_date'] = near['expiry_date']
+        cleaned['far_expiry_date'] = far['expiry_date']
+        cleaned['near_tick_size'] = near['tick_size']
+        cleaned['far_tick_size'] = far['tick_size']
+        if cleaned.get('direction') == 'short':
+            cleaned['near_direction'] = 'long'
+            cleaned['far_direction'] = 'short'
+        else:
+            cleaned['near_direction'] = 'short'
+            cleaned['far_direction'] = 'long'
+
+        near_pid = build_product_id(
+            self.spec,
+            underlying_id=cleaned['underlying_id'],
+            expiry_date=near['expiry_date'],
+            strike=None,
+            option_type=None,
+            contract_ticker=near['contract_ticker'],
+        )
+        far_pid = build_product_id(
+            self.spec,
+            underlying_id=cleaned['underlying_id'],
+            expiry_date=far['expiry_date'],
+            strike=None,
+            option_type=None,
+            contract_ticker=far['contract_ticker'],
+        )
+        cleaned['near_product_id'] = near_pid
+        cleaned['far_product_id'] = far_pid
+        self.product_id = f'{near_pid}+{far_pid}'
+
+        terms_base = {
+            'underlying_id': cleaned['underlying_id'],
+            'settlement': cleaned['settlement'],
+            'currency': cleaned.get('currency', 'USD'),
+            'contract_size': cleaned['contract_size'],
+            'product_code': cleaned['product_code'],
+        }
+        for pid, expiry, ticker, field in (
+            (near_pid, near['expiry_date'], near['contract_ticker'], 'near_ticker'),
+            (far_pid, far['expiry_date'], far['contract_ticker'], 'far_ticker'),
+        ):
+            conflicts = product_conflicts(
+                pid,
+                spec=self.spec,
+                terms={
+                    **terms_base,
+                    'expiry_date': expiry,
+                    'contract_ticker': ticker,
+                },
+            )
+            if conflicts:
+                self.add_error(
+                    field,
+                    f'Product {pid} already exists on different terms, and the '
+                    'importer would silently reuse the existing one. '
+                    + '; '.join(conflicts)
+                    + '. Adjust the inputs or book against the existing product terms.',
+                )
+        return cleaned

@@ -7,7 +7,7 @@
     <a href="{% url 'journal:quant_lab' %}">Quant Lab</a>
     · not persisted
     · uniform toy grid (not prod schedule)
-    · C++ <code>EvolveSingleFactorGbm</code>
+    · production C++ evolution kernels
   </p>
 {% endblock %}
 
@@ -25,15 +25,27 @@
         <div class="nj-quant-edu-head">
           <strong>Risk-factor paths</strong>
           <span class="small text-secondary">
-            fixed horizon · equal time steps · GBM wired · other models stubbed
+            pick an asset class first · fixed horizon · equal time steps · no instrument, no quoted market
           </span>
         </div>
         <form method="get" action="{% url 'journal:simulation_lab' %}" class="nj-quant-lab-form" id="sim-lab-form">
           <input type="hidden" name="run" value="1">
           <div class="nj-quant-params">
+            <label title="Asset class the model belongs to">
+              <span>Asset class</span>
+              <select class="form-select form-select-sm" name="asset_class"
+                      onchange="this.form.submit()">
+                {% for a in asset_classes %}
+                  <option value="{{ a.id }}" {% if sim.asset_class == a.id %}selected{% endif %}>
+                    {{ a.label }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
             <label title="Diffusion model">
               <span>Model</span>
-              <select class="form-select form-select-sm" name="model">
+              <select class="form-select form-select-sm" name="model"
+                      onchange="this.form.submit()">
                 {% for m in sim_models %}
                   <option value="{{ m.id }}" {% if sim.model == m.id %}selected{% endif %}>
                     {{ m.label }}{% if not m.wired %} (stub){% endif %}
@@ -51,31 +63,87 @@
                 {% endfor %}
               </select>
             </label>
-            <label title="Initial spot">
-              <span><span class="nj-sym">S</span>Spot</span>
-              <input class="form-control form-control-sm" type="number" step="any"
-                     name="spot" value="{{ sim.spot }}">
-            </label>
-            <label title="Continuous rate">
-              <span><span class="nj-sym">r</span>Rate</span>
-              <input class="form-control form-control-sm" type="number" step="any"
-                     name="rate" value="{{ sim.rate }}">
-            </label>
-            <label title="Dividend yield">
-              <span><span class="nj-sym">q</span>Div</span>
-              <input class="form-control form-control-sm" type="number" step="any"
-                     name="div" value="{{ sim.div }}">
-            </label>
-            <label title="Volatility">
-              <span><span class="nj-sym">σ</span>IV</span>
-              <input class="form-control form-control-sm" type="number" step="any"
-                     name="vol" value="{{ sim.vol }}">
-            </label>
-            <label title="Number of paths (max 100)">
-              <span>Paths</span>
-              <input class="form-control form-control-sm" type="number" step="1"
-                     name="n_paths" value="{{ sim.n_paths }}">
-            </label>
+
+            {% if sim.asset_class == 'commodity' %}
+              <input type="hidden" name="preset_applied" value="{{ sim.curve }}">
+              <label title="Which market's character to start from">
+                <span>Market</span>
+                <select class="form-select form-select-sm" name="curve"
+                        onchange="this.form.submit()">
+                  {% for c in curve_presets %}
+                    <option value="{{ c.id }}" {% if sim.curve == c.id %}selected{% endif %}>
+                      {{ c.label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label title="Time to delivery — each tenor is a different curve">
+                <span>Tenor</span>
+                <select class="form-select form-select-sm" name="tenor_years">
+                  {% for t in tenors %}
+                    <option value="{{ t.years }}"
+                            {% if sim.tenor_years == t.years %}selected{% endif %}>{{ t.label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label title="Starting futures price">
+                <span><span class="nj-sym">F</span>Level</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="level" value="{{ sim.level|floatformat:'-4' }}">
+              </label>
+              <label title="Mean reversion of the short factor">
+                <span><span class="nj-sym">κ</span>Reversion</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="mean_reversion" value="{{ sim.mean_reversion|floatformat:'-4' }}">
+              </label>
+              <label title="Short-factor volatility">
+                <span><span class="nj-sym">σ</span>Short</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="short_vol" value="{{ sim.short_vol|floatformat:'-4' }}">
+              </label>
+              <label title="Long-factor volatility">
+                <span><span class="nj-sym">σ</span>Long</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="long_vol" value="{{ sim.long_vol|floatformat:'-4' }}">
+              </label>
+              <label title="Correlation between the two factor shocks">
+                <span><span class="nj-sym">ρ</span>Factors</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="factor_correlation" value="{{ sim.factor_correlation|floatformat:'-4' }}">
+              </label>
+              <label title="Number of paths (max 20000; up to 50 drawn)">
+                <span>Paths</span>
+                <input class="form-control form-control-sm" type="number" step="100"
+                       name="n_paths" value="{{ sim.n_paths }}">
+              </label>
+            {% else %}
+              <label title="Initial spot">
+                <span><span class="nj-sym">S</span>Spot</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="spot" value="{{ sim.spot }}">
+              </label>
+              <label title="Continuous rate">
+                <span><span class="nj-sym">r</span>Rate</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="rate" value="{{ sim.rate }}">
+              </label>
+              <label title="Dividend yield">
+                <span><span class="nj-sym">q</span>Div</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="div" value="{{ sim.div }}">
+              </label>
+              <label title="Volatility">
+                <span><span class="nj-sym">σ</span>IV</span>
+                <input class="form-control form-control-sm" type="number" step="any"
+                       name="vol" value="{{ sim.vol }}">
+              </label>
+              <label title="Number of paths (max 100)">
+                <span>Paths</span>
+                <input class="form-control form-control-sm" type="number" step="1"
+                       name="n_paths" value="{{ sim.n_paths }}">
+              </label>
+            {% endif %}
+
             <label title="RNG seed">
               <span>Seed</span>
               <input class="form-control form-control-sm" type="number" step="1"
@@ -97,23 +165,51 @@
           </p>
         {% endif %}
 
+        {% if sim.asset_class == 'commodity' and sim.settles_early %}
+          <p class="small text-secondary mt-2 mb-0">
+            This contract delivers before the horizon ends, so its path stops moving at {{ sim.tenor_years|floatformat:2 }}y.
+          </p>
+        {% endif %}
+
         {% if show_sim_chart and sim_result %}
           {{ sim_result|json_script:"sim-paths-data" }}
           <div class="nj-quant-sim-meta small text-secondary mt-2">
             {{ sim_result.engine }}
             · uniform grid
             · horizon {{ sim_result.horizon_days }}d
-            · {{ sim_result.n_paths }} paths
+            · {{ sim_result.n_paths }} paths{% if sim_result.n_drawn < sim_result.n_paths %} ({{ sim_result.n_drawn }} drawn){% endif %}
             · {{ sim_result.n_steps }} nodes
             · seed {{ sim_result.seed }}
+            {% if sim.model == 'gabillon' %}
+              · {{ sim_result.contract_label }}
+              · realized σ {{ sim_result.realized_vol|floatformat:3 }} vs model σ {{ sim_result.model_vol|floatformat:3 }}
+              · 5–95% {{ sim_result.p5|floatformat:3 }}–{{ sim_result.p95|floatformat:3 }}
+              · martingale drift {{ sim_result.worst_martingale_drift|floatformat:4 }}
+            {% endif %}
           </div>
           <div id="sim-paths-chart" class="nj-chart nj-sim-paths-chart" aria-label="Simulated path fan"></div>
-          <div class="nj-quant-edu mt-2">
-            <span class="nj-quant-edu-label">GBM SDE</span>
-            <div class="nj-quant-edu-math">\[
-              dS_t = (r-q)\,S_t\,dt + \sigma\,S_t\,dW_t
-            \]</div>
-          </div>
+          {% if sim.model == 'gabillon' %}
+            <div class="nj-quant-edu mt-2">
+              <span class="nj-quant-edu-label">Gabillon two-factor futures dynamics</span>
+              <div class="nj-quant-edu-math">\[
+                \frac{dF(t,T)}{F(t,T)} = \sigma_S e^{-\kappa (T-t)}\,dW^S_t
+                  + \sigma_L\left(1 - e^{-\kappa (T-t)}\right) dW^L_t,
+                \qquad d\langle W^S, W^L\rangle_t = \rho\,dt
+              \]</div>
+              <p class="small text-secondary mb-0">
+                The short shock decays as delivery moves away, so a deferred tenor breathes less than
+                the prompt under the very same parameters — run 3M against 3Y to see it. No drift term:
+                a futures price is a martingale, which is what the drift figure above checks.
+              </p>
+            </div>
+          {% else %}
+            <div class="nj-quant-edu mt-2">
+              <span class="nj-quant-edu-label">GBM SDE</span>
+              <div class="nj-quant-edu-math">\[
+                dS_t = (r-q)\,S_t\,dt + \sigma\,S_t\,dW_t
+              \]</div>
+            </div>
+          {% endif %}
         {% endif %}
       </div>
     </div>
@@ -149,6 +245,7 @@
       const times = data.times || [];
       const paths = data.paths || [];
       const mean = data.mean_path || [];
+      const yLabel = data.y_label || 'S';
       if (!paths.length) return;
 
       const x = days.length === paths[0].length
@@ -179,10 +276,10 @@
           z: 3,
         });
       }
-      // Spot marker at t=0
+      // Starting level marker at t=0
       if (paths[0] && paths[0].length) {
         series.push({
-          name: 'S₀',
+          name: yLabel + '₀',
           type: 'scatter',
           symbolSize: 8,
           itemStyle: { color: '#f8fafc', borderColor: '#2dd4bf', borderWidth: 2 },
@@ -215,7 +312,7 @@
             const meanItem = items.find((it) => it.seriesName === 'mean');
             let html = '<div style="margin-bottom:4px"><b>day ' + day.toFixed(0) + '</b></div>';
             if (meanItem != null && meanItem.data != null) {
-              html += 'mean S ≈ ' + Number(meanItem.data[1]).toFixed(2);
+              html += 'mean ' + yLabel + ' ≈ ' + Number(meanItem.data[1]).toFixed(3);
             }
             return html;
           },
@@ -235,7 +332,7 @@
         yAxis: {
           type: 'value',
           scale: true,
-          name: 'S',
+          name: yLabel,
           nameTextStyle: { color: '#94a3b8', fontSize: 11 },
           axisLabel: { color: '#94a3b8', fontSize: 10 },
           splitLine: { lineStyle: { color: '#1e293b' } },

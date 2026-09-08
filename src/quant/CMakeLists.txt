@@ -4,6 +4,7 @@ add_library(numeraire_quant STATIC
         cox_ross_rubinstein.cpp
         discount_curve_bootstrap.cpp
         fixed_income_pricing.cpp
+        gabillon_curve_fit.cpp
         implied_vol_european.cpp
         nearest_correlation.cpp
         interest_rate_transforms.cpp

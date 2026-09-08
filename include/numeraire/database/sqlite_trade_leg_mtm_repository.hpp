@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace numeraire::database {
 
@@ -34,6 +35,13 @@ class SqliteTradeLegMtmRepository {
     [[nodiscard]] std::optional<PriorOfficialMtmMark> LookupPriorOfficialMark(std::string_view leg_id,
                                                                               std::string_view pricing_engine,
                                                                               std::string_view as_of) const;
+
+    /// Official FO mark (`is_official = 1`) for this leg on this session. CCR persist requires this.
+    [[nodiscard]] bool HasOfficialMark(std::string_view leg_id, std::string_view as_of) const;
+
+    /// LIVE legs in `portfolio_id` with no official MTM row on `as_of`. Empty means the book may persist EE/PFE.
+    [[nodiscard]] std::vector<std::string> LiveLegsMissingOfficialMtm(std::string_view portfolio_id,
+                                                                      std::string_view as_of) const;
 
    private:
     void InsertArchive(const TradeLegMtmEodRow& row, const std::string& calculated_at) const;

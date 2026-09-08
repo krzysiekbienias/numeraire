@@ -2,12 +2,11 @@
 #include <cpr/util.h>
 
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <numeraire/market_data_providers/polygon_ingest_common.hpp>
 #include <numeraire/utils/logger.hpp>
-
-#include <chrono>
 #include <string>
 #include <thread>
 
@@ -72,9 +71,7 @@ constexpr int kStarterTierSleepSec = 0;
     return false;
 }
 
-[[nodiscard]] int ResolveSleepSec(const char* explicit_sec_env,
-                                  const char* plan_env,
-                                  const char* legacy_env) {
+[[nodiscard]] int ResolveSleepSec(const char* explicit_sec_env, const char* plan_env, const char* legacy_env) {
     int sleep_sec = kBasicTierSleepSec;
     if (TryParseIntEnv(explicit_sec_env, sleep_sec)) {
         return sleep_sec;

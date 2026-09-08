@@ -6,7 +6,9 @@
 # (95% and 97.5%) to trade_leg_exposure_eod. Raw MC paths are not written to
 # SQLite (optional CSV dumps via NUMERAIRE_DUMP_* only).
 #
-# Intended to run from daily_book_mtm.sh (same as_of). Can also be invoked alone.
+# Intended to run from daily_book_mtm.sh (same as_of). Can also be invoked alone,
+# but persist is refused unless every LIVE leg in the book already has official
+# FO MTM on that as_of (holiday / missing settle → no EE/PFE).
 #
 # Usage:
 #   /opt/numeraire/dev/scripts/daily_book_exposure.sh
@@ -124,12 +126,37 @@ main() {
 
     log "books (${#books[@]}): ${books[*]}"
 
+    live_legs_missing_official_mtm() {
+        local book="$1"
+        local session="$2"
+        sqlite3 "${DB_PATH}" "
+            SELECT l.leg_id
+            FROM trades t
+            JOIN trade_legs l ON l.trade_id = t.trade_id
+            LEFT JOIN trade_leg_mtm_eod m
+              ON m.leg_id = l.leg_id AND m.as_of = '${session}' AND m.is_official = 1
+            WHERE t.portfolio_id = '${book}'
+              AND upper(trim(t.status)) = 'LIVE'
+              AND m.leg_id IS NULL
+            ORDER BY l.leg_id;
+        "
+    }
+
+    local failed=0
     local book
     for book in "${books[@]}"; do
+        local missing
+        missing="$(live_legs_missing_official_mtm "${book}" "${as_of}")"
+        if [[ -n "${missing}" ]]; then
+            log "ERROR: persist-exposure requires official FO MTM as_of=${as_of} book=${book} missing=$(echo "${missing}" | tr '\n' ',')"
+            failed=1
+            continue
+        fi
+
         log "CCR exposure: book=${book} (EE / PFE 95% / PFE 97.5% → trade_leg_exposure_eod)"
         # Persist via CLI flag (does not require NUMERAIRE_PERSIST_EXPOSURE in .env).
         # Market quotes for path pricing: same DB sources as FO MTM.
-        run_cmd env \
+        if ! run_cmd env \
             NUMERAIRE_DEV_SPOT_SOURCE=db \
             NUMERAIRE_DEV_VOL_SOURCE=db \
             NUMERAIRE_DEV_RATE_SOURCE=db \
@@ -139,8 +166,14 @@ main() {
             --as-of "${as_of}" \
             --book "${book}" \
             --price-paths \
-            --persist-exposure
+            --persist-exposure; then
+            failed=1
+        fi
     done
+
+    if [[ "${failed}" -ne 0 ]]; then
+        die "daily_book_exposure failed as_of=${as_of} (missing FO MTM or simulate error)"
+    fi
 
     log "daily_book_exposure done as_of=${as_of} books=${#books[@]}"
 }

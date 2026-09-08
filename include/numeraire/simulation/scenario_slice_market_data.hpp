@@ -1,6 +1,7 @@
 #pragma once
 
 #include <numeraire/core/imarket_data.hpp>
+#include <numeraire/simulation/commodity_curve_resolver.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/path_pricing_market_config.hpp>
 #include <numeraire/simulation/scenario_buffer.hpp>
@@ -17,10 +18,13 @@ namespace numeraire::simulation {
 /// Call `SetSlice(step, path)` before pricing — the object is reused across the hot loop.
 class ScenarioSliceMarketData final : public core::IMarketData {
    public:
+    /// `commodity_curves` is optional: without it only calibration factor ids resolve,
+    /// which is all an equity book needs. With it, dated futures tickers resolve too.
     ScenarioSliceMarketData(const ScenarioBuffer& buffer,
                             const ExposureTimeGrid& time_grid,
                             const std::unordered_map<std::string, std::size_t>& factor_by_underlying,
-                            PathPricingMarketConfig market_config);
+                            PathPricingMarketConfig market_config,
+                            const CommodityCurveResolver* commodity_curves = nullptr);
 
     void SetSlice(std::size_t step, std::size_t path);
 
@@ -44,6 +48,7 @@ class ScenarioSliceMarketData final : public core::IMarketData {
     const ExposureTimeGrid& time_grid_;
     const std::unordered_map<std::string, std::size_t>& factor_by_underlying_;
     PathPricingMarketConfig market_config_;
+    const CommodityCurveResolver* commodity_curves_{nullptr};
     std::size_t step_{0};
     std::size_t path_{0};
 };

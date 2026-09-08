@@ -537,6 +537,77 @@ class FuturesContract(models.Model):
         return f'{self.ticker} @ {self.listing_as_of}'
 
 
+class CalibrationSnapshot(models.Model):
+    """One calibration run: a model fitted to a book or to a single underlier."""
+
+    calibration_id = models.AutoField(primary_key=True)
+    model = models.TextField()
+    source = models.TextField()
+    calibration_scope = models.TextField()
+    scope_key = models.TextField()
+    as_of = models.DateField()
+    num_factors = models.IntegerField()
+    history_start = models.DateField(blank=True, null=True)
+    history_end = models.DateField(blank=True, null=True)
+    lookback_calendar_days = models.IntegerField(blank=True, null=True)
+    min_return_observations = models.IntegerField(blank=True, null=True)
+    vol_annualization_days = models.IntegerField(blank=True, null=True)
+    eod_adjusted = models.IntegerField(blank=True, null=True)
+    num_return_observations = models.IntegerField(blank=True, null=True)
+    batch_run_id = models.TextField(blank=True, null=True)
+    calculated_at = models.TextField()
+    produced_by = models.TextField()
+    remarks = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = 'calibration_snapshot'
+        ordering = ['-as_of', 'scope_key', 'model']
+        verbose_name = 'Calibration snapshot'
+
+    def __str__(self):
+        return f'{self.model}/{self.scope_key} @ {self.as_of}'
+
+
+class CalibrationFactor(models.Model):
+    """Per-factor volatility of a snapshot; `factor_level` is the fitted anchor."""
+
+    pk = models.CompositePrimaryKey('calibration_id', 'factor_index')
+    calibration_id = models.IntegerField()
+    factor_index = models.IntegerField()
+    factor_id = models.TextField()
+    factor_level = models.FloatField(blank=True, null=True)
+    volatility = models.FloatField()
+
+    class Meta:
+        managed = False
+        db_table = 'calibration_factor'
+        ordering = ['calibration_id', 'factor_index']
+        verbose_name = 'Calibration factor'
+
+    def __str__(self):
+        return f'{self.factor_id} vol={self.volatility}'
+
+
+class CalibrationParam(models.Model):
+    """Model-specific scalars that do not fit one-vol-per-factor (Gabillon kappa, ...)."""
+
+    pk = models.CompositePrimaryKey('calibration_id', 'factor_id', 'param_name')
+    calibration_id = models.IntegerField()
+    factor_id = models.TextField()
+    param_name = models.TextField()
+    param_value = models.FloatField()
+
+    class Meta:
+        managed = False
+        db_table = 'calibration_param'
+        ordering = ['calibration_id', 'factor_id', 'param_name']
+        verbose_name = 'Calibration parameter'
+
+    def __str__(self):
+        return f'{self.param_name}={self.param_value}'
+
+
 class CatalogInstrumentType(models.Model):
     """Reference codes for equity instrument types (seed / UI inventory)."""
 

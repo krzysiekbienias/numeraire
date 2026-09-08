@@ -820,63 +820,110 @@ CREATE TABLE IF NOT EXISTS vol_surface_point_eod (
 CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_id ON vol_surface_point_eod (surface_id);
 CREATE INDEX IF NOT EXISTS idx_vol_surface_point_surface_expiry ON vol_surface_point_eod (surface_id, expiration_date);
 -- ---------------------------------------------------------------------------
--- Historical GBM calibration snapshots (vol + correlation + Cholesky for MC).
+-- Calibration snapshots (factor parameters + correlation + Cholesky for MC).
 --
--- One official row per (scope, scope_key, as_of, method). Re-run on the same key replaces
--- the header; child rows cascade. MC loads the latest snapshot with `as_of <= valuation_date`.
+-- Model-agnostic on purpose. Two independent axes describe a snapshot:
+--   * `model`  — which stochastic model the parameters belong to:
+--                'gbm', 'gabillon_2f', 'heston', ...
+--   * `source` — how the parameters were obtained:
+--                'historical' estimated from EOD price history,
+--                'implied'    backed out of quoted option prices,
+--                'fit'        manual / expert override.
+-- Keeping them separate lets a historical GBM and an implied Gabillon snapshot
+-- coexist for the same book and date instead of colliding on one `method` string.
 --
--- v1 scope: whole book as one bucket (`calibration_scope='book'`, `scope_key='ALL'`).
-CREATE TABLE IF NOT EXISTS historical_calibration (
+-- `calibration_scope` buckets the snapshot: 'book' (`scope_key` = portfolio_id or
+-- 'ALL') or 'underlying' (`scope_key` = a single underlying / curve id). Both use
+-- the same child tables, so a one-factor snapshot still carries a 1x1 correlation.
+--
+-- One official row per (scope, scope_key, as_of, model, source). Re-running the
+-- same key replaces the header and child rows cascade. MC loads the latest
+-- snapshot with `as_of <= valuation_date`.
+--
+-- The `history_*` / `lookback_*` / `eod_*` columns only describe how history was
+-- sampled, so they are NULL unless `source = 'historical'` (guarded by CHECK).
+CREATE TABLE IF NOT EXISTS calibration_snapshot (
     calibration_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    calibration_method TEXT NOT NULL DEFAULT 'historical_eod_gbm',
-    calibration_scope TEXT NOT NULL DEFAULT 'book',
+    model TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('historical', 'implied', 'fit')),
+    calibration_scope TEXT NOT NULL DEFAULT 'book' CHECK (calibration_scope IN ('book', 'underlying')),
     scope_key TEXT NOT NULL DEFAULT 'ALL',
     as_of TEXT NOT NULL,
-    history_start TEXT NOT NULL,
-    history_end TEXT NOT NULL,
-    lookback_calendar_days INTEGER NOT NULL,
-    min_return_observations INTEGER NOT NULL,
-    vol_annualization_days INTEGER NOT NULL DEFAULT 252,
-    eod_adjusted INTEGER NOT NULL DEFAULT 1 CHECK (eod_adjusted IN (0, 1)),
-    num_factors INTEGER NOT NULL,
-    num_return_observations INTEGER NOT NULL,
+    num_factors INTEGER NOT NULL CHECK (num_factors > 0),
+    history_start TEXT,
+    history_end TEXT,
+    lookback_calendar_days INTEGER,
+    min_return_observations INTEGER,
+    vol_annualization_days INTEGER,
+    eod_adjusted INTEGER CHECK (eod_adjusted IS NULL OR eod_adjusted IN (0, 1)),
+    num_return_observations INTEGER,
     batch_run_id TEXT,
     calculated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    source TEXT NOT NULL DEFAULT 'dev_main',
+    produced_by TEXT NOT NULL DEFAULT 'dev_main',
     remarks TEXT NOT NULL DEFAULT '',
-    UNIQUE (calibration_scope, scope_key, as_of, calibration_method)
+    UNIQUE (calibration_scope, scope_key, as_of, model, source),
+    CHECK (source <> 'historical' OR (
+        history_start IS NOT NULL
+        AND history_end IS NOT NULL
+        AND lookback_calendar_days IS NOT NULL
+        AND min_return_observations IS NOT NULL
+        AND vol_annualization_days IS NOT NULL
+        AND eod_adjusted IS NOT NULL
+        AND num_return_observations IS NOT NULL
+    ))
 );
-CREATE INDEX IF NOT EXISTS idx_historical_calibration_scope_asof ON historical_calibration (
+CREATE INDEX IF NOT EXISTS idx_calibration_snapshot_lookup ON calibration_snapshot (
     calibration_scope,
     scope_key,
+    model,
+    source,
     as_of DESC
 );
-CREATE TABLE IF NOT EXISTS historical_calibration_factor (
+-- One diffusion factor per row. `factor_id` is whatever the model drives:
+-- an equity underlying ('AAPL'), a constant-maturity commodity pillar ('CL_M1'),
+-- or a Gabillon state variable ('CL_SHORT', 'CL_LONG').
+-- `factor_level` is the level the factor sits at on `as_of` (spot or forward);
+-- it is NULL for factors that are not directly observable, e.g. the Gabillon
+-- long-end factor.
+CREATE TABLE IF NOT EXISTS calibration_factor (
     calibration_id INTEGER NOT NULL,
     factor_index INTEGER NOT NULL,
-    underlying_id TEXT NOT NULL,
-    spot_as_of REAL NOT NULL CHECK (spot_as_of > 0.0),
+    factor_id TEXT NOT NULL,
+    factor_level REAL CHECK (factor_level IS NULL OR factor_level > 0.0),
     volatility REAL NOT NULL CHECK (volatility >= 0.0),
     PRIMARY KEY (calibration_id, factor_index),
-    FOREIGN KEY (calibration_id) REFERENCES historical_calibration (calibration_id) ON DELETE CASCADE,
-    UNIQUE (calibration_id, underlying_id)
+    FOREIGN KEY (calibration_id) REFERENCES calibration_snapshot (calibration_id) ON DELETE CASCADE,
+    UNIQUE (calibration_id, factor_id)
 );
-CREATE INDEX IF NOT EXISTS idx_historical_calibration_factor_underlying ON historical_calibration_factor (underlying_id);
-CREATE TABLE IF NOT EXISTS historical_calibration_correlation (
+CREATE INDEX IF NOT EXISTS idx_calibration_factor_factor_id ON calibration_factor (factor_id);
+CREATE TABLE IF NOT EXISTS calibration_correlation (
     calibration_id INTEGER NOT NULL,
     factor_i INTEGER NOT NULL,
     factor_j INTEGER NOT NULL,
     rho REAL NOT NULL CHECK (rho >= -1.0 AND rho <= 1.0),
     PRIMARY KEY (calibration_id, factor_i, factor_j),
-    FOREIGN KEY (calibration_id) REFERENCES historical_calibration (calibration_id) ON DELETE CASCADE,
+    FOREIGN KEY (calibration_id) REFERENCES calibration_snapshot (calibration_id) ON DELETE CASCADE,
     CHECK (factor_i <= factor_j)
 );
-CREATE TABLE IF NOT EXISTS historical_calibration_cholesky (
+CREATE TABLE IF NOT EXISTS calibration_cholesky (
     calibration_id INTEGER NOT NULL,
     row_i INTEGER NOT NULL,
     col_j INTEGER NOT NULL,
     l_value REAL NOT NULL,
     PRIMARY KEY (calibration_id, row_i, col_j),
-    FOREIGN KEY (calibration_id) REFERENCES historical_calibration (calibration_id) ON DELETE CASCADE,
+    FOREIGN KEY (calibration_id) REFERENCES calibration_snapshot (calibration_id) ON DELETE CASCADE,
     CHECK (col_j <= row_i)
+);
+-- Model-specific scalars that do not fit the one-vol-per-factor shape:
+-- Gabillon mean reversion ('kappa' on 'CL'), Heston 'theta' / 'xi' / 'v0', ...
+-- `factor_id = ''` means the parameter applies to the whole snapshot rather than
+-- to one factor. Kept as key/value because the parameter set is what varies
+-- between models; everything above this point does not.
+CREATE TABLE IF NOT EXISTS calibration_param (
+    calibration_id INTEGER NOT NULL,
+    factor_id TEXT NOT NULL DEFAULT '',
+    param_name TEXT NOT NULL,
+    param_value REAL NOT NULL,
+    PRIMARY KEY (calibration_id, factor_id, param_name),
+    FOREIGN KEY (calibration_id) REFERENCES calibration_snapshot (calibration_id) ON DELETE CASCADE
 );

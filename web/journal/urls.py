@@ -27,6 +27,11 @@ urlpatterns = [
     path('underliers/<str:ticker>/', views.UnderlierDetailView.as_view(), name='underlier_detail'),
     path('curves/', views.CurveView.as_view(), name='curves'),
     path('commodity-curves/', views.CommodityCurveView.as_view(), name='commodity_curves'),
+    path(
+        'commodity-curves/backtest/',
+        views.CommodityCurveBacktestView.as_view(),
+        name='commodity_curve_backtest',
+    ),
     path('exposure/', views.ExposureView.as_view(), name='exposure'),
     path('surfaces/', views.SurfaceView.as_view(), name='surfaces'),
     path('inventory/', views.InventoryView.as_view(), name='inventory'),

@@ -64,8 +64,8 @@
       <div class="nj-panel-body">
         <p class="mb-2">Pick an instrument type to show its fields.</p>
         <p class="small text-secondary mb-0">
-          Wired types: equity/index (priced today) and <strong>FUT</strong> commodity outright
-          (books as <code>PENDING</code>; futures pricer comes later).
+          Wired types: equity/index, <strong>FUT</strong> commodity outright, and
+          <strong>CAL</strong> calendar (two outright legs, one trade).
           Catalog codes live on the <a href="{% url 'journal:inventory' %}">Inventory</a> page.
         </p>
       </div>
@@ -95,7 +95,10 @@
             {% else %}
               {{ form.underlying_id }}
             {% endif %}
-            {% if form.contract_ticker %}
+            {% if spec.is_calendar %}
+              {% include 'partials/form_field.html' with field=form.near_ticker %}
+              {% include 'partials/form_field.html' with field=form.far_ticker %}
+            {% elif form.contract_ticker %}
               {% include 'partials/form_field.html' with field=form.contract_ticker %}
             {% endif %}
             {% if form.option_type %}
@@ -171,10 +174,19 @@
 
       <div class="nj-panel mb-2">
         <div class="nj-panel-head">
-          <h2>Leg</h2>
-          <span class="small text-secondary">single leg</span>
+          <h2>{% if spec.is_calendar %}Spread{% else %}Leg{% endif %}</h2>
+          <span class="small text-secondary">
+            {% if spec.is_calendar %}two outright legs · 1:1{% else %}single leg{% endif %}
+          </span>
         </div>
         <div class="nj-panel-body">
+          {% if spec.is_calendar %}
+            <p class="nj-cal-legs-note">
+              Long calendar = short the nearer tenor, long the deferred.
+              Short calendar = the opposite. Both legs reuse
+              <code>FUT_OUTRIGHT_*</code> products.
+            </p>
+          {% endif %}
           <div class="nj-form-grid">
             {% include 'partials/form_field.html' with field=form.direction %}
             {% include 'partials/form_field.html' with field=form.quantity %}

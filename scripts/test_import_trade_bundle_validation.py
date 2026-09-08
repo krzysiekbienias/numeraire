@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import json
 import sqlite3
 import sys
 import tempfile
@@ -65,7 +66,7 @@ class ImportExpiryValidationTest(unittest.TestCase):
             stderr = io.StringIO()
             with redirect_stderr(stderr):
                 with self.assertRaises(SystemExit) as ctx:
-                    itb.insert_bundle(conn, product, equity, trade)
+                    itb.insert_bundle(conn, product, "equity", equity, trade)
             self.assertEqual(ctx.exception.code, 1)
             msg = stderr.getvalue()
             self.assertIn("expiry_date", msg)
@@ -78,7 +79,7 @@ class ImportExpiryValidationTest(unittest.TestCase):
         conn = sqlite3.connect(":memory:")
         try:
             _bootstrap_schema(conn)
-            itb.insert_bundle(conn, product, equity, trade)
+            itb.insert_bundle(conn, product, "equity", equity, trade)
             row = conn.execute(
                 "SELECT expiry_date FROM products WHERE product_id = ?",
                 (product["product_id"],),
@@ -93,7 +94,7 @@ class ImportExpiryValidationTest(unittest.TestCase):
         conn = sqlite3.connect(":memory:")
         try:
             _bootstrap_schema(conn)
-            itb.insert_bundle(conn, product, equity, trade)
+            itb.insert_bundle(conn, product, "equity", equity, trade)
             row = conn.execute("SELECT 1 FROM trades WHERE trade_id = ?", (trade["trade_id"],)).fetchone()
             self.assertIsNotNone(row)
         finally:
@@ -103,6 +104,128 @@ class ImportExpiryValidationTest(unittest.TestCase):
 def _bootstrap_schema(conn: sqlite3.Connection) -> None:
     schema_path = _REPO_ROOT / "sql" / "schema_v1.sql"
     conn.executescript(schema_path.read_text(encoding="utf-8"))
+
+
+def _outright_product(pid: str, ticker: str, expiry: str) -> dict:
+    return {
+        "product_id": pid,
+        "asset_kind": "COMMODITY",
+        "underlying_id": "CL",
+        "expiry_date": expiry,
+        "settlement": "PHYSICAL",
+        "currency": "USD",
+        "contract_size": 1000,
+        "day_count": "Actual365Fixed",
+        "calendar": "UnitedStates",
+        "commodity": {
+            "instrument_type": "commodity_futures_outright",
+            "product_code": "CL",
+            "contract_ticker": ticker,
+            "settlement_date": expiry,
+            "multiplier": 1000,
+            "structured_params": {},
+        },
+    }
+
+
+def _calendar_root(*, trade_id: str = "TRD_CAL_1") -> dict:
+    near = _outright_product("FUT_OUTRIGHT_CL_CLV6", "CLV6", "2026-09-22")
+    far = _outright_product("FUT_OUTRIGHT_CL_CLX6", "CLX6", "2026-10-20")
+    return {
+        "products": [near, far],
+        "trade": {
+            "trade_id": trade_id,
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_CALENDAR",
+            "trade_date": "2026-09-01",
+            "legs": [
+                {
+                    "product_id": "FUT_OUTRIGHT_CL_CLV6",
+                    "direction": "short",
+                    "quantity": 1,
+                    "execution_price": None,
+                    "commission_per_contract": 0,
+                },
+                {
+                    "product_id": "FUT_OUTRIGHT_CL_CLX6",
+                    "direction": "long",
+                    "quantity": 1,
+                    "execution_price": None,
+                    "commission_per_contract": 0,
+                },
+            ],
+        },
+    }
+
+
+class ImportCalendarBundleTest(unittest.TestCase):
+    def test_products_array_imports_two_outright_legs(self) -> None:
+        root = _calendar_root()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_CAL_1.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            items, trade, _notes = itb.load_bundle(path)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0][1], "commodity")
+        self.assertEqual(trade["legs"][0]["product_id"], "FUT_OUTRIGHT_CL_CLV6")
+        self.assertEqual(trade["legs"][1]["product_id"], "FUT_OUTRIGHT_CL_CLX6")
+
+        conn = sqlite3.connect(":memory:")
+        try:
+            _bootstrap_schema(conn)
+            itb.insert_items(conn, items, trade)
+            products = {
+                row[0]
+                for row in conn.execute("SELECT product_id FROM products").fetchall()
+            }
+            self.assertEqual(
+                products,
+                {"FUT_OUTRIGHT_CL_CLV6", "FUT_OUTRIGHT_CL_CLX6"},
+            )
+            legs = conn.execute(
+                "SELECT leg_id, product_id, direction FROM trade_legs "
+                "WHERE trade_id = ? ORDER BY leg_id",
+                (trade["trade_id"],),
+            ).fetchall()
+            self.assertEqual(
+                legs,
+                [
+                    ("TRD_CAL_1_L1", "FUT_OUTRIGHT_CL_CLV6", "SHORT"),
+                    ("TRD_CAL_1_L2", "FUT_OUTRIGHT_CL_CLX6", "LONG"),
+                ],
+            )
+            strategy = conn.execute(
+                "SELECT strategy_type FROM trades WHERE trade_id = ?",
+                (trade["trade_id"],),
+            ).fetchone()
+            self.assertEqual(strategy[0], "COMMODITY_CALENDAR")
+        finally:
+            conn.close()
+
+    def test_leg_product_id_must_belong_to_bundle(self) -> None:
+        root = _calendar_root()
+        root["trade"]["legs"][1]["product_id"] = "FUT_OUTRIGHT_CL_CLZ6"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_CAL_1.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                with self.assertRaises(SystemExit):
+                    itb.load_bundle(path)
+            self.assertIn("must be one of this bundle's products", stderr.getvalue())
+
+    def test_single_product_bundle_still_loads(self) -> None:
+        product, equity, trade = _minimal_bundle(
+            expiry_date="2027-03-20", trade_date="2026-05-11"
+        )
+        root = {"product": product, "equity": equity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_BAD_DATES.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            items, loaded, _notes = itb.load_bundle(path)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0][0]["product_id"], product["product_id"])
+        self.assertEqual(loaded["legs"][0]["product_id"], product["product_id"])
 
 
 if __name__ == "__main__":

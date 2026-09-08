@@ -1447,6 +1447,13 @@ body {
   gap: 0.5rem 0.75rem;
 }
 
+.nj-cal-legs-note {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+  margin: 0 0 0.75rem;
+}
+
 .nj-quant-edu-body {
   padding: 0.55rem 0.85rem !important;
 }
@@ -2037,6 +2044,56 @@ body {
 .nj-chart-3d {
   height: min(32rem, 62vh);
   width: 100%;
+}
+
+.nj-cmdty-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 1fr);
+  gap: 0.85rem;
+  align-items: stretch;
+}
+
+.nj-cmdty-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.nj-cmdty-side .nj-panel {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.nj-cmdty-side .nj-panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.nj-cmdty-layout .nj-chart-3d {
+  height: min(36rem, 72vh);
+}
+
+.nj-cmdty-2d {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 14.75rem;
+  min-height: 12.5rem;
+}
+
+@media (max-width: 960px) {
+  .nj-cmdty-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .nj-cmdty-layout .nj-chart-3d {
+    height: min(26rem, 58vh);
+  }
 }
 
 .nj-chart-3d-sm {

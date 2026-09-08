@@ -12,6 +12,9 @@
     {% else %}
       Rotate the history × tenor surface; pick a day for the strip and a ticker for its path
     {% endif %}
+    {% if product_code %}
+      · <a href="{% url 'journal:commodity_curve_backtest' %}?product_code={{ product_code }}">simulated vs realized</a>
+    {% endif %}
   </p>
 {% endblock %}
 
@@ -62,35 +65,57 @@
     <strong>{{ product_code }}</strong>
     · cloud <strong>{{ curve_payload.cloud|length }}</strong> pts
     over <strong>{{ curve_payload.cloud_days }}</strong> session{{ curve_payload.cloud_days|pluralize }}
-    · gold = strip @ <strong>{{ as_of|date:"Y-m-d" }}</strong>
-    · cyan = history of <strong>{{ ticker }}</strong>
+    · strip @ <strong>{{ as_of|date:"Y-m-d" }}</strong>
+    · tenor <strong>{{ ticker }}</strong>
     {% if first_as_of and latest_as_of %}
-      · full coverage {{ first_as_of|date:"Y-m-d" }} → {{ latest_as_of|date:"Y-m-d" }}
-      ({{ available_as_of|length }} days)
+      · coverage {{ first_as_of|date:"Y-m-d" }} → {{ latest_as_of|date:"Y-m-d" }}
     {% endif %}
-    · drag to rotate · scroll to zoom
+    · drag the field to rotate · click a 2D point to jump
   </div>
 
-  <div class="nj-panel mb-3">
-    <div class="nj-panel-head">
-      <h2>3D term structure</h2>
-      <span class="small text-secondary">X = τ · Y = history · Z = settle</span>
+  {{ curve_payload|json_script:"commodity-curve-data" }}
+  <div class="nj-cmdty-layout mb-3">
+    <div class="nj-panel mb-0">
+      <div class="nj-panel-head">
+        <h2>3D term structure</h2>
+        <span class="small text-secondary">X = τ · Y = history · Z = settle</span>
+      </div>
+      <div class="nj-panel-body">
+        <div id="commodity-curve-3d" class="nj-chart nj-chart-3d" aria-label="3D settlement field"></div>
+        <p class="small text-secondary mb-0 mt-2">
+          Grey = recent field.
+          <span style="color:#fbbf24">Gold</span> = strip on the selected day.
+          <span style="color:#22d3ee">Cyan</span> = the chosen contract inside that window.
+        </p>
+      </div>
     </div>
-    <div class="nj-panel-body">
-      {{ curve_payload|json_script:"commodity-curve-data" }}
-      <div id="commodity-curve-3d" class="nj-chart nj-chart-3d" style="height:520px"></div>
-      <p class="small text-secondary mb-0 mt-2">
-        Grey cloud = recent settlement field.
-        <span style="color:#fbbf24">Gold line</span> = all tenors on the selected day (strip).
-        <span style="color:#22d3ee">Cyan line</span> = selected contract through history.
-      </p>
+
+    <div class="nj-cmdty-side">
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>Strip @ {{ as_of|date:"Y-m-d" }}</h2>
+          <span class="small text-secondary">settle vs τ · click a tenor</span>
+        </div>
+        <div class="nj-panel-body">
+          <div id="commodity-strip-2d" class="nj-chart nj-cmdty-2d" aria-label="2D settlement strip"></div>
+        </div>
+      </div>
+      <div class="nj-panel">
+        <div class="nj-panel-head">
+          <h2>{{ ticker }} history</h2>
+          <span class="small text-secondary">printed settles · click a session</span>
+        </div>
+        <div class="nj-panel-body">
+          <div id="commodity-tenor-2d" class="nj-chart nj-cmdty-2d" aria-label="2D tenor history"></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="nj-panel mb-2">
     <div class="nj-panel-head">
-      <h2>Strip @ {{ as_of|date:"Y-m-d" }}</h2>
-      <span class="small text-secondary">settlement_price</span>
+      <h2>Strip table</h2>
+      <span class="small text-secondary">settlement_price @ {{ as_of|date:"Y-m-d" }}</span>
     </div>
     <div class="nj-panel-body">
       {% if strip_rows %}
@@ -137,135 +162,276 @@
       (function () {
         if (typeof echarts === 'undefined') return;
         const raw = document.getElementById('commodity-curve-data');
-        const el = document.getElementById('commodity-curve-3d');
-        if (!raw || !el) return;
+        if (!raw) return;
         const payload = JSON.parse(raw.textContent);
+        const product = payload.product_code || '';
+        const selectedAsOf = payload.as_of || '';
+        const selectedTicker = payload.ticker || '';
+
+        function jump(next) {
+          const q = new URLSearchParams();
+          q.set('product_code', product);
+          q.set('as_of', next.as_of || selectedAsOf);
+          q.set('ticker', next.ticker || selectedTicker);
+          const dest = '{% url "journal:commodity_curves" %}?' + q.toString();
+          if (dest !== window.location.pathname + window.location.search) {
+            window.location.assign(dest);
+          }
+        }
+
+        const axis = {
+          color: '#94a3b8',
+          line: '#334155',
+          split: '#1e293b',
+        };
+        const tooltipBox = {
+          trigger: 'axis',
+          axisPointer: { type: 'line', lineStyle: { color: '#475569' } },
+          backgroundColor: 'rgba(15, 23, 42, 0.92)',
+          borderColor: '#334155',
+          textStyle: { color: '#e2e8f0', fontSize: 12 },
+        };
 
         const cloud = (payload.cloud || []).map((p) => [p.tau, p.y, p.settle, p.as_of, p.ticker]);
-        const strip = (payload.strip || [])
+        const strip3d = (payload.strip || [])
           .filter((p) => p.tau != null)
           .sort((a, b) => a.tau - b.tau)
           .map((p) => [p.tau, p.y, p.settle, p.as_of, p.ticker]);
-        const tenor = (payload.tenor_path || [])
+        const tenor3d = (payload.tenor_path || [])
           .slice()
           .sort((a, b) => (a.as_of < b.as_of ? -1 : 1))
           .map((p) => [p.tau, p.y, p.settle, p.as_of, p.ticker]);
+        const strip2d = (payload.strip || [])
+          .filter((p) => p.tau != null && p.settle != null)
+          .sort((a, b) => a.tau - b.tau);
+        const history2d = (payload.tenor_history || payload.tenor_path || [])
+          .slice()
+          .sort((a, b) => (a.as_of < b.as_of ? -1 : 1));
 
-        const settles = cloud.map((p) => p[2]).filter((v) => v != null);
-        const vmin = settles.length ? Math.min.apply(null, settles) : 0;
-        const vmax = settles.length ? Math.max.apply(null, settles) : 1;
+        const charts = [];
 
-        const chart = echarts.init(el, null, { renderer: 'canvas' });
-        chart.setOption({
-          tooltip: {
-            formatter: (params) => {
-              const d = params.data || [];
-              return [
-                `<strong>${d[4] || ''}</strong>`,
-                d[3] ? `as_of: ${d[3]}` : null,
-                d[0] != null ? `τ: ${Number(d[0]).toFixed(3)}y` : null,
-                d[2] != null ? `settle: ${Number(d[2]).toFixed(4)}` : null,
-              ].filter(Boolean).join('<br/>');
+        const el3d = document.getElementById('commodity-curve-3d');
+        if (el3d) {
+          const settles = cloud.map((p) => p[2]).filter((v) => v != null);
+          const vmin = settles.length ? Math.min.apply(null, settles) : 0;
+          const vmax = settles.length ? Math.max.apply(null, settles) : 1;
+          const chart = echarts.init(el3d, null, { renderer: 'canvas' });
+          chart.setOption({
+            tooltip: {
+              formatter: (params) => {
+                const d = params.data || [];
+                return [
+                  `<strong>${d[4] || ''}</strong>`,
+                  d[3] ? `as_of: ${d[3]}` : null,
+                  d[0] != null ? `τ: ${Number(d[0]).toFixed(3)}y` : null,
+                  d[2] != null ? `settle: ${Number(d[2]).toFixed(4)}` : null,
+                ].filter(Boolean).join('<br/>');
+              },
             },
-          },
-          visualMap: {
-            show: true,
-            min: vmin,
-            max: vmax,
-            dimension: 2,
-            seriesIndex: 0,
-            inRange: {
-              color: ['#334155', '#64748b', '#94a3b8'],
+            visualMap: {
+              show: false,
+              min: vmin,
+              max: vmax,
+              dimension: 2,
+              seriesIndex: 0,
+              inRange: { color: ['#334155', '#64748b', '#94a3b8'] },
             },
-            textStyle: { color: '#94a3b8' },
-            right: 8,
-            top: 'middle',
-            calculable: true,
-            text: ['settle', ''],
-          },
-          legend: {
-            data: ['field', 'strip @ day', 'tenor history'],
-            textStyle: { color: '#94a3b8' },
-            top: 0,
-          },
-          xAxis3D: {
-            type: 'value',
-            name: 'τ (years)',
-            nameTextStyle: { color: '#94a3b8' },
-            axisLabel: { color: '#94a3b8' },
-            min: 0,
-          },
-          yAxis3D: {
-            type: 'value',
-            name: 'history (y)',
-            nameTextStyle: { color: '#94a3b8' },
-            axisLabel: { color: '#94a3b8' },
-          },
-          zAxis3D: {
-            type: 'value',
-            name: 'settle',
-            nameTextStyle: { color: '#94a3b8' },
-            axisLabel: { color: '#94a3b8' },
-            scale: true,
-          },
-          grid3D: {
-            boxWidth: 120,
-            boxDepth: 100,
-            boxHeight: 70,
-            viewControl: {
-              projection: 'perspective',
-              autoRotate: false,
-              distance: 200,
-              alpha: 28,
-              beta: 42,
+            legend: {
+              data: ['field', 'strip @ day', 'tenor history'],
+              textStyle: { color: axis.color, fontSize: 11 },
+              top: 0,
             },
-            light: {
-              main: { intensity: 1.1, shadow: false },
-              ambient: { intensity: 0.45 },
+            xAxis3D: {
+              type: 'value', name: 'τ (years)', min: 0,
+              nameTextStyle: { color: axis.color },
+              axisLabel: { color: axis.color },
             },
-          },
-          series: [
-            {
-              name: 'field',
-              type: 'scatter3D',
-              data: cloud,
-              symbolSize: 3.5,
-              itemStyle: { opacity: 0.55 },
-              zlevel: 1,
+            yAxis3D: {
+              type: 'value', name: 'history (y)',
+              nameTextStyle: { color: axis.color },
+              axisLabel: { color: axis.color },
             },
-            {
-              name: 'strip @ day',
-              type: 'line3D',
-              data: strip,
-              lineStyle: { width: 5, color: '#fbbf24' },
-              zlevel: 3,
+            zAxis3D: {
+              type: 'value', name: 'settle', scale: true,
+              nameTextStyle: { color: axis.color },
+              axisLabel: { color: axis.color },
             },
-            {
-              name: 'strip @ day',
-              type: 'scatter3D',
-              data: strip,
-              symbolSize: 10,
-              itemStyle: { color: '#fbbf24', opacity: 1 },
-              zlevel: 4,
+            grid3D: {
+              boxWidth: 120, boxDepth: 100, boxHeight: 70,
+              viewControl: {
+                projection: 'perspective', autoRotate: false,
+                distance: 200, alpha: 28, beta: 42,
+              },
+              light: {
+                main: { intensity: 1.1, shadow: false },
+                ambient: { intensity: 0.45 },
+              },
             },
-            {
-              name: 'tenor history',
-              type: 'line3D',
-              data: tenor,
-              lineStyle: { width: 4, color: '#22d3ee' },
-              zlevel: 3,
+            series: [
+              {
+                name: 'field', type: 'scatter3D', data: cloud,
+                symbolSize: 3.5, itemStyle: { opacity: 0.55 }, zlevel: 1,
+              },
+              {
+                name: 'strip @ day', type: 'line3D', data: strip3d,
+                lineStyle: { width: 5, color: '#fbbf24' }, zlevel: 3,
+              },
+              {
+                name: 'strip @ day', type: 'scatter3D', data: strip3d,
+                symbolSize: 10, itemStyle: { color: '#fbbf24', opacity: 1 }, zlevel: 4,
+              },
+              {
+                name: 'tenor history', type: 'line3D', data: tenor3d,
+                lineStyle: { width: 4, color: '#22d3ee' }, zlevel: 3,
+              },
+              {
+                name: 'tenor history', type: 'scatter3D', data: tenor3d,
+                symbolSize: 8, itemStyle: { color: '#22d3ee', opacity: 1 }, zlevel: 4,
+              },
+            ],
+          });
+          charts.push(chart);
+        }
+
+        const elStrip = document.getElementById('commodity-strip-2d');
+        if (elStrip && strip2d.length) {
+          const chart = echarts.init(elStrip, null, { renderer: 'canvas' });
+          chart.setOption({
+            animationDuration: 280,
+            backgroundColor: 'transparent',
+            grid: { left: 52, right: 16, top: 18, bottom: 36 },
+            tooltip: {
+              ...tooltipBox,
+              formatter: (items) => {
+                const p = strip2d[(items[0] || {}).dataIndex];
+                if (!p) return '';
+                return '<div style="margin-bottom:4px"><b>' + p.ticker + '</b></div>' +
+                  'τ ' + Number(p.tau).toFixed(3) + 'y<br>settle <b>' +
+                  Number(p.settle).toFixed(4) + '</b>';
+              },
             },
-            {
-              name: 'tenor history',
-              type: 'scatter3D',
-              data: tenor,
-              symbolSize: 8,
-              itemStyle: { color: '#22d3ee', opacity: 1 },
-              zlevel: 4,
+            xAxis: {
+              type: 'value', name: 'τ (years)', nameLocation: 'middle', nameGap: 22,
+              nameTextStyle: { color: axis.color, fontSize: 11 },
+              min: 0,
+              axisLabel: { color: axis.color, fontSize: 10 },
+              axisLine: { lineStyle: { color: axis.line } },
+              splitLine: { show: false },
             },
-          ],
-        });
-        window.addEventListener('resize', () => chart.resize());
+            yAxis: {
+              type: 'value', scale: true, name: 'settle',
+              nameTextStyle: { color: axis.color, fontSize: 11 },
+              axisLabel: { color: axis.color, fontSize: 10 },
+              splitLine: { lineStyle: { color: axis.split } },
+              axisLine: { show: false },
+            },
+            series: [
+              {
+                type: 'line',
+                data: strip2d.map((p) => [p.tau, p.settle]),
+                showSymbol: true,
+                symbolSize: (value, params) =>
+                  strip2d[params.dataIndex] && strip2d[params.dataIndex].ticker === selectedTicker ? 10 : 6,
+                lineStyle: { width: 2.2, color: '#fbbf24' },
+                itemStyle: {
+                  color: (params) =>
+                    strip2d[params.dataIndex] && strip2d[params.dataIndex].ticker === selectedTicker
+                      ? '#fde68a' : '#fbbf24',
+                },
+                areaStyle: {
+                  color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: 'rgba(251, 191, 36, 0.22)' },
+                    { offset: 1, color: 'rgba(0,0,0,0)' },
+                  ]),
+                },
+              },
+            ],
+          });
+          chart.on('click', (ev) => {
+            const p = strip2d[ev.dataIndex];
+            if (p && p.ticker) jump({ ticker: p.ticker });
+          });
+          charts.push(chart);
+        }
+
+        const elTenor = document.getElementById('commodity-tenor-2d');
+        if (elTenor && history2d.length) {
+          const chart = echarts.init(elTenor, null, { renderer: 'canvas' });
+          chart.setOption({
+            animationDuration: 280,
+            backgroundColor: 'transparent',
+            grid: { left: 52, right: 16, top: 18, bottom: 42 },
+            tooltip: {
+              ...tooltipBox,
+              formatter: (items) => {
+                const p = history2d[(items[0] || {}).dataIndex];
+                if (!p) return '';
+                return '<div style="margin-bottom:4px"><b>' + (p.ticker || selectedTicker) +
+                  '</b> · ' + p.as_of + '</div>settle <b>' +
+                  Number(p.settle).toFixed(4) + '</b>';
+              },
+            },
+            xAxis: {
+              type: 'category',
+              data: history2d.map((p) => p.as_of),
+              name: 'session',
+              nameLocation: 'middle',
+              nameGap: 28,
+              nameTextStyle: { color: axis.color, fontSize: 11 },
+              axisLabel: {
+                color: axis.color, fontSize: 10, rotate: 40,
+                interval: Math.max(0, Math.floor(history2d.length / 6) - 1),
+              },
+              axisLine: { lineStyle: { color: axis.line } },
+              axisTick: { show: false },
+            },
+            yAxis: {
+              type: 'value', scale: true, name: 'settle',
+              nameTextStyle: { color: axis.color, fontSize: 11 },
+              axisLabel: { color: axis.color, fontSize: 10 },
+              splitLine: { lineStyle: { color: axis.split } },
+              axisLine: { show: false },
+            },
+            series: [
+              {
+                type: 'line',
+                data: history2d.map((p) => p.settle),
+                showSymbol: history2d.length <= 80,
+                symbolSize: (value, params) =>
+                  history2d[params.dataIndex] && history2d[params.dataIndex].as_of === selectedAsOf ? 10 : 5,
+                lineStyle: { width: 2.1, color: '#22d3ee' },
+                itemStyle: {
+                  color: (params) =>
+                    history2d[params.dataIndex] && history2d[params.dataIndex].as_of === selectedAsOf
+                      ? '#a5f3fc' : '#22d3ee',
+                },
+                areaStyle: {
+                  color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: 'rgba(34, 211, 238, 0.20)' },
+                    { offset: 1, color: 'rgba(0,0,0,0)' },
+                  ]),
+                },
+                markPoint: selectedAsOf ? {
+                  symbol: 'diamond',
+                  symbolSize: 11,
+                  itemStyle: { color: '#a5f3fc' },
+                  data: history2d
+                    .filter((p) => p.as_of === selectedAsOf)
+                    .map((p) => ({ coord: [p.as_of, p.settle] })),
+                } : undefined,
+              },
+            ],
+          });
+          chart.on('click', (ev) => {
+            const p = history2d[ev.dataIndex];
+            if (p && p.as_of) jump({ as_of: p.as_of });
+          });
+          charts.push(chart);
+        }
+
+        const resize = () => charts.forEach((c) => c.resize());
+        window.addEventListener('resize', resize);
+        requestAnimationFrame(resize);
       })();
     </script>
   {% endif %}

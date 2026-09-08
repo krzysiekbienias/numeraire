@@ -35,4 +35,35 @@ struct DailyCloseObservation {
         std::optional<std::string_view> trade_status = std::string_view{"LIVE"},
         std::optional<std::string_view> portfolio_id = std::nullopt);
 
+/// A booked underlying together with the asset class it belongs to.
+struct BookUnderlying {
+    std::string underlying_id;
+    /// `products.asset_kind`, e.g. 'EQUITY' or 'COMMODITY'. Decides how history is
+    /// sourced: one close series per equity, a pillar strip per commodity curve.
+    std::string asset_kind;
+};
+
+/// Same selection as `ListDistinctBookUnderlyingIds`, carrying `products.asset_kind`.
+[[nodiscard]] std::vector<BookUnderlying> ListBookUnderlyings(
+        const std::string& database_file_path,
+        std::optional<std::string_view> trade_status = std::string_view{"LIVE"},
+        std::optional<std::string_view> portfolio_id = std::nullopt);
+
+/// A dated futures contract referenced by a booked leg.
+struct BookFuturesContract {
+    std::string contract_ticker;
+    std::string product_code;
+    std::string settlement_date;
+};
+
+/// Distinct futures contracts booked in `portfolio_id`, ordered by ticker.
+///
+/// Lighter than loading priceable legs, which is what lets a simulation decide which
+/// contracts to carry as risk factors before the factor set those legs will bind to
+/// exists.
+[[nodiscard]] std::vector<BookFuturesContract> ListBookFuturesContracts(
+        const std::string& database_file_path,
+        std::string_view portfolio_id,
+        std::optional<std::string_view> trade_status = std::string_view{"LIVE"});
+
 }  // namespace numeraire::database

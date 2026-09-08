@@ -13,11 +13,13 @@ ScenarioSliceMarketData::ScenarioSliceMarketData(
         const ScenarioBuffer& buffer,
         const ExposureTimeGrid& time_grid,
         const std::unordered_map<std::string, std::size_t>& factor_by_underlying,
-        PathPricingMarketConfig market_config)
+        PathPricingMarketConfig market_config,
+        const CommodityCurveResolver* commodity_curves)
     : buffer_(buffer),
       time_grid_(time_grid),
       factor_by_underlying_(factor_by_underlying),
-      market_config_(std::move(market_config)) {
+      market_config_(std::move(market_config)),
+      commodity_curves_(commodity_curves) {
     if (buffer.NumSteps() != time_grid.NumSteps()) {
         throw ValidationError("ScenarioSliceMarketData: buffer steps must match time_grid.NumSteps().");
     }
@@ -44,11 +46,28 @@ const schedule::Date& ScenarioSliceMarketData::ValuationDate() const {
 double ScenarioSliceMarketData::Spot(const std::string_view underlying_id) const {
     const std::string key(underlying_id);
     const auto it = factor_by_underlying_.find(key);
-    if (it == factor_by_underlying_.end()) {
-        throw MarketDataError("ScenarioSliceMarketData: unknown underlying \"" + key +
-                              "\" (not in calibration factor set).");
+    if (it != factor_by_underlying_.end()) {
+        return buffer_.At(it->second, step_, path_);
     }
-    return buffer_.At(it->second, step_, path_);
+
+    // A dated futures contract is not a factor of its own; it is carried by the
+    // constant-maturity pillars it currently sits between. Log-linear in maturity,
+    // which keeps the level positive and preserves the curve's contango shape.
+    if (commodity_curves_ != nullptr) {
+        if (const std::vector<PillarBlend>* blends = commodity_curves_->Find(underlying_id)) {
+            const PillarBlend& blend = (*blends)[step_];
+            const double lower = buffer_.At(blend.lower_factor, step_, path_);
+            if (blend.upper_weight <= 0.0) {
+                return lower;
+            }
+            const double upper = buffer_.At(blend.upper_factor, step_, path_);
+            return std::exp(((1.0 - blend.upper_weight) * std::log(lower)) +
+                            (blend.upper_weight * std::log(upper)));
+        }
+    }
+
+    throw MarketDataError("ScenarioSliceMarketData: unknown underlying \"" + key +
+                          "\" (not in calibration factor set).");
 }
 
 double ScenarioSliceMarketData::RiskFreeRate() const {

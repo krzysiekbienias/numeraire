@@ -5,9 +5,9 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-#include <numeraire/database/historical_calibration_eod_read.hpp>
-#include <numeraire/database/historical_calibration_types.hpp>
-#include <numeraire/database/sqlite_historical_calibration_repository.hpp>
+#include <numeraire/database/calibration_snapshot_read.hpp>
+#include <numeraire/database/calibration_types.hpp>
+#include <numeraire/database/sqlite_calibration_repository.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/exposure_time_grid.hpp>
 #include <numeraire/simulation/gbm_evolution.hpp>
@@ -21,13 +21,13 @@ namespace fs = std::filesystem;
 
 namespace {
 
-using numeraire::database::HasHistoricalCalibrationEod;
-using numeraire::database::HistoricalCalibrationCholeskyWrite;
-using numeraire::database::HistoricalCalibrationCorrelationWrite;
-using numeraire::database::HistoricalCalibrationFactorWrite;
-using numeraire::database::HistoricalCalibrationHeaderWrite;
-using numeraire::database::SqliteHistoricalCalibrationRepository;
-using numeraire::database::TryLoadLatestHistoricalCalibrationEod;
+using numeraire::database::HasCalibrationSnapshot;
+using numeraire::database::CalibrationCholeskyWrite;
+using numeraire::database::CalibrationCorrelationWrite;
+using numeraire::database::CalibrationFactorWrite;
+using numeraire::database::CalibrationHeaderWrite;
+using numeraire::database::SqliteCalibrationRepository;
+using numeraire::database::TryLoadLatestCalibrationSnapshot;
 using numeraire::schedule::ParseIsoDate;
 using numeraire::simulation::BuildExposureTimeGrid;
 using numeraire::simulation::EvolveMultiFactorGbm;
@@ -56,31 +56,33 @@ void UpsertTwoFactorSnapshot(const fs::path& path,
                              const std::string& scope_key,
                              const std::string& as_of,
                              const double rho) {
-    SqliteHistoricalCalibrationRepository repo(path.string());
+    SqliteCalibrationRepository repo(path.string());
 
-    HistoricalCalibrationHeaderWrite header{};
+    CalibrationHeaderWrite header{};
     header.scope_key = scope_key;
     header.as_of = as_of;
     header.history_start = "2024-01-16";
     header.history_end = as_of;
     header.lookback_calendar_days = 504;
     header.min_return_observations = 60;
+    header.vol_annualization_days = 252;
+    header.eod_adjusted = 1;
     header.num_factors = 2;
     header.num_return_observations = 120;
     header.batch_run_id = "ut-" + scope_key + "-" + as_of;
 
-    const std::vector<HistoricalCalibrationFactorWrite> factors{
-            {.factor_index = 0, .underlying_id = "AAPL", .spot_as_of = 190.0, .volatility = 0.22},
-            {.factor_index = 1, .underlying_id = "MSFT", .spot_as_of = 420.0, .volatility = 0.18},
+    const std::vector<CalibrationFactorWrite> factors{
+            {.factor_index = 0, .factor_id = "AAPL", .factor_level = 190.0, .volatility = 0.22},
+            {.factor_index = 1, .factor_id = "MSFT", .factor_level = 420.0, .volatility = 0.18},
     };
-    const std::vector<HistoricalCalibrationCorrelationWrite> correlations{
+    const std::vector<CalibrationCorrelationWrite> correlations{
             {.factor_i = 0, .factor_j = 0, .rho = 1.0},
             {.factor_i = 0, .factor_j = 1, .rho = rho},
             {.factor_i = 1, .factor_j = 1, .rho = 1.0},
     };
     const double l10 = rho;
     const double l11 = std::sqrt(std::max(0.0, 1.0 - (rho * rho)));
-    const std::vector<HistoricalCalibrationCholeskyWrite> cholesky{
+    const std::vector<CalibrationCholeskyWrite> cholesky{
             {.row_i = 0, .col_j = 0, .l_value = 1.0},
             {.row_i = 1, .col_j = 0, .l_value = l10},
             {.row_i = 1, .col_j = 1, .l_value = l11},
@@ -90,7 +92,7 @@ void UpsertTwoFactorSnapshot(const fs::path& path,
 
 }  // namespace
 
-TEST(HistoricalCalibrationEodReadTest, LoadsLatestOnOrBeforeAsOf) {
+TEST(CalibrationSnapshotReadTest, LoadsLatestOnOrBeforeAsOf) {
     const fs::path path = UniqueSqlitePath();
     {
         SQLite::Database db(path.string(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
@@ -99,16 +101,16 @@ TEST(HistoricalCalibrationEodReadTest, LoadsLatestOnOrBeforeAsOf) {
     UpsertTwoFactorSnapshot(path, "ALL", "2026-06-01", 0.70);
     UpsertTwoFactorSnapshot(path, "ALL", "2026-06-18", 0.80);
 
-    EXPECT_TRUE(HasHistoricalCalibrationEod(path.string(), "ALL", "2026-06-01"));
-    EXPECT_FALSE(HasHistoricalCalibrationEod(path.string(), "ALL", "2026-05-31"));
+    EXPECT_TRUE(HasCalibrationSnapshot(path.string(), "ALL", "2026-06-01"));
+    EXPECT_FALSE(HasCalibrationSnapshot(path.string(), "ALL", "2026-05-31"));
 
-    const auto june_mid = TryLoadLatestHistoricalCalibrationEod(path.string(), "ALL", "2026-06-15");
+    const auto june_mid = TryLoadLatestCalibrationSnapshot(path.string(), "ALL", "2026-06-15");
     ASSERT_TRUE(june_mid.has_value());
     EXPECT_EQ(june_mid->as_of, "2026-06-01");
     EXPECT_EQ(june_mid->factor_ids.size(), 2U);
     EXPECT_NEAR(june_mid->correlation[2], 0.70, 1.0e-9);
 
-    const auto june_end = TryLoadLatestHistoricalCalibrationEod(path.string(), "ALL", "2026-06-18");
+    const auto june_end = TryLoadLatestCalibrationSnapshot(path.string(), "ALL", "2026-06-18");
     ASSERT_TRUE(june_end.has_value());
     EXPECT_EQ(june_end->as_of, "2026-06-18");
     EXPECT_NEAR(june_end->correlation[2], 0.80, 1.0e-9);
@@ -152,7 +154,7 @@ TEST(HistoricalCalibrationLoaderTest, BuildsGbmSpecAndEvolvesPaths) {
         EXPECT_GT(buffer.At(1, grid.NumSteps() - 1, mc_path), 0.0);
     }
 
-    const auto read = TryLoadLatestHistoricalCalibrationEod(path.string(), "BOOK_1", "2026-06-30");
+    const auto read = TryLoadLatestCalibrationSnapshot(path.string(), "BOOK_1", "2026-06-30");
     ASSERT_TRUE(read.has_value());
     const auto round_trip = ToHistoricalCalibrationResult(*read);
     EXPECT_EQ(round_trip.factor_ids, calibration->factor_ids);

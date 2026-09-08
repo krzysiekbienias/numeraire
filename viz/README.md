@@ -83,6 +83,8 @@ from numeraire_viz import (
     plot_scenario_paths_grid,
 )
 
+# Defaults to model="gbm", source="historical"; pass both to pick another
+# snapshot stored for the same scope and date, e.g. ("gabillon_2f", "implied").
 header, factors, corr = load_historical_calibration("BOOK_1", valuation_as_of="2026-06-15")
 matrix, labels = correlation_matrix_from_sparse(factors, corr)
 plot_calibration_overview(header, factors, matrix, labels)

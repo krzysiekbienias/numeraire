@@ -20,8 +20,9 @@ add_library(numeraire_database STATIC
         par_curve_quote_loader.cpp
         sqlite_discount_curve_repository.cpp
         sqlite_discount_curve_eod_read.cpp
-        sqlite_historical_calibration_repository.cpp
-        historical_calibration_eod_read.cpp
+        sqlite_calibration_repository.cpp
+        calibration_snapshot_read.cpp
+        futures_pillar_returns.cpp
         vol_surface_eod_builder.cpp
         vol_surface_quote_loader.cpp
 )
