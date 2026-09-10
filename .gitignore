@@ -111,3 +111,6 @@ scripts/backfill_exposure_dev.sh
 
 # ---- exports ---
 exports
+
+# ----- xlsx ---
+*.xlsx
