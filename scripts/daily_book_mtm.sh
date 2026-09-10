@@ -2,10 +2,10 @@
 # ============================================================================
 # Numeraire++ — daily book MTM (Hetzner / cron)
 #
-# End-of-day mark-to-market for LIVE trades only, then CCR exposure
-# (scripts/daily_book_exposure.sh) for each LIVE portfolio. No Polygon ingest,
-# no booking (--price-booking is manual). Market data must already be in SQLite
-# from scripts/daily_market_prep.sh.
+# End-of-day mark-to-market for LIVE trades only. No Polygon ingest, no booking
+# (--price-booking is manual), no CCR. Market data must already be in SQLite
+# from scripts/daily_market_prep.sh. EE/PFE is a separate cron:
+# scripts/daily_book_exposure.sh (same as_of, after this job).
 #
 # Usage:
 #   /opt/numeraire/dev/scripts/daily_book_mtm.sh
@@ -18,7 +18,6 @@
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)
 #   NUMERAIRE_AS_OF_LAG_DAYS=1
 #   NUMERAIRE_DB_PATH=db.sqlite3
-#   NUMERAIRE_SKIP_EXPOSURE=1        MTM only (skip simulate / EE-PFE persist)
 #   NUMERAIRE_DRY_RUN=1
 # ============================================================================
 set -euo pipefail
@@ -133,13 +132,6 @@ main() {
     log "MTM EOD: spot/vol/rate from DB (run daily_market_prep first)"
     run_cmd env NUMERAIRE_DEV_SPOT_SOURCE=db NUMERAIRE_DEV_VOL_SOURCE=db NUMERAIRE_DEV_RATE_SOURCE=db \
         "${DEV_MAIN}" --as-of "${as_of}" --trades-json "${_TRADES_JSON}"
-
-    log "daily_book_mtm MTM finished as_of=${as_of} trades=${#live_ids[@]}"
-
-    # Same as_of: EE / PFE into trade_leg_exposure_eod (not raw MC paths).
-    export NUMERAIRE_AS_OF="${as_of}"
-    export NUMERAIRE_DB_PATH="${DB_PATH}"
-    "${REPO_ROOT}/scripts/daily_book_exposure.sh"
 
     log "daily_book_mtm done as_of=${as_of} trades=${#live_ids[@]}"
 }

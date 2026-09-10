@@ -6,13 +6,17 @@
 # (95% and 97.5%) to trade_leg_exposure_eod. Raw MC paths are not written to
 # SQLite (optional CSV dumps via NUMERAIRE_DUMP_* only).
 #
-# Intended to run from daily_book_mtm.sh (same as_of). Can also be invoked alone,
-# but persist is refused unless every LIVE leg in the book already has official
-# FO MTM on that as_of (holiday / missing settle → no EE/PFE).
+# Own cron job, after daily_book_mtm.sh (same as_of). Persist is refused unless
+# every LIVE leg in the book already has official FO MTM on that as_of
+# (holiday / missing settle → no EE/PFE).
 #
 # Usage:
 #   /opt/numeraire/dev/scripts/daily_book_exposure.sh
 #   NUMERAIRE_AS_OF=2026-06-01 ./scripts/daily_book_exposure.sh
+#
+# Cron example (after daily_book_mtm, e.g. 06:30 UTC Tue–Sat):
+#   30 6 * * 2-6 cd /opt/numeraire/dev && ./scripts/daily_book_exposure.sh >> /var/log/numeraire-exposure.log 2>&1
+# Also tees to /var/log/numeraire-exposure-<as_of>.log (session date).
 #
 # Environment:
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)
@@ -30,6 +34,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 DEV_MAIN="${REPO_ROOT}/${BUILD_DIR}/dev_main"
 DB_PATH="${NUMERAIRE_DB_PATH:-${REPO_ROOT}/db.sqlite3}"
+
+# shellcheck source=lib_cron_log.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_cron_log.sh"
 
 log() {
     printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -96,8 +103,6 @@ resolve_books() {
 }
 
 main() {
-    log "daily_book_exposure start repo=${REPO_ROOT}"
-
     if [[ "${NUMERAIRE_SKIP_EXPOSURE:-0}" == "1" ]]; then
         log "NUMERAIRE_SKIP_EXPOSURE=1 — skipping exposure (exit 0)"
         exit 0
@@ -112,6 +117,8 @@ main() {
 
     local as_of
     as_of="$(resolve_as_of)"
+    numeraire_tee_as_of_log exposure "${as_of}"
+    log "daily_book_exposure start repo=${REPO_ROOT}"
     log "as_of=${as_of} db=${DB_PATH}"
 
     local -a books=()

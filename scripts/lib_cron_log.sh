@@ -1,4 +1,4 @@
-# Sourced by daily_market_prep.sh / daily_book_mtm.sh.
+# Sourced by daily_market_prep.sh / daily_book_mtm.sh / daily_book_exposure.sh.
 # After as_of is known, duplicate stdout/stderr to
 #   $NUMERAIRE_LOG_DIR/numeraire-<kind>-<as_of>.log
 # Cron still redirects to the undated numeraire-<kind>.log.

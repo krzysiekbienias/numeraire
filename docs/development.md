@@ -136,7 +136,7 @@ WHERE t.trade_id = 'TRD_10004';
 | 3 | `dev_main --price-booking` + mutual exclusion with `--as-of` | **Shipped** |
 | 4 | Rules + repo UT (`trade_booking_rules`, booking repository) | **Shipped** |
 | 5 | [`README.md`](../README.md) § *dev_main* — booking row in capabilities table | Planned |
-| 6 | Hetzner daily cron — [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) + [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **Shipped** (crontab on host is manual) |
+| 6 | Hetzner daily cron — [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) + [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) + [`daily_book_exposure.sh`](../scripts/daily_book_exposure.sh) | **Shipped** (crontab on host is manual) |
 
 ### PnL on MTM rows (next)
 
@@ -154,14 +154,15 @@ WHERE t.trade_id = 'TRD_10004';
 
 ## Daily jobs (Hetzner / cron)
 
-Two cron jobs (booking is **manual** in `dev_main`, not cron):
+Three cron jobs (booking is **manual** in `dev_main`, not cron):
 
 | Script | Role |
 |--------|------|
 | [`daily_market_prep.sh`](../scripts/daily_market_prep.sh) | **All Polygon ingest** — `market_data_prep_scope` + equity catch-up for book underlyings not in scope |
-| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **Risk engine** — FO MTM for `LIVE` trades, then CCR exposure via [`daily_book_exposure.sh`](../scripts/daily_book_exposure.sh) (`--simulate --price-paths --persist-exposure` → `trade_leg_exposure_eod`: EE, PFE 95%, PFE 97.5%). Persist is refused unless every LIVE leg already has official MTM on that `as_of`. |
+| [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) | **FO MTM** for `LIVE` trades (`trade_leg_mtm_eod`). No ingest, no CCR. |
+| [`daily_book_exposure.sh`](../scripts/daily_book_exposure.sh) | **CCR** after MTM — `--simulate --price-paths --persist-exposure` → `trade_leg_exposure_eod` (EE, PFE 95%, PFE 97.5%). Persist is refused unless every LIVE leg already has official MTM on that `as_of`. |
 
-[`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) is **deprecated** (wrapper: prep → book MTM → exposure).
+[`daily_dev_eod.sh`](../scripts/daily_dev_eod.sh) is **deprecated** (wrapper: prep → MTM → exposure).
 
 **`as_of` default:** `NUMERAIRE_AS_OF_LAG_DAYS` calendar days ago (default **1** in scripts, UTC). Override: `NUMERAIRE_AS_OF=YYYY-MM-DD`. US holidays are not skipped.
 
@@ -172,9 +173,10 @@ cd /opt/numeraire/dev
 ./scripts/build.sh Release
 NUMERAIRE_DRY_RUN=1 ./scripts/daily_market_prep.sh
 NUMERAIRE_DRY_RUN=1 ./scripts/daily_book_mtm.sh
-./scripts/daily_market_prep.sh    # needs POLYGON_API_KEY in .env
-./scripts/daily_book_mtm.sh       # after prep; MTM then exposure (needs GBM calibration per book)
-NUMERAIRE_SKIP_EXPOSURE=1 ./scripts/daily_book_mtm.sh   # MTM only
+NUMERAIRE_DRY_RUN=1 ./scripts/daily_book_exposure.sh
+./scripts/daily_market_prep.sh      # needs POLYGON_API_KEY in .env
+./scripts/daily_book_mtm.sh         # after prep; LIVE FO MTM
+./scripts/daily_book_exposure.sh    # after MTM; EE/PFE (needs GBM calibration per book)
 ```
 
 ### Cron install (example)
@@ -189,11 +191,12 @@ sudo crontab -e
 ```cron
 0 4 * * 2-6 /opt/numeraire/dev/scripts/daily_market_prep.sh >> /var/log/numeraire-prep.log 2>&1
 0 6 * * 2-6 /opt/numeraire/dev/scripts/daily_book_mtm.sh >> /var/log/numeraire-mtm.log 2>&1
+30 6 * * 2-6 /opt/numeraire/dev/scripts/daily_book_exposure.sh >> /var/log/numeraire-exposure.log 2>&1
 ```
 
-Keep those stable paths (`numeraire-prep.log` / `numeraire-mtm.log` = latest run). The scripts also tee to **`numeraire-prep-<as_of>.log`** / **`numeraire-mtm-<as_of>.log`** so `lnav` on a dated name matches the session in the file. Install [`scripts/logrotate.d/numeraire`](../scripts/logrotate.d/numeraire) as `/etc/logrotate.d/numeraire`: undated files are emptied nightly (no `dateext`). As_of slices are left as-is for `lnav`.
+Keep those stable paths (`numeraire-prep.log` / `numeraire-mtm.log` / `numeraire-exposure.log` = latest run). The scripts also tee to **`numeraire-{prep,mtm,exposure}-<as_of>.log`** so `lnav` on a dated name matches the session in the file. Install [`scripts/logrotate.d/numeraire`](../scripts/logrotate.d/numeraire) as `/etc/logrotate.d/numeraire`: undated files are emptied nightly (no `dateext`). As_of slices are left as-is for `lnav`.
 
-Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). Risk job: `LIVE` MTM, then EE/PFE into [`trade_leg_exposure_eod`](../sql/schema_v1.sql) (requires prior `--calibrate-historical-gbm` for each portfolio).
+Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). MTM writes `LIVE` marks; exposure then writes EE/PFE into [`trade_leg_exposure_eod`](../sql/schema_v1.sql) (requires prior `--calibrate-historical-gbm` for each portfolio).
 
 Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …
 
@@ -201,11 +204,11 @@ Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, 
 
 | Variable | Script | Effect |
 |----------|--------|--------|
-| `NUMERAIRE_AS_OF_LAG_DAYS` | both | when `NUMERAIRE_AS_OF` unset |
+| `NUMERAIRE_AS_OF_LAG_DAYS` | prep / MTM / exposure | when `NUMERAIRE_AS_OF` unset |
 | `NUMERAIRE_PREP_SKIP_BOOK_EQUITY` | prep | `1` = skip book equity catch-up |
-| `NUMERAIRE_SKIP_EXPOSURE` | MTM | `1` = skip CCR simulate after MTM |
+| `NUMERAIRE_SKIP_EXPOSURE` | exposure | `1` = no-op exit 0 (do not run MC) |
 | `NUMERAIRE_SIM_BOOK` / `NUMERAIRE_SIM_BOOKS` | exposure | override LIVE portfolio discovery |
-| `NUMERAIRE_DRY_RUN` | both | `1` = log commands only |
+| `NUMERAIRE_DRY_RUN` | prep / MTM / exposure | `1` = log commands only |
 
 ### Manual backfill (gaps)
 
@@ -227,12 +230,13 @@ for d in 2026-05-20 2026-05-21; do
 done
 ```
 
-**Full day** (prep + MTM):
+**Full day** (prep + MTM + exposure):
 
 ```bash
 for d in 2026-05-20 2026-05-21; do
   NUMERAIRE_AS_OF=$d ./scripts/daily_market_prep.sh
   NUMERAIRE_AS_OF=$d ./scripts/daily_book_mtm.sh
+  NUMERAIRE_AS_OF=$d ./scripts/daily_book_exposure.sh
 done
 ```
 
