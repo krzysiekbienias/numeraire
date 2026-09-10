@@ -12,6 +12,7 @@
 #
 # Cron example (after daily_market_prep, e.g. 06:00 UTC Tue–Sat):
 #   0 6 * * 2-6 cd /opt/numeraire/dev && ./scripts/daily_book_mtm.sh >> /var/log/numeraire-mtm.log 2>&1
+# Also tees to /var/log/numeraire-mtm-<as_of>.log (session date, not rotation date).
 #
 # Environment:
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)
@@ -28,6 +29,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 DEV_MAIN="${REPO_ROOT}/${BUILD_DIR}/dev_main"
 DB_PATH="${NUMERAIRE_DB_PATH:-${REPO_ROOT}/db.sqlite3}"
+
+# shellcheck source=lib_cron_log.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_cron_log.sh"
 
 log() {
     printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -97,8 +101,6 @@ write_live_trades_json() {
 }
 
 main() {
-    log "daily_book_mtm start repo=${REPO_ROOT}"
-
     if [[ ! -x "${DEV_MAIN}" ]]; then
         die "dev_main not found: ${DEV_MAIN} (run scripts/build.sh)"
     fi
@@ -108,6 +110,8 @@ main() {
 
     local as_of
     as_of="$(resolve_as_of)"
+    numeraire_tee_as_of_log mtm "${as_of}"
+    log "daily_book_mtm start repo=${REPO_ROOT}"
     log "as_of=${as_of} db=${DB_PATH}"
 
     local -a live_ids=()

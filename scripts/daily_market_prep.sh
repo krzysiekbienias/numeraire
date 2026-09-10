@@ -23,6 +23,7 @@
 #
 # Cron example (e.g. 04:00 UTC Tue–Sat, before MTM at 06:00):
 #   0 4 * * 2-6 cd /opt/numeraire/dev && ./scripts/daily_market_prep.sh >> /var/log/numeraire-prep.log 2>&1
+# Also tees to /var/log/numeraire-prep-<as_of>.log (session date, not rotation date).
 #
 # Environment:
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)
@@ -44,6 +45,9 @@ BUILD_DIR="${BUILD_DIR:-build}"
 DEV_MAIN="${REPO_ROOT}/${BUILD_DIR}/dev_main"
 DB_PATH="${NUMERAIRE_DB_PATH:-${REPO_ROOT}/db.sqlite3}"
 GRID_CONFIG="${NUMERAIRE_GRID_CONFIG:-configs/option_universe_grid.json}"
+
+# shellcheck source=lib_cron_log.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_cron_log.sh"
 
 log() {
     printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -403,8 +407,6 @@ run_commodity_futures_ingest() {
 }
 
 main() {
-    log "daily_market_prep start repo=${REPO_ROOT}"
-
     if [[ ! -x "${DEV_MAIN}" ]]; then
         die "dev_main not found: ${DEV_MAIN} (run scripts/build.sh)"
     fi
@@ -417,6 +419,8 @@ main() {
 
     local as_of
     as_of="$(resolve_as_of)"
+    numeraire_tee_as_of_log prep "${as_of}"
+    log "daily_market_prep start repo=${REPO_ROOT}"
     log "as_of=${as_of} db=${DB_PATH} grid=${GRID_CONFIG}"
 
     local count=0

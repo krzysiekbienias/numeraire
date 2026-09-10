@@ -191,6 +191,8 @@ sudo crontab -e
 0 6 * * 2-6 /opt/numeraire/dev/scripts/daily_book_mtm.sh >> /var/log/numeraire-mtm.log 2>&1
 ```
 
+Keep those stable paths (`numeraire-prep.log` / `numeraire-mtm.log` = latest run). The scripts also tee to **`numeraire-prep-<as_of>.log`** / **`numeraire-mtm-<as_of>.log`** so `lnav` on a dated name matches the session in the file. Install [`scripts/logrotate.d/numeraire`](../scripts/logrotate.d/numeraire) as `/etc/logrotate.d/numeraire`: undated files are emptied nightly (no `dateext`). As_of slices are left as-is for `lnav`.
+
 Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). Risk job: `LIVE` MTM, then EE/PFE into [`trade_leg_exposure_eod`](../sql/schema_v1.sql) (requires prior `--calibrate-historical-gbm` for each portfolio).
 
 Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, …
