@@ -12,7 +12,7 @@
 #
 # Cron example (after daily_market_prep, e.g. 06:00 UTC Tue–Sat):
 #   0 6 * * 2-6 cd /opt/numeraire/dev && ./scripts/daily_book_mtm.sh >> /var/log/numeraire-mtm.log 2>&1
-# Also tees to /var/log/numeraire-mtm-<as_of>.log (session date, not rotation date).
+# Also tees to archive/numeraire-mtm-<as_of>.log (session date; see lib_cron_log.sh).
 #
 # Environment:
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)

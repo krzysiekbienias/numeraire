@@ -194,7 +194,7 @@ sudo crontab -e
 30 6 * * 2-6 /opt/numeraire/dev/scripts/daily_book_exposure.sh >> /var/log/numeraire-exposure.log 2>&1
 ```
 
-Keep those stable paths (`numeraire-prep.log` / `numeraire-mtm.log` / `numeraire-exposure.log` = latest run). The scripts also tee to **`numeraire-{prep,mtm,exposure}-<as_of>.log`** so `lnav` on a dated name matches the session in the file. Install [`scripts/logrotate.d/numeraire`](../scripts/logrotate.d/numeraire) as `/etc/logrotate.d/numeraire`: undated files are emptied nightly (no `dateext`). As_of slices are left as-is for `lnav`.
+Keep those stable undated paths (`numeraire-prep.log` / `numeraire-mtm.log` / `numeraire-exposure.log` = latest run, emptied nightly). Session slices go to an **archive** dir so the live folder stays three files: Hetzner `/var/log/numeraire-archive/numeraire-{prep,mtm,exposure}-<as_of>.log`; prod `$NUMERAIRE_LOG_DIR/archive/…` (override with `NUMERAIRE_AS_OF_LOG_DIR`). Install [`scripts/logrotate.d/numeraire`](../scripts/logrotate.d/numeraire) as `/etc/logrotate.d/numeraire`: undated files only (no `dateext`). `lnav` the archive path for a given session.
 
 Prep: [`market_data_prep_scope`](../sql/schema_v1.sql) + seed [`sql/seed_market_data_prep_scope.sql`](../sql/seed_market_data_prep_scope.sql). MTM writes `LIVE` marks; exposure then writes EE/PFE into [`trade_leg_exposure_eod`](../sql/schema_v1.sql) (requires prior `--calibrate-historical-gbm` for each portfolio).
 
@@ -209,6 +209,8 @@ Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, 
 | `NUMERAIRE_SKIP_EXPOSURE` | exposure | `1` = no-op exit 0 (do not run MC) |
 | `NUMERAIRE_SIM_BOOK` / `NUMERAIRE_SIM_BOOKS` | exposure | override LIVE portfolio discovery |
 | `NUMERAIRE_DRY_RUN` | prep / MTM / exposure | `1` = log commands only |
+| `NUMERAIRE_LOG_DIR` | tee | undated parent (default `/var/log`); as_of archive is `$LOG_DIR/archive` unless `LOG_DIR=/var/log` |
+| `NUMERAIRE_AS_OF_LOG_DIR` | tee | override archive dir for `numeraire-<kind>-<as_of>.log` |
 
 ### Manual backfill (gaps)
 

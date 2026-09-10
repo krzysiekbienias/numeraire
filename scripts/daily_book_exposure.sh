@@ -16,7 +16,7 @@
 #
 # Cron example (after daily_book_mtm, e.g. 06:30 UTC Tue–Sat):
 #   30 6 * * 2-6 cd /opt/numeraire/dev && ./scripts/daily_book_exposure.sh >> /var/log/numeraire-exposure.log 2>&1
-# Also tees to /var/log/numeraire-exposure-<as_of>.log (session date).
+# Also tees to archive/numeraire-exposure-<as_of>.log (session date; see lib_cron_log.sh).
 #
 # Environment:
 #   NUMERAIRE_AS_OF=YYYY-MM-DD       session date (default: last Mon–Fri, UTC lag)
