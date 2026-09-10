@@ -12,6 +12,9 @@ only missing listed rows (source=cme_manual). Never updates existing EOD.
   python3 scripts/parse_cme_manual_settles.py
   python3 scripts/parse_cme_manual_settles.py --sheets CL,NG
   python3 scripts/parse_cme_manual_settles.py --apply
+
+Dev only. To copy those rows onto prod (not the book DB), see
+scripts/sync_cme_manual_settles.py (export JSON → scp → import --apply).
 """
 
 from __future__ import annotations
