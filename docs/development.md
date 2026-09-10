@@ -1,6 +1,6 @@
 # Numeraire++ — development progress
 
-Living document: **what shipped when**, stage naming, and gaps. For module design and diagrams see [`architecture.md`](architecture.md); for build/run instructions see [`README.md`](../README.md).
+Living document: **what shipped when**, stage naming, and gaps. For module design and diagrams see [`architecture.md`](architecture.md); for build/run instructions see [`README.md`](../README.md); for cron / logs / CME promote see [`devops.md`](devops.md).
 
 ---
 
@@ -154,7 +154,7 @@ WHERE t.trade_id = 'TRD_10004';
 
 ## Daily jobs (Hetzner / cron)
 
-Three cron jobs (booking is **manual** in `dev_main`, not cron):
+Three cron jobs (booking is **manual** in `dev_main`, not cron). **Live host times, logs, and CME promote:** [`devops.md`](devops.md).
 
 | Script | Role |
 |--------|------|
