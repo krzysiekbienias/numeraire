@@ -118,6 +118,29 @@ Each column is **0 or 1** per `scope_id` — not all-or-nothing.
 
 **Commodity futures:** after book catch-up, contracts + `1session` EOD for active `universe_instrument` COMMODITY rows with `ingest_futures_*` (`NUMERAIRE_PREP_SKIP_FUTURES=1` to disable).
 
+### CME manual settles (Massive gaps → prod)
+
+Both hosts run normal Massive ingest for listed front tenors. When the strip is incomplete (holiday window, far contracts), paste CME settlements into `configs/cme_manual_settles.xlsx` **on Hetzner only** and apply locally. Promote **those rows** to prod with a JSON dump (`source=cme_manual` only — never the whole SQLite, trades differ).
+
+```bash
+# 1) Dev — fill gaps in Hetzner SQLite
+python3 scripts/parse_cme_manual_settles.py              # dry-run
+python3 scripts/parse_cme_manual_settles.py --apply
+
+# 2) Dev — dump (optional --as-of YYYY-MM-DD)
+python3 scripts/sync_cme_manual_settles.py export --out /tmp/cme_manual.json
+
+# 3) You — copy the file (not git)
+scp /tmp/cme_manual.json ubuntu@PROD:/tmp/cme_manual.json
+
+# 4) Prod — insert missing only (Massive bars SKIP_HAVE)
+cd /opt/numeraire/prod
+python3 scripts/sync_cme_manual_settles.py import --from /tmp/cme_manual.json
+python3 scripts/sync_cme_manual_settles.py import --from /tmp/cme_manual.json --apply
+```
+
+Not a cron job. Re-run MTM on prod for that `as_of` if the official mark was blocked on a missing settle (`NUMERAIRE_AS_OF=… ./scripts/daily_book_mtm.sh`).
+
 **USD discount curve (global, before scope loop):** FRED par ingest + `--build-discount-curve-eod` with **`NUMERAIRE_FRED_AS_OF_LAG_DAYS=2`** (FRED T-2). Scope ingest uses **`NUMERAIRE_AS_OF_LAG_DAYS=1`** by default. Skip: `NUMERAIRE_PREP_SKIP_FRED_CURVE=1`.
 
 ## Par yield curve (FRED)

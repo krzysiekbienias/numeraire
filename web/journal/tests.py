@@ -147,6 +147,18 @@ class CalibrationHelpersTest(SimpleTestCase):
         self.assertEqual(fallback['curve'], 'CL')
 
 
+class LandingPageTests(TestCase):
+    def test_guest_landing_has_scattered_photos(self):
+        response = Client().get(reverse('journal:landing'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('nj-landing-collage', html)
+        for name in ('tanks.jpg', 'bars.jpg', 'code.jpg', 'desck.jpg'):
+            self.assertIn(name, html)
+        self.assertIn('Open Quant Lab', html)
+        self.assertIn('nj-landing-orbit', html)
+
+
 class JournalHubNavTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user('nav', password='nav-pass')
