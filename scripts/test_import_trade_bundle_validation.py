@@ -202,6 +202,105 @@ class ImportCalendarBundleTest(unittest.TestCase):
         finally:
             conn.close()
 
+
+class ImportCommodityForwardBundleTest(unittest.TestCase):
+    def test_forward_persists_strike_on_commodity_extension(self) -> None:
+        product = {
+            "product_id": "FWD_CFF_CL_CLX6_80_31",
+            "asset_kind": "COMMODITY",
+            "underlying_id": "CL",
+            "expiry_date": "2026-10-20",
+            "settlement": "CASH",
+            "currency": "USD",
+            "contract_size": 1000,
+            "day_count": "Actual365Fixed",
+            "calendar": "UnitedStates",
+        }
+        commodity = {
+            "instrument_type": "commodity_futures_forward",
+            "product_code": "CL",
+            "contract_ticker": "CLX6",
+            "settlement_date": "2026-10-20",
+            "multiplier": 1000,
+            "strike": 80.31,
+            "structured_params": {},
+        }
+        trade = {
+            "trade_id": "TRD_CFF_1",
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_FUTURES_FORWARD",
+            "trade_date": "2026-08-11",
+            "legs": [
+                {
+                    "direction": "LONG",
+                    "quantity": 1,
+                    "execution_price": None,
+                    "commission": 0,
+                }
+            ],
+        }
+        root = {"product": product, "commodity": commodity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_CFF_1.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            items, loaded, _notes = itb.load_bundle(path)
+
+        conn = sqlite3.connect(":memory:")
+        try:
+            _bootstrap_schema(conn)
+            itb.insert_items(conn, items, loaded)
+            row = conn.execute(
+                "SELECT instrument_type, strike, contract_ticker FROM products_commodity "
+                "WHERE product_id = ?",
+                ("FWD_CFF_CL_CLX6_80_31",),
+            ).fetchone()
+            self.assertEqual(row[0], "commodity_futures_forward")
+            self.assertAlmostEqual(row[1], 80.31)
+            self.assertEqual(row[2], "CLX6")
+        finally:
+            conn.close()
+
+    def test_forward_without_strike_is_rejected(self) -> None:
+        product = {
+            "product_id": "FWD_CFF_CL_CLX6",
+            "asset_kind": "COMMODITY",
+            "underlying_id": "CL",
+            "expiry_date": "2026-10-20",
+            "settlement": "CASH",
+            "currency": "USD",
+            "contract_size": 1000,
+            "day_count": "Actual365Fixed",
+            "calendar": "UnitedStates",
+        }
+        commodity = {
+            "instrument_type": "commodity_futures_forward",
+            "product_code": "CL",
+            "contract_ticker": "CLX6",
+            "settlement_date": "2026-10-20",
+            "multiplier": 1000,
+            "structured_params": {},
+        }
+        trade = {
+            "trade_id": "TRD_CFF_BAD",
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_FUTURES_FORWARD",
+            "trade_date": "2026-08-11",
+            "legs": [{"direction": "LONG", "quantity": 1, "execution_price": None}],
+        }
+        root = {"product": product, "commodity": commodity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_CFF_BAD.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                with self.assertRaises(SystemExit):
+                    items, loaded, _notes = itb.load_bundle(path)
+                    conn = sqlite3.connect(":memory:")
+                    _bootstrap_schema(conn)
+                    itb.insert_items(conn, items, loaded)
+            self.assertIn("commodity.strike", stderr.getvalue())
+
+
     def test_leg_product_id_must_belong_to_bundle(self) -> None:
         root = _calendar_root()
         root["trade"]["legs"][1]["product_id"] = "FUT_OUTRIGHT_CL_CLZ6"

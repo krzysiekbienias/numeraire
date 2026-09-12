@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS products_equity (
 CREATE TABLE IF NOT EXISTS products_commodity (
     product_id TEXT PRIMARY KEY,
     instrument_type TEXT NOT NULL,
-    -- e.g. commodity_futures_outright; later calendar/strip package or option_on_future
+    -- e.g. commodity_futures_outright, commodity_futures_forward; later option_on_future
     product_code TEXT NOT NULL,
     -- CL / GC / SI / NG — joins futures_product / universe_instrument.provider_symbol
     contract_ticker TEXT,

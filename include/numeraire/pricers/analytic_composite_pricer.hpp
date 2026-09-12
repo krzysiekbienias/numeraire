@@ -2,6 +2,7 @@
 
 #include <numeraire/core/ipricer.hpp>
 #include <numeraire/pricers/analytic_black_scholes_equity_pricer.hpp>
+#include <numeraire/pricers/analytic_commodity_futures_forward_pricer.hpp>
 #include <numeraire/pricers/analytic_forward_pricer.hpp>
 #include <numeraire/pricers/analytic_futures_outright_pricer.hpp>
 #include <numeraire/pricers/analytic_spot_pricer.hpp>
@@ -14,6 +15,7 @@ namespace numeraire::pricers {
 /// — equity / index spot → `AnalyticSpotPricer`
 /// — equity forwards → `AnalyticForwardPricer`
 /// — commodity futures outrights → `AnalyticFuturesOutrightPricer`
+/// — commodity futures forwards → `AnalyticCommodityFuturesForwardPricer`
 class AnalyticCompositePricer final : public core::IPricer {
    public:
     [[nodiscard]] numeraire::PricingEngineType EngineKind() const override;
@@ -26,6 +28,7 @@ class AnalyticCompositePricer final : public core::IPricer {
     AnalyticSpotPricer spots_{};
     AnalyticForwardPricer forwards_{};
     AnalyticFuturesOutrightPricer futures_outrights_{};
+    AnalyticCommodityFuturesForwardPricer commodity_forwards_{};
 };
 
 }  // namespace numeraire::pricers

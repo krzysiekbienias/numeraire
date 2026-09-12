@@ -1,6 +1,7 @@
 #include <numeraire/products/product_factory.hpp>
 
 #include <numeraire/enums/exercise_style.hpp>
+#include <numeraire/products/commodity_futures_forward_product.hpp>
 #include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/products/equity_asset_or_nothing_product.hpp>
 #include <numeraire/products/equity_cash_or_nothing_product.hpp>
@@ -292,7 +293,9 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromCommodityCatalog(
 
     const std::string type_key = NormalizeInstrumentTypeKey(
             product.catalog_instrument_type.value_or(commodity.instrument_type));
-    if (type_key != "commodityfuturesoutright" && type_key != "futuresoutright") {
+    const bool is_outright = type_key == "commodityfuturesoutright" || type_key == "futuresoutright";
+    const bool is_forward = type_key == "commodityfuturesforward" || type_key == "futuresforward";
+    if (!is_outright && !is_forward) {
         throw ValidationError("unsupported commodity instrument_type: " +
                               (product.catalog_instrument_type.has_value()
                                        ? *product.catalog_instrument_type
@@ -301,14 +304,14 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromCommodityCatalog(
 
     const std::string ticker = numeraire::utils::TrimCopy(commodity.contract_ticker);
     if (ticker.empty()) {
-        throw ValidationError("commodity futures outright requires contract_ticker");
+        throw ValidationError("commodity futures product requires contract_ticker");
     }
     const std::string product_code = numeraire::utils::TrimCopy(commodity.product_code);
     if (product_code.empty()) {
-        throw ValidationError("commodity futures outright requires product_code");
+        throw ValidationError("commodity futures product requires product_code");
     }
     if (trade_header == nullptr || numeraire::utils::TrimCopy(trade_header->trade_date).empty()) {
-        throw ValidationError("commodity futures outright requires trades.trade_date");
+        throw ValidationError("commodity futures product requires trades.trade_date");
     }
     const schedule::Date trade_date = schedule::ParseIsoDate(trade_header->trade_date);
 
@@ -318,13 +321,22 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromCommodityCatalog(
         expiry_iso = commodity.settlement_date;
     }
     if (!expiry_iso.has_value() || numeraire::utils::TrimCopy(*expiry_iso).empty()) {
-        throw ValidationError("commodity futures outright requires expiry_date or settlement_date");
+        throw ValidationError("commodity futures product requires expiry_date or settlement_date");
     }
     const schedule::Date expiry = schedule::ParseIsoDate(*expiry_iso);
     if (schedule::ToQuantLibDate(expiry) < schedule::ToQuantLibDate(trade_date)) {
         throw ValidationError("product " + product.product_id + ": expiry_date " + *expiry_iso +
                               " must be on or after trade_date " +
                               numeraire::utils::TrimCopy(trade_header->trade_date));
+    }
+
+    if (is_forward) {
+        const std::optional<double> strike = commodity.strike.has_value() ? commodity.strike : product.strike;
+        if (!strike.has_value() || !(*strike > 0.0)) {
+            throw ValidationError("commodity futures forward requires a positive strike K");
+        }
+        return std::make_unique<CommodityFuturesForwardProduct>(ticker, product_code, *strike, trade_date,
+                                                               expiry);
     }
 
     return std::make_unique<CommodityFuturesOutrightProduct>(ticker, product_code, trade_date, expiry);

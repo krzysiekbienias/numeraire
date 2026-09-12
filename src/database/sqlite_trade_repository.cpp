@@ -30,7 +30,7 @@ constexpr const char* kSelectCatalogSql =
         "p.contract_size, p.day_count, p.calendar, "
         "e.option_type, e.strike, e.instrument_type, e.exercise_style, e.structured_params, "
         "c.product_id, c.instrument_type, c.product_code, c.contract_ticker, c.settlement_date, "
-        "c.multiplier, c.structured_params "
+        "c.multiplier, c.structured_params, c.strike "
         "FROM trades t "
         "INNER JOIN trade_legs tl ON tl.trade_id = t.trade_id "
         "INNER JOIN products p ON p.product_id = tl.product_id "
@@ -74,6 +74,7 @@ enum class CatalogCol : int {
     kCommoditySettlementDate = 31,
     kCommodityMultiplier = 32,
     kCommodityStructuredParams = 33,
+    kCommodityStrike = 34,
 };
 
 [[nodiscard]] std::string NormalizeEnumKey(std::string s) {
@@ -260,11 +261,19 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
             commodity.multiplier =
                     st.getColumn(static_cast<int>(CatalogCol::kCommodityMultiplier)).getDouble();
         }
+        if (ColumnIsNull(st, static_cast<int>(CatalogCol::kCommodityStrike))) {
+            commodity.strike = std::nullopt;
+        } else {
+            commodity.strike = st.getColumn(static_cast<int>(CatalogCol::kCommodityStrike)).getDouble();
+        }
         row.commodity = std::move(commodity);
 
         if (!row.product.catalog_instrument_type.has_value() &&
             !row.commodity->instrument_type.empty()) {
             row.product.catalog_instrument_type = row.commodity->instrument_type;
+        }
+        if (!row.product.strike.has_value() && row.commodity->strike.has_value()) {
+            row.product.strike = row.commodity->strike;
         }
         if ((row.product.attributes_json.empty() || row.product.attributes_json == "{}") &&
             !ColumnIsNull(st, static_cast<int>(CatalogCol::kCommodityStructuredParams))) {

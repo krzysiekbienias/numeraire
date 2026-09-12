@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <string_view>
 
 namespace numeraire::database {
 
@@ -15,6 +16,41 @@ namespace {
     std::string out(status);
     std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) { return std::toupper(c); });
     return out;
+}
+
+[[nodiscard]] std::string NormalizeInstrumentTypeKey(std::string t) {
+    t = numeraire::utils::ToLowerAscii(numeraire::utils::TrimCopy(t));
+    t.erase(std::remove_if(t.begin(), t.end(),
+                           [](const unsigned char c) { return c == '_' || std::isspace(c) != 0; }),
+            t.end());
+    return t;
+}
+
+[[nodiscard]] bool IsLinearForwardInstrumentType(std::string_view raw) {
+    const std::string key = NormalizeInstrumentTypeKey(std::string{raw});
+    return key == "equityforward" || key == "forward" || key == "commodityfuturesforward" ||
+           key == "futuresforward";
+}
+
+[[nodiscard]] std::string LegInstrumentType(const TradeLegCatalogRow& row) {
+    if (row.product.catalog_instrument_type.has_value() &&
+        !row.product.catalog_instrument_type->empty()) {
+        return *row.product.catalog_instrument_type;
+    }
+    if (row.commodity.has_value()) {
+        return row.commodity->instrument_type;
+    }
+    return {};
+}
+
+[[nodiscard]] bool LegIsBooked(const TradeLegCatalogRow& row) {
+    if (row.leg.execution_price > 0.0) {
+        return true;
+    }
+    if (row.leg.execution_price < 0.0) {
+        return false;
+    }
+    return IsLinearForwardInstrumentType(LegInstrumentType(row));
 }
 
 }  // namespace
@@ -60,9 +96,10 @@ void RequireTradeLiveForMtm(const TradeHeaderDto& trade) {
 
 void RequireAllLegsBookedForMtm(const TradeCatalogBundle& bundle) {
     for (const TradeLegCatalogRow& row : bundle.legs) {
-        if (row.leg.execution_price <= 0.0) {
+        if (!LegIsBooked(row)) {
             throw ValidationError("trade " + bundle.trade.trade_id + ": leg " + row.leg.leg_id +
-                                  " has no booked execution_price (must be > 0 before MTM)");
+                                  " has no booked execution_price (must be > 0 before MTM, "
+                                  "or 0 for an ATM linear forward)");
         }
     }
 }
@@ -73,6 +110,18 @@ void RequireMtmAsOfNotBeforeTradeDate(const std::string_view as_of_iso, const Tr
         throw ValidationError("trade " + trade.trade_id + ": MTM as_of " + std::string{as_of_iso} +
                               " must not be before trade_date " + trade_date_iso);
     }
+}
+
+bool AllLegsBooked(const TradeCatalogBundle& bundle) {
+    if (bundle.legs.empty()) {
+        return false;
+    }
+    for (const TradeLegCatalogRow& row : bundle.legs) {
+        if (!LegIsBooked(row)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool AllLegExecutionPricesPositive(const TradeCatalogBundle& bundle) {

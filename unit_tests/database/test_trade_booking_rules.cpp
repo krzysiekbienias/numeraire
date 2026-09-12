@@ -51,6 +51,14 @@ TEST(TradeBookingRulesTest, MtmRequiresBookedLegs) {
     EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(live));
 }
 
+TEST(TradeBookingRulesTest, AtmLinearForwardCountsAsBooked) {
+    auto live = MakeBundle("LIVE", 0.0);
+    live.legs[0].product.catalog_instrument_type = std::string{"commodity_futures_forward"};
+    EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(live));
+    EXPECT_TRUE(numeraire::database::AllLegsBooked(live));
+    EXPECT_FALSE(numeraire::database::AllLegExecutionPricesPositive(live));
+}
+
 TEST(TradeBookingRulesTest, MtmAsOfNotBeforeTradeDate) {
     auto b = MakeBundle("LIVE", 1.0);
     EXPECT_NO_THROW(numeraire::database::RequireMtmAsOfNotBeforeTradeDate("2026-05-01", b.trade));

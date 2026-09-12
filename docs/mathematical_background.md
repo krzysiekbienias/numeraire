@@ -188,6 +188,24 @@ $$V_{\mathrm{fwd}} = S\,e^{-q\tau} - K\,e^{-r\tau}$$
 
 ---
 
+## Commodity futures forward (uncollateralized)
+
+**Scope in repo:** [`CommodityFuturesForwardProduct`](../include/numeraire/products/commodity_futures_forward_product.hpp) priced by [`AnalyticCommodityFuturesForwardPricer`](../include/numeraire/pricers/analytic_commodity_futures_forward_pricer.hpp). Catalog **CFF**. \(F_{t,T}\) is the listed settle for `contract_ticker` (same spot map as an outright). Locked price \(K\) is `products_commodity.strike`. **No volatility.** Contrast: listed outright marks at \(F\) with \(\Delta=1\).
+
+**Present value (per one futures unit):**
+
+$$V = e^{-r\tau}\,(F_{t,T}-K)$$
+
+**Delta:** \(\partial V/\partial F = e^{-r\tau}\) (1 at expiry).
+
+**Expiry:**
+
+- **\(\tau \le 0\):** \(V = F-K\).
+
+Position scale is the same as other legs: \(M = \mathrm{sign}\times\mathrm{quantity}\times\mathrm{contract\_size}\). Path exposure uses this PV (no `execution_price` offset).
+
+---
+
 ## Planned extensions (placeholder)
 
 Future sections may cover: local/stochastic vol, American bounds, Monte Carlo GBM, FX forwards (**FXF**), FRAs (**IRF**), etc., as corresponding pricers land in `src/pricers/`.

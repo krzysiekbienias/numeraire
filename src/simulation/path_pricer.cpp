@@ -6,6 +6,7 @@
 #include <numeraire/database/leg_pv.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
 #include <numeraire/database/trade_booking_rules.hpp>
+#include <numeraire/products/commodity_futures_forward_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/simulation/path_pricing_rules.hpp>
@@ -117,7 +118,12 @@ std::vector<PathPricingLegEntry> LoadPathPricingLegsForPortfolio(
                         .product_code = row.commodity->product_code,
                         .settlement_date = expiry_date,
                 };
-                entry.pv_unit_offset = row.leg.execution_price;
+                // Listed outright marks at full F; exposure is the move since fill.
+                // A true forward already has K in PV — do not subtract execution_price.
+                const bool is_commodity_forward =
+                        dynamic_cast<const products::CommodityFuturesForwardProduct*>(entry.product.get()) !=
+                        nullptr;
+                entry.pv_unit_offset = is_commodity_forward ? 0.0 : row.leg.execution_price;
             }
             legs.push_back(std::move(entry));
         }

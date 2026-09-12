@@ -48,6 +48,7 @@
 #include <numeraire/market_data_providers/polygon_option_daily_price_eod_fetch.hpp>
 #include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
+#include <numeraire/products/commodity_futures_forward_product.hpp>
 #include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/products/equity_forward_product.hpp>
 #include <numeraire/products/equity_spot_product.hpp>
@@ -417,6 +418,9 @@ struct PricingArgvScan {
         const bool is_futures_outright =
                 dynamic_cast<const numeraire::products::CommodityFuturesOutrightProduct*>(product.get()) !=
                 nullptr;
+        const bool is_commodity_forward =
+                dynamic_cast<const numeraire::products::CommodityFuturesForwardProduct*>(product.get()) !=
+                nullptr;
         // Spot has no maturity; keep the column at 0 rather than a negative τ from
         // ExpiryDate() == TradeDate(). Listed futures mark off settle — τ is informational.
         const double years_to_maturity =
@@ -434,7 +438,8 @@ struct PricingArgvScan {
         // would claim an input the price never saw. Zero is the column's existing "not
         // applicable" marker (it already covers expired legs). The surface itself stays
         // ingested for the underlier — options written on it still need it.
-        const bool payoff_uses_volatility = !is_spot && !is_forward && !is_futures_outright;
+        const bool payoff_uses_volatility =
+                !is_spot && !is_forward && !is_futures_outright && !is_commodity_forward;
         const double strike = product->Strike();
         if (payoff_uses_volatility && years_to_maturity > 0.0 && strike > 0.0) {
             mtm.implied_vol_used =
@@ -544,7 +549,8 @@ void PrintUsage() {
             "trade_date)\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade, MTM mode).\n"
             "MTM requires --as-of or NUMERAIRE_DEV_AS_OF. Booking forbids --as-of; ValuationDate = trade_date.\n"
-            "Booking: status PENDING → LIVE when every leg execution_price > 0. "
+            "Booking: status PENDING → LIVE when legs are booked (execution_price > 0, or 0 for an ATM "
+            "linear forward). "
             "Matured LIVE trades become EXPIRED on the first as_of after max leg expiry (before MTM/sim). "
             "MTM requires LIVE + booked legs.\n"
             "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
@@ -1023,18 +1029,13 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
         const std::vector<TradeLegBookingUpdate> updates = PriceBundleForBooking(bundle, *mkt_handle, *pricer);
         booking_repo.ApplyTradeBooking(tid, updates, std::nullopt);
 
-        bool all_positive = true;
-        for (const TradeLegBookingUpdate& u : updates) {
-            if (u.execution_price <= 0.0) {
-                all_positive = false;
-                break;
-            }
-        }
-        if (all_positive) {
+        const TradeCatalogBundle booked = repo.GetCatalogForTrade(tid);
+        if (numeraire::database::AllLegsBooked(booked)) {
             booking_repo.SetTradeStatus(tid, std::string{numeraire::database::kTradeStatusLive});
-            Logger::NumInfo("Trade {} promoted to LIVE (all legs execution_price > 0).", tid);
+            Logger::NumInfo("Trade {} promoted to LIVE (legs booked; ATM forwards may have execution_price 0).",
+                            tid);
         } else {
-            Logger::NumInfo("Trade {} remains PENDING (at least one leg execution_price <= 0 after booking run).", tid);
+            Logger::NumInfo("Trade {} remains PENDING (at least one leg not booked after booking run).", tid);
         }
     }
 

@@ -32,11 +32,10 @@ struct PathPricingLegEntry {
     std::unique_ptr<core::IProduct> product;
     /// Set for listed futures legs: the dated contract this leg tracks.
     std::optional<CommodityContractRef> contract;
-    /// Subtracted from the unit PV before scaling. Zero for options, whose premium is
-    /// already sunk. For a futures leg it is the trade price, because the position is
-    /// worth the move since execution, not the full contract notional — the analytic
-    /// pricer marks futures at full notional for EOD reporting, which would otherwise
-    /// turn exposure into a notional figure.
+    /// Subtracted from the unit PV before scaling. Zero for options and for
+    /// commodity/equity forwards, whose K (or premium) is already in PV. For a
+    /// listed futures outright it is the trade price, because the EOD pricer
+    /// marks at full settle and exposure should be the move since execution.
     double pv_unit_offset{0.0};
 };
 

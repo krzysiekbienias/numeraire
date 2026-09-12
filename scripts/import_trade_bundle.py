@@ -124,6 +124,13 @@ def _is_commodity_futures_outright(raw: Any) -> bool:
     return key in ("commodityfuturesoutright", "futuresoutright", "commodityoutright")
 
 
+def _is_commodity_futures_forward(raw: Any) -> bool:
+    if raw is None:
+        return False
+    key = _normalize_instrument_type_key(str(raw))
+    return key in ("commodityfuturesforward", "futuresforward")
+
+
 def _structured_params_to_text(raw: Any, *, label: str = "structured_params") -> str:
     if raw is None:
         return "{}"
@@ -438,17 +445,17 @@ def _parse_settlement(raw: Any, label: str) -> str:
     return settlement
 
 
-def _parse_strike(raw: Any, *, required: bool) -> float | None:
+def _parse_strike(raw: Any, *, required: bool, label: str = "equity.strike") -> float | None:
     if _is_blank(raw):
         if required:
-            _die('equity.strike: required number (see _strike_comment in bundle template)')
+            _die(f"{label}: required number (see _strike_comment in bundle template)")
         return None
     try:
         strike = float(raw)
     except (TypeError, ValueError):
-        _die(f"equity.strike: expected number, got {raw!r}")
+        _die(f"{label}: expected number, got {raw!r}")
     if strike <= 0.0:
-        _die(f"equity.strike: must be positive, got {strike}")
+        _die(f"{label}: must be positive, got {strike}")
     return strike
 
 
@@ -505,21 +512,27 @@ def _insert_one_product(
     is_spot = (not is_commodity) and _is_spot_instrument(instrument_type)
     is_forward = (not is_commodity) and _is_equity_forward_instrument(instrument_type)
     is_outright = is_commodity and _is_commodity_futures_outright(instrument_type)
+    is_commodity_forward = is_commodity and _is_commodity_futures_forward(instrument_type)
 
-    if is_commodity and not is_outright:
+    if is_commodity and not is_outright and not is_commodity_forward:
         _die(
             f"commodity.instrument_type: unsupported {instrument_type!r} "
-            "(only commodity_futures_outright for now)"
+            "(commodity_futures_outright or commodity_futures_forward)"
         )
 
     if is_commodity:
-        strike = None
         option_type = None
         exercise_style = extension.get("exercise_style", None)
         if not _is_blank(exercise_style):
             exercise_style = str(exercise_style).strip()
         else:
             exercise_style = None
+        if is_commodity_forward:
+            strike = _parse_strike(
+                extension.get("strike", None), required=True, label="commodity.strike"
+            )
+        else:
+            strike = None
     else:
         exercise_style = extension.get("exercise_style", "european")
         strike = _parse_strike(extension.get("strike", None), required=not is_spot)
@@ -583,7 +596,7 @@ def _insert_one_product(
             _die("commodity.product_code: required")
         contract_ticker = extension.get("contract_ticker", None)
         if _is_blank(contract_ticker):
-            _die("commodity.contract_ticker: required for commodity_futures_outright")
+            _die("commodity.contract_ticker: required for commodity futures products")
         contract_ticker = str(contract_ticker).strip().upper()
 
         def _opt_float(key: str) -> float | None:

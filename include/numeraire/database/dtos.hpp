@@ -46,6 +46,7 @@ struct ProductCommodityDto {
     std::string contract_ticker;
     std::optional<std::string> settlement_date;
     std::optional<double> multiplier;
+    std::optional<double> strike;
 };
 
 /// Trade header (`trades` row). `trade_date` / timestamps may be empty strings

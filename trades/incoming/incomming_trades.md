@@ -90,8 +90,16 @@ Cash underlier positions for **delta hedging** (same `portfolio_id` as the optio
 - Templates: [`trade_bundle_equity_spot.sample.json`](trade_bundle_equity_spot.sample.json), [`trade_bundle_index_spot.sample.json`](trade_bundle_index_spot.sample.json).
 - Spot resolves from `equity_daily_eod` or `index_daily_eod` (e.g. NDX → `I:NDX`) when `NUMERAIRE_DEV_SPOT_SOURCE=db`.
 
+## Commodity futures forward (catalog CFF)
+
+Uncollateralized lock against a **listed** futures ticker. `commodity.instrument_type` = **`commodity_futures_forward`**. Forward price **K** in `commodity.strike`; the contract ticker (e.g. `CLX6`) is `commodity.contract_ticker`. Product id pattern: **`FWD_CFF_{PRODUCT_CODE}_{TICKER}_{K}`**.
+
+Analytic mark: \(\mathrm{pv\_unit} = e^{-r\tau}(F_{t,T}-K)\) with \(F\) from `futures_daily_eod`. Not the listed outright (that marks at \(F\)).
+
+Template: [`trade_bundle_commodity_forward.sample.json`](trade_bundle_commodity_forward.sample.json).
+
 ## Pipeline
 
-Import (always **`PENDING`** in `trades`, even if JSON says `LIVE`) → `dev_main --price-booking <trade_id>` → `LIVE` when all legs `execution_price > 0` → `dev_main --as-of …` MTM. See [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle*.
+Import (always **`PENDING`** in `trades`, even if JSON says `LIVE`) → `dev_main --price-booking <trade_id>` → `LIVE` when legs are booked (`execution_price > 0`, or `0` for an ATM linear forward) → `dev_main --as-of …` MTM. See [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle*.
 
 **Fix existing row booked as LIVE by mistake:** `UPDATE trades SET status='PENDING' WHERE trade_id='…';` and reset `execution_price=0` on legs before re-running `--price-booking`.
