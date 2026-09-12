@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
+from journal.booking import bookable_instruments
 from journal.commodity_curves import load_tenor_history
 from journal.commodity_curve_backtest import (
     MAX_HORIZON_DAYS,
@@ -148,15 +149,36 @@ class CalibrationHelpersTest(SimpleTestCase):
 
 
 class LandingPageTests(TestCase):
-    def test_guest_landing_has_scattered_photos(self):
+    def test_guest_landing_has_orbit_not_photos(self):
         response = Client().get(reverse('journal:landing'))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
-        self.assertIn('nj-landing-collage', html)
-        for name in ('tanks.jpg', 'bars.jpg', 'code.jpg', 'desck.jpg'):
-            self.assertIn(name, html)
+        self.assertNotIn('nj-landing-collage', html)
+        self.assertNotIn('desck.jpg', html)
+        self.assertNotIn('tanks.jpg', html)
         self.assertIn('Open Quant Lab', html)
         self.assertIn('nj-landing-orbit', html)
+
+
+class BookableInstrumentTests(SimpleTestCase):
+    def test_commodity_futures_forward_is_wired(self) -> None:
+        by_code = {spec.code: spec for spec in bookable_instruments()}
+        self.assertIn('CFF', by_code)
+        spec = by_code['CFF']
+        self.assertEqual(spec.instrument_type, 'commodity_futures_forward')
+        self.assertTrue(spec.has_strike)
+        self.assertTrue(spec.has_contract_ticker)
+
+
+class LoginPageTests(TestCase):
+    def test_login_art_uses_desk_photos(self):
+        response = Client().get(reverse('login'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('nj-login-collage', html)
+        for name in ('tanks.jpg', 'bars.jpg', 'code.jpg', 'desck.jpg'):
+            self.assertIn(name, html)
+        self.assertNotIn('isaac-smith-6EnTPvPPL6I-unsplash.jpg', html)
 
 
 class JournalHubNavTests(TestCase):
@@ -186,6 +208,7 @@ class JournalHubNavTests(TestCase):
         self.assertIn('Market Data', html)
         self.assertIn('Risk', html)
         self.assertIn('bi-flask', html)
+        self.assertIn('Quant Lab', html)
         self.assertIn('bi-umbrella', html)
         self.assertNotIn('bi-lightning-charge', html)
         self.assertIn('Futures curves', html)

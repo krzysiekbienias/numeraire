@@ -11,6 +11,8 @@ PRICED_MAPS_TO = frozenset(
         'binary_cash_or_nothing',
         'digital',
         'equity_forward',
+        'commodity_futures_outright',
+        'commodity_futures_forward',
     }
 )
 
@@ -37,4 +39,8 @@ def pricing_notes(maps_to: str) -> str:
         return 'Priced · NPV only (greeks zero in MTM)'
     if key == 'plain_vanilla_european_option':
         return 'Priced · analytic BS + greeks'
+    if key == 'commodity_futures_outright':
+        return 'Priced · settle mark, Δ = 1'
+    if key == 'commodity_futures_forward':
+        return 'Priced · DF × (F − K), Δ = DF'
     return 'Priced'

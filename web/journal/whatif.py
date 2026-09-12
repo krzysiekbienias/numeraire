@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from journal.black_scholes import black_scholes, scale_unit
+from journal.commodity_futures_forward import commodity_futures_forward
 from journal.equity_forward import equity_forward
 from journal.monte_carlo import monte_carlo_vanilla
 
@@ -50,6 +51,15 @@ CAPS_FORWARD = ProductCapabilities(
     analytic_name='forward closed-form',
 )
 
+CAPS_COMMODITY_FORWARD = ProductCapabilities(
+    kind='linear',
+    label='linear · commodity futures forward',
+    uses_vol=False,
+    uses_mc=False,
+    uses_option_greeks=False,
+    analytic_name='DF × (F − K)',
+)
+
 CAPS_UNSUPPORTED = ProductCapabilities(
     kind='unsupported',
     label='unsupported in what-if',
@@ -71,6 +81,22 @@ def capabilities_for_equity(equity) -> ProductCapabilities:
     return CAPS_UNSUPPORTED
 
 
+def capabilities_for_commodity(commodity) -> ProductCapabilities:
+    if commodity is None:
+        return CAPS_UNSUPPORTED
+    key = (commodity.instrument_type or '').strip().lower()
+    if key in {'commodity_futures_forward', 'futures_forward'}:
+        return CAPS_COMMODITY_FORWARD
+    return CAPS_UNSUPPORTED
+
+
+def capabilities_for_row(row: dict[str, Any]) -> ProductCapabilities:
+    commodity = row.get('commodity')
+    if commodity is not None:
+        return capabilities_for_commodity(commodity)
+    return capabilities_for_equity(row.get('equity'))
+
+
 def merge_trade_capabilities(caps_list: list[ProductCapabilities]) -> ProductCapabilities:
     """Aggregate leg capabilities for the trade-level form / metrics."""
     usable = [c for c in caps_list if c.kind != 'unsupported']
@@ -78,7 +104,7 @@ def merge_trade_capabilities(caps_list: list[ProductCapabilities]) -> ProductCap
         return CAPS_UNSUPPORTED
     kinds = {c.kind for c in usable}
     if kinds == {'linear'}:
-        return CAPS_FORWARD
+        return usable[0]
     if kinds == {'nonlinear'}:
         return CAPS_VANILLA
     return ProductCapabilities(
@@ -258,7 +284,31 @@ def _finish_leg(
     )
 
 
-def price_leg(leg, equity, mtm, inputs: WhatIfInputs) -> WhatIfLegResult:
+def price_leg(leg, equity, mtm, inputs: WhatIfInputs, commodity=None) -> WhatIfLegResult:
+    if commodity is not None:
+        caps = capabilities_for_commodity(commodity)
+        leg_id = leg.leg_id
+        if caps.kind == 'unsupported':
+            itype = getattr(commodity, 'instrument_type', None) or 'unknown'
+            return _unsupported(leg_id, f'No what-if engine for {itype}', mtm, caps)
+        if commodity.strike is None:
+            return _unsupported(leg_id, 'Missing strike K', mtm, caps)
+        try:
+            fwd = commodity_futures_forward(
+                inputs.spot, float(commodity.strike), inputs.tau, inputs.rate
+            )
+        except (ValueError, OverflowError) as exc:
+            return _unsupported(leg_id, str(exc), mtm, caps)
+        return _finish_leg(
+            leg=leg,
+            mtm=mtm,
+            caps=caps,
+            pv_unit=fwd.pv_unit,
+            delta_unit=fwd.delta,
+            vega_unit=0.0,
+            theta_unit=0.0,
+        )
+
     caps = capabilities_for_equity(equity)
     leg_id = leg.leg_id
 
@@ -347,7 +397,14 @@ def run_trade_whatif(
     caps: ProductCapabilities,
 ) -> dict[str, Any]:
     legs_out = [
-        price_leg(row['leg'], row['equity'], row['mtm'], inputs) for row in market_rows
+        price_leg(
+            row['leg'],
+            row['equity'],
+            row['mtm'],
+            inputs,
+            commodity=row.get('commodity'),
+        )
+        for row in market_rows
     ]
 
     supported = [r for r in legs_out if r.supported and r.whatif_pv_total is not None]

@@ -6,7 +6,7 @@ and shells out to that script — it stays the only code that INSERTs into
 `products` / `trades` / `trade_legs`. New trades land as `PENDING`; the C++
 `dev_main --price-booking` fills `execution_price` and promotes them to `LIVE`.
 
-Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS, FUT, CAL);
+Only the instrument types wired here can be booked (PVE, EQF, EQS, IXS, FUT, CFF, CAL);
 everything else in `catalog_instrument_type` stays read-only inventory.
 
 Deletion follows the same rule: `scripts/delete_trade.py` does the DELETE, the
@@ -170,6 +170,26 @@ COMMODITY_FUTURES_OUTRIGHT = BookableInstrument(
     has_contract_ticker=True,
 )
 
+COMMODITY_FUTURES_FORWARD = BookableInstrument(
+    code='CFF',
+    label='CFF — Commodity futures forward',
+    instrument_type='commodity_futures_forward',
+    strategy_type='COMMODITY_FUTURES_FORWARD',
+    product_prefix='FWD_CFF',
+    asset_kind='COMMODITY',
+    has_option_type=False,
+    has_strike=True,
+    has_expiry=True,
+    underlier_asset_class='COMMODITY',
+    strike_label='Forward price K',
+    strike_help='Locked futures price K (uncollateralized). PV = DF × (F − K) per unit.',
+    default_contract_size=1000.0,
+    default_settlement='CASH',
+    contract_size_help='Futures multiplier (e.g. 1000 bbl for CL). Same size as the listed contract.',
+    extension='commodity',
+    has_contract_ticker=True,
+)
+
 COMMODITY_CALENDAR = BookableInstrument(
     code='CAL',
     label='CAL — Commodity calendar spread',
@@ -197,6 +217,7 @@ BOOKABLE = (
     EQUITY_SPOT,
     INDEX_SPOT,
     COMMODITY_FUTURES_OUTRIGHT,
+    COMMODITY_FUTURES_FORWARD,
     COMMODITY_CALENDAR,
 )
 
@@ -461,7 +482,10 @@ def build_product_id(
     und = underlying_id.strip().upper()
     if spec.has_contract_ticker:
         ticker = (contract_ticker or '').strip().upper()
-        return '_'.join([spec.product_prefix, und, ticker])
+        parts = [spec.product_prefix, und, ticker]
+        if spec.has_strike:
+            parts.append(_fmt_id_number(float(strike or 0.0)))
+        return '_'.join(parts)
     parts = [spec.product_prefix, und]
     if spec.has_option_type:
         parts.append('C' if (option_type or '').lower() == 'call' else 'P')
@@ -512,6 +536,13 @@ def product_conflicts(product_id: str, *, spec: BookableInstrument, terms: dict)
                 (commodity.contract_ticker or '').upper(),
                 (terms.get('contract_ticker') or '').upper(),
             )
+            if spec.has_strike and commodity.strike is not None and terms.get('strike') is not None:
+                if not math.isclose(
+                    float(commodity.strike), float(terms['strike']), rel_tol=1e-9, abs_tol=1e-9
+                ):
+                    diffs.append(
+                        f'strike: book has {commodity.strike!r}, form says {terms["strike"]!r}'
+                    )
         return diffs
 
     equity = getattr(product, 'equity', None)
@@ -589,7 +620,7 @@ def build_bundle(
             'tick_size': cleaned.get('tick_size'),
             'tick_value': cleaned.get('tick_value'),
             'option_type': None,
-            'strike': None,
+            'strike': cleaned.get('strike') if spec.has_strike else None,
             'exercise_style': None,
             'option_ticker': None,
             'underlying_contract_ticker': None,

@@ -82,7 +82,7 @@ from journal.surfaces import (
 )
 from journal.whatif import (
     baseline_inputs_from_mtm,
-    capabilities_for_equity,
+    capabilities_for_row,
     inputs_are_shocked,
     merge_trade_capabilities,
     parse_whatif_inputs,
@@ -596,7 +596,7 @@ class TradeDetailView(DetailView):
             )
 
         trade_caps = merge_trade_capabilities(
-            [capabilities_for_equity(row['equity']) for row in market_rows]
+            [capabilities_for_row(row) for row in market_rows]
         )
         # Only a payoff that is linear in spot is vol-free. Anything we cannot classify
         # (digitals today) keeps the surface: they do depend on vol, they merely lack a

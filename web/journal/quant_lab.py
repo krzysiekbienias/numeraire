@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 
 from journal.black_scholes import BsResult, black_scholes
+from journal.commodity_futures_forward import commodity_futures_forward
 from journal.greeks_lab import GreeksLabParams, build_greeks_vs_spot, params_from_get
 from journal.models import CatalogInstrumentType
 from journal.payoff import unit_payoff
@@ -192,7 +193,7 @@ _GREEK_SYMS = frozenset({'Δ', 'Γ', 'ν', 'Θ', 'ρ'})
 
 # Quant Lab asset-class filters (catalog codes).
 _EQUITY_CODES = frozenset({'PVE', 'PVA', 'AON', 'BIN', 'DIG', 'ASN', 'BRR', 'EQF'})
-_COMMODITY_CODES = frozenset({'EFT', 'FUT'})
+_COMMODITY_CODES = frozenset({'EFT', 'FUT', 'CFF'})
 _EQUITY_MAPS = frozenset({
     'plain_vanilla_european_option',
     'plain_vanilla_american_option',
@@ -208,6 +209,8 @@ _COMMODITY_MAPS = frozenset({
     'listed_future',
     'commodity_futures_outright',
     'futures_outright',
+    'commodity_futures_forward',
+    'futures_forward',
 })
 
 
@@ -279,6 +282,12 @@ def _lab_product(code: str, maps_to: str, param_kind: str) -> str:
         or param_kind == 'futures'
     ):
         return 'futures_outright'
+    if (
+        key in {'commodity_futures_forward', 'futures_forward'}
+        or code_u == 'CFF'
+        or (param_kind == 'forward' and 'commodity' in key)
+    ):
+        return 'commodity_futures_forward'
     return 'unsupported'
 
 
@@ -307,7 +316,7 @@ def _param_kind(code: str, family: str, maps_to: str) -> str:
         'futures_outright',
     } or code_u in {'EFT', 'FUT'}:
         return 'futures'
-    if fam == 'FORWARD' or 'forward' in key or code_u in {'EQF', 'FXF', 'IRF'}:
+    if fam == 'FORWARD' or 'forward' in key or code_u in {'EQF', 'FXF', 'IRF', 'CFF'}:
         return 'forward'
     if fam == 'OPTION' or _is_vanilla(key) or code_u in {
         'PVE',
@@ -332,6 +341,8 @@ def fields_for_kind(
     ex = (exercise or '').strip().lower()
     if product == 'futures_outright' or param_kind == 'futures':
         return [dict(f) for f in _FUTURES_FIELDS]
+    if product == 'commodity_futures_forward':
+        return [dict(f) for f in _FORWARD_FIELDS]
     if product == 'con':
         return [dict(f) for f in _CON_FIELDS]
     if product == 'forward' or param_kind == 'forward':
@@ -402,6 +413,19 @@ def list_inventory_choices(*, asset_class: str | None = None) -> list[InventoryC
             )
         )
 
+    if not any(c.code == 'CFF' for c in out):
+        out.append(
+            InventoryChoice(
+                code='CFF',
+                label='CFF — Commodity futures forward',
+                maps_to='commodity_futures_forward',
+                family='FORWARD',
+                is_vanilla=False,
+                exercise='n/a',
+                param_kind='forward',
+            )
+        )
+
     wanted = (asset_class or '').strip().lower()
     if wanted in {'equity', 'commodity'}:
         out = [c for c in out if _choice_asset_class(c) == wanted]
@@ -421,10 +445,14 @@ def defaults_from_instrument(code: str) -> dict:
         except Exception:
             if code_u in {'EFT', 'FUT'}:
                 return _synthetic_futures_defaults(code_u)
+            if code_u == 'CFF':
+                return _synthetic_cff_defaults()
             return {}
     except Exception:
         if code_u in {'EFT', 'FUT'}:
             return _synthetic_futures_defaults(code_u)
+        if code_u == 'CFF':
+            return _synthetic_cff_defaults()
         return {}
 
     maps = (cat.maps_to_instrument_type or '').strip()
@@ -479,6 +507,28 @@ def _synthetic_futures_defaults(code_u: str) -> dict:
         'is_vanilla': False,
         'param_kind': 'futures',
         'lab_product': 'futures_outright',
+    }
+
+
+def _synthetic_cff_defaults() -> dict:
+    return {
+        'instrument': 'CFF',
+        'spot': 80.0,
+        'strike': 80.0,
+        'vol': 0.0,
+        'rate': 0.05,
+        'div': 0.0,
+        'side': 'call',
+        'cash_payout': 1.0,
+        'n_steps': _CRR_DEFAULT_STEPS,
+        'tau': 0.25,
+        'exercise': 'n/a',
+        'instrument_code': 'CFF',
+        'instrument_title': 'Commodity futures forward',
+        'maps_to': 'commodity_futures_forward',
+        'is_vanilla': False,
+        'param_kind': 'forward',
+        'lab_product': 'commodity_futures_forward',
     }
 def _parse_tau(get, default: float) -> float:
     raw = get.get('tau')
@@ -989,6 +1039,30 @@ def price_sandbox(
             rho=0.0,
         )
 
+    if product == 'commodity_futures_forward':
+        try:
+            fwd = commodity_futures_forward(
+                float(params.spot), float(params.strike), float(tau), float(params.rate)
+            )
+        except (ValueError, OverflowError) as exc:
+            return QuantLabQuote(
+                ok=False,
+                engine_label='analytic_commodity_futures_forward',
+                message=str(exc),
+            )
+        return QuantLabQuote(
+            ok=True,
+            engine_label='analytic_commodity_futures_forward',
+            message='',
+            pv_unit=fwd.pv_unit,
+            delta=fwd.delta,
+            gamma=0.0,
+            vega=0.0,
+            theta=0.0,
+            theta_day=0.0,
+            rho=0.0,
+        )
+
     return QuantLabQuote(
         ok=False,
         engine_label='lab',
@@ -1160,6 +1234,7 @@ def build_quant_lab(get, *, asset_class: str = 'equity') -> dict:
         'con',
         'forward',
         'futures_outright',
+        'commodity_futures_forward',
     }:
         quote = price_sandbox(
             params,
@@ -1240,7 +1315,7 @@ def build_quant_lab(get, *, asset_class: str = 'equity') -> dict:
         'show_quote_greeks': show_quote_greeks,
         'show_greeks_panel': is_eu_vanilla and has_greeks,
         'show_formulas': selected
-        and product in {'vanilla', 'aon', 'con', 'forward', 'futures_outright'},
+        and product in {'vanilla', 'aon', 'con', 'forward', 'futures_outright', 'commodity_futures_forward'},
         'crr_tree': crr_tree,
         'crr_params': crr_params,
         'show_crr_tree': bool(crr_tree and crr_tree.get('nodes')),
