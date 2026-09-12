@@ -21,8 +21,8 @@ class MapMarket final : public numeraire::core::IMarketData {
         return valuation_date_;
     }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return 0.05; }
@@ -34,10 +34,10 @@ class MapMarket final : public numeraire::core::IMarketData {
         return 0.2;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     numeraire::schedule::Date valuation_date_{.year = 2026, .month = 8, .day = 11};
 };
 
@@ -45,7 +45,7 @@ class MapMarket final : public numeraire::core::IMarketData {
 
 TEST(AnalyticFuturesOutrightPricerTest, MarksToSettlementWithUnitDelta) {
     MapMarket m;
-    m.SetSpot("CLX6", 80.31);
+    m.SetQuote("CLX6", 80.31);
 
     const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
     const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
@@ -62,7 +62,7 @@ TEST(AnalyticFuturesOutrightPricerTest, MarksToSettlementWithUnitDelta) {
 
 TEST(AnalyticFuturesOutrightPricerTest, RejectsEquitySpot) {
     MapMarket m;
-    m.SetSpot("AAPL", 100.0);
+    m.SetQuote("AAPL", 100.0);
     const numeraire::schedule::Date d{.year = 2026, .month = 8, .day = 11};
     const numeraire::products::EquitySpotProduct spot("AAPL", d);
     const numeraire::pricers::AnalyticFuturesOutrightPricer pricer;
@@ -71,7 +71,7 @@ TEST(AnalyticFuturesOutrightPricerTest, RejectsEquitySpot) {
 
 TEST(AnalyticCompositePricerTest, RoutesFuturesOutright) {
     MapMarket m;
-    m.SetSpot("CLX6", 80.31);
+    m.SetQuote("CLX6", 80.31);
     const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
     const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
     const numeraire::products::CommodityFuturesOutrightProduct fut("CLX6", "CL", trade, expiry);

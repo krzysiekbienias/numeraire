@@ -16,11 +16,11 @@ public:
 
     [[nodiscard]] const schedule::Date& ValuationDate() const override { return snapshot_.valuation_date; }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
         const std::string key(underlying_id);
-        const auto it = snapshot_.spots.find(key);
-        if (it == snapshot_.spots.end()) {
-            throw MarketDataError("Spot: unknown underlying \"" + key + "\"");
+        const auto it = snapshot_.quotes.find(key);
+        if (it == snapshot_.quotes.end()) {
+            throw MarketDataError("Quote: unknown underlying \"" + key + "\"");
         }
         return it->second;
     }

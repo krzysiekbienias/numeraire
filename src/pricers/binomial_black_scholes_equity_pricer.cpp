@@ -139,7 +139,7 @@ constexpr const char* kBinomialStepsConfigKey = "pricing.binomial.default_steps"
     }
 
     const double tau = schedule::Act365FixedYearFraction(market.ValuationDate(), vanilla.ExpiryDate());
-    const double spot = market.Spot(vanilla.UnderlyingId());
+    const double spot = market.Quote(vanilla.UnderlyingId());
     const double strike = vanilla.Strike();
     const double r = market.RiskFreeRateForTenor(tau);
     const double q = market.DividendYield(vanilla.UnderlyingId());

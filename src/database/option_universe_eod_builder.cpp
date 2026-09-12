@@ -380,11 +380,11 @@ int TryRunOptionUniverseEodBuild(const int argc, char** argv, const numeraire::u
         return 1;
     }
 
-    const int adjusted =
-            (std::getenv("NUMERAIRE_DEV_SPOT_ADJUSTED") != nullptr &&
-             std::strcmp(std::getenv("NUMERAIRE_DEV_SPOT_ADJUSTED"), "0") == 0)
-                    ? 0
-                    : 1;
+    const char* adj_raw = std::getenv("NUMERAIRE_DEV_QUOTE_ADJUSTED");
+    if (adj_raw == nullptr || adj_raw[0] == '\0') {
+        adj_raw = std::getenv("NUMERAIRE_DEV_SPOT_ADJUSTED");
+    }
+    const int adjusted = (adj_raw != nullptr && std::strcmp(adj_raw, "0") == 0) ? 0 : 1;
 
     Logger::NumInfo("build-option-universe → SQLite {} underlying={} index_ticker={} grid={} range {}..{}.",
                     db_path.string(),

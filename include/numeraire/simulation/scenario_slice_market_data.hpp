@@ -14,7 +14,7 @@ namespace numeraire::simulation {
 
 /// `IMarketData` view over one `(step, path)` slice of a multifactor `ScenarioBuffer`.
 ///
-/// Spots come from simulated paths; IV and rates come from sticky DB quotes @ valuation `as_of`.
+/// Quotes come from simulated paths; IV and rates come from sticky DB quotes @ valuation `as_of`.
 /// Call `SetSlice(step, path)` before pricing — the object is reused across the hot loop.
 class ScenarioSliceMarketData final : public core::IMarketData {
    public:
@@ -30,7 +30,7 @@ class ScenarioSliceMarketData final : public core::IMarketData {
 
     [[nodiscard]] const schedule::Date& ValuationDate() const override;
 
-    [[nodiscard]] double Spot(std::string_view underlying_id) const override;
+    [[nodiscard]] double Quote(std::string_view underlying_id) const override;
 
     [[nodiscard]] double RiskFreeRate() const override;
 

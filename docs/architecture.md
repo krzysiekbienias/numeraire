@@ -544,7 +544,7 @@ When shipped, booking answers: *“What was the model premium per share at trade
 | **`execution_price`** | Per-share model **`pv_unit`** from `PricingResult::Npv()` at booking (options, binaries, forwards — same scale as MTM `pv_unit`). **Convention A:** commission is **not** included in `execution_price`. |
 | **`commission`** | Set at **import** (`commission` or `commission_per_contract × quantity` in JSON). Booking **does not** recalculate commission in v1. |
 | **Valuation date** | `MarketSnapshot::valuation_date` = `ParseIsoDate(trades.trade_date)`. Reject trades with empty/invalid `trade_date`. |
-| **Market inputs** | Same env as MTM: `NUMERAIRE_DEV_SPOT_SOURCE`, `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, `NUMERAIRE_DEV_DIV_YIELD`. With **`SPOT_SOURCE=db`**, spot is `equity_daily_eod.close` on **`trade_date`** (ingest required for that session). |
+| **Market inputs** | Same env as MTM: `NUMERAIRE_DEV_QUOTE_SOURCE` (alias `NUMERAIRE_DEV_SPOT_SOURCE`), `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, `NUMERAIRE_DEV_DIV_YIELD`. With **`QUOTE_SOURCE=db`**, the mark is `equity_daily_eod.close` or a futures settle on **`trade_date`** (ingest required for that session). |
 | **Greeks / MTM tables** | Booking run **does not** write `trade_leg_mtm_eod` or greeks to the book row. |
 | **`booking_timestamp`** | Optional: set to `datetime('now')` on `trades` when booking completes; otherwise leave as imported. |
 | **Trade status** | Import with **`PENDING`**. Booking allowed only for **`PENDING`**. After booking, if every leg has **`execution_price > 0`**, status → **`LIVE`**; otherwise stays **`PENDING`**. |
@@ -570,8 +570,8 @@ Pricing follows the same sequence as **[Pricing flow (target)](#pricing-flow-tar
 
 For market inputs, `**dev_main` builds a `MarketSnapshot**` and `**StaticMarketDataProvider**`:
 
-- **Spot** — `**NUMERAIRE_DEV_SPOT_SOURCE=env`** (default): `NUMERAIRE_DEV_SPOT` for every underlying referenced by booked legs.
-- **Spot — DB** — `**NUMERAIRE_DEV_SPOT_SOURCE=db`**: `**equity_daily_eod.close**` for each underlying on `**ValuationDate**` (requires an ingested daily bar; ticker match is case-insensitive; `adjusted` via `**NUMERAIRE_DEV_SPOT_ADJUSTED**`, default `1`).
+- **Quote** — `**NUMERAIRE_DEV_QUOTE_SOURCE=env`** (default): `NUMERAIRE_DEV_QUOTE` for every underlying referenced by booked legs (`NUMERAIRE_DEV_SPOT` / `SPOT_SOURCE` still accepted).
+- **Quote — DB** — `**NUMERAIRE_DEV_QUOTE_SOURCE=db`**: equity/index close or futures settle on `**ValuationDate**` (requires an ingested bar; ticker match is case-insensitive; `adjusted` via `**NUMERAIRE_DEV_QUOTE_ADJUSTED**`, default `1`).
 - **Rate / vol / dividends** — still from env: `**NUMERAIRE_DEV_RATE`**, `**NUMERAIRE_DEV_VOL**`, `**NUMERAIRE_DEV_DIV_YIELD**`.
 
 **MTM persistence** — After each leg is priced, `dev_main` upserts `**trade_leg_mtm_eod`** and appends `**trade_leg_mtm_eod_archive**` with inputs used (`underlying_spot`, rates, vol), outputs (`pv_unit`, greeks), `**years_to_maturity**` (same T as the pricer), `pricing_engine`, and a shared `**batch_run_id**` for the run.

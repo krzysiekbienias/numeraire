@@ -27,8 +27,8 @@ std::unique_ptr<core::IMarketData> CurvedRateMarketData::MaybeWrap(
 
 const schedule::Date& CurvedRateMarketData::ValuationDate() const { return inner_->ValuationDate(); }
 
-double CurvedRateMarketData::Spot(const std::string_view underlying_id) const {
-    return inner_->Spot(underlying_id);
+double CurvedRateMarketData::Quote(const std::string_view underlying_id) const {
+    return inner_->Quote(underlying_id);
 }
 
 double CurvedRateMarketData::RiskFreeRate() const { return representative_risk_free_rate_; }

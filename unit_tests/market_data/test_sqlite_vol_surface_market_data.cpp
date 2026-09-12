@@ -73,10 +73,10 @@ TEST(SqliteVolSurfaceMarketDataTest, LoadsAndInterpolatesCallVol) {
     SeedSurface(db_path);
 
     const auto valuation = numeraire::schedule::ParseIsoDate("2026-05-15");
-    std::unordered_map<std::string, double> spots{{"NDX", 28000.0}};
+    std::unordered_map<std::string, double> quotes{{"NDX", 28000.0}};
 
     auto market = numeraire::market_data::SqliteVolSurfaceMarketData::Load(
-            db_path.string(), valuation, spots, 0.03, {}, {"NDX"}, "2026-05-15", 0.20);
+            db_path.string(), valuation, quotes, 0.03, {}, {"NDX"}, "2026-05-15", 0.20);
 
     const double iv_atm_short = market->ImpliedVolatility("NDX", 28000.0, 0.10, numeraire::OptionType::kCall);
     EXPECT_NEAR(iv_atm_short, 0.20, 1.0e-6);
@@ -103,10 +103,10 @@ TEST(SqliteVolSurfaceMarketDataTest, MissingSurfaceUsesFlatFallback) {
     SeedSurface(db_path);
 
     const auto valuation = numeraire::schedule::ParseIsoDate("2026-05-15");
-    std::unordered_map<std::string, double> spots{{"NDX", 28000.0}, {"MSFT", 400.0}};
+    std::unordered_map<std::string, double> quotes{{"NDX", 28000.0}, {"MSFT", 400.0}};
 
     auto market = numeraire::market_data::SqliteVolSurfaceMarketData::Load(
-            db_path.string(), valuation, spots, 0.03, {}, {"NDX", "MSFT"}, "2026-05-15", 0.25);
+            db_path.string(), valuation, quotes, 0.03, {}, {"NDX", "MSFT"}, "2026-05-15", 0.25);
 
     const double iv_ndx = market->ImpliedVolatility("NDX", 28000.0, 0.10, numeraire::OptionType::kCall);
     EXPECT_NEAR(iv_ndx, 0.20, 1.0e-6);

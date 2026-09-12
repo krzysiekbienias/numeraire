@@ -20,8 +20,8 @@ class MapMarket final : public numeraire::core::IMarketData {
         return valuation_date_;
     }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return r_; }
@@ -42,7 +42,7 @@ class MapMarket final : public numeraire::core::IMarketData {
         return vol_;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
     void SetRate(const double r) { r_ = r; }
 
@@ -51,7 +51,7 @@ class MapMarket final : public numeraire::core::IMarketData {
     void SetVol(const double v) { vol_ = v; }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     double r_ = 0.0;
     double q_ = 0.0;
     double vol_ = 0.2;
@@ -67,7 +67,7 @@ TEST(AnalyticForwardPricerTest, EquityForwardMatchesClosedForm) {
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("AAPL", 100.0);
+    m.SetQuote("AAPL", 100.0);
     m.SetRate(0.05);
     m.SetDivYield(0.02);
 
@@ -86,7 +86,7 @@ TEST(AnalyticForwardPricerTest, ZeroTimeIsSpotMinusForwardPrice) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 105.0);
+    m.SetQuote("AAPL", 105.0);
     m.SetRate(0.05);
 
     const numeraire::products::EquityForwardProduct forward("AAPL", 100.0, d, d);
@@ -103,13 +103,13 @@ TEST(AnalyticForwardPricerTest, IgnoresVol) {
 
     MapMarket low_vol;
     low_vol.SetValuationDate(trade);
-    low_vol.SetSpot("MSFT", 420.0);
+    low_vol.SetQuote("MSFT", 420.0);
     low_vol.SetRate(0.03);
     low_vol.SetVol(0.05);
 
     MapMarket high_vol;
     high_vol.SetValuationDate(trade);
-    high_vol.SetSpot("MSFT", 420.0);
+    high_vol.SetQuote("MSFT", 420.0);
     high_vol.SetRate(0.03);
     high_vol.SetVol(0.80);
 
@@ -129,7 +129,7 @@ TEST(AnalyticForwardPricerTest, RejectsVanillaOption) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 100.0);
+    m.SetQuote("AAPL", 100.0);
 
     const numeraire::products::VanillaEquityOptionProduct opt(
             "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 100.0, d, d);

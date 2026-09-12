@@ -22,8 +22,8 @@ class MapMarket final : public numeraire::core::IMarketData {
         return valuation_date_;
     }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return 0.05; }
@@ -35,10 +35,10 @@ class MapMarket final : public numeraire::core::IMarketData {
         return 0.2;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     numeraire::schedule::Date valuation_date_{.year = 2025, .month = 6, .day = 15};
 };
 
@@ -46,7 +46,7 @@ class MapMarket final : public numeraire::core::IMarketData {
 
 TEST(AnalyticSpotPricerTest, MarksToMarketSpotWithUnitDelta) {
     MapMarket m;
-    m.SetSpot("AAPL", 187.5);
+    m.SetQuote("AAPL", 187.5);
 
     const numeraire::schedule::Date trade{.year = 2025, .month = 6, .day = 1};
     const numeraire::products::EquitySpotProduct spot("AAPL", trade);
@@ -63,7 +63,7 @@ TEST(AnalyticSpotPricerTest, MarksToMarketSpotWithUnitDelta) {
 
 TEST(AnalyticSpotPricerTest, RejectsVanillaOption) {
     MapMarket m;
-    m.SetSpot("AAPL", 100.0);
+    m.SetQuote("AAPL", 100.0);
     const numeraire::schedule::Date d{.year = 2025, .month = 6, .day = 15};
     const numeraire::products::VanillaEquityOptionProduct opt(
             "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 100.0, d, d);
@@ -73,7 +73,7 @@ TEST(AnalyticSpotPricerTest, RejectsVanillaOption) {
 
 TEST(AnalyticCompositePricerTest, RoutesSpotToSpotPricer) {
     MapMarket m;
-    m.SetSpot("NDX", 21000.0);
+    m.SetQuote("NDX", 21000.0);
 
     const numeraire::schedule::Date trade{.year = 2025, .month = 1, .day = 1};
     const numeraire::products::EquitySpotProduct spot("NDX", trade);

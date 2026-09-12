@@ -164,7 +164,7 @@ main() {
         # Persist via CLI flag (does not require NUMERAIRE_PERSIST_EXPOSURE in .env).
         # Market quotes for path pricing: same DB sources as FO MTM.
         if ! run_cmd env \
-            NUMERAIRE_DEV_SPOT_SOURCE=db \
+            NUMERAIRE_DEV_QUOTE_SOURCE=db \
             NUMERAIRE_DEV_VOL_SOURCE=db \
             NUMERAIRE_DEV_RATE_SOURCE=db \
             NUMERAIRE_PERSIST_EXPOSURE=1 \

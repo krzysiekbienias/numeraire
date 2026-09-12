@@ -39,7 +39,7 @@
         "${input:devMainAsOf}"
       ],
       "env": {
-        "NUMERAIRE_DEV_SPOT_SOURCE": "db",
+        "NUMERAIRE_DEV_QUOTE_SOURCE": "db",
         "NUMERAIRE_DEV_RATE": "0.03",
         "NUMERAIRE_DEV_VOL": "0.2"
       },

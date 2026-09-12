@@ -12,13 +12,13 @@ namespace numeraire::market_data {
 
 SqliteVolSurfaceMarketData::SqliteVolSurfaceMarketData(
         schedule::Date valuation_date,
-        std::unordered_map<std::string, double> spots,
+        std::unordered_map<std::string, double> quotes,
         const double risk_free_rate,
         std::unordered_map<std::string, double> dividend_yields,
         std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces,
         const double flat_implied_volatility_fallback)
         : valuation_date_(valuation_date),
-          spots_(std::move(spots)),
+          quotes_(std::move(quotes)),
           risk_free_rate_(risk_free_rate),
           dividend_yields_(std::move(dividend_yields)),
           surfaces_(std::move(surfaces)),
@@ -27,7 +27,7 @@ SqliteVolSurfaceMarketData::SqliteVolSurfaceMarketData(
 std::unique_ptr<SqliteVolSurfaceMarketData> SqliteVolSurfaceMarketData::Load(
         const std::string& database_file_path,
         schedule::Date valuation_date,
-        std::unordered_map<std::string, double> spots,
+        std::unordered_map<std::string, double> quotes,
         const double risk_free_rate,
         std::unordered_map<std::string, double> dividend_yields,
         const std::vector<std::string>& underlying_ids,
@@ -47,18 +47,18 @@ std::unique_ptr<SqliteVolSurfaceMarketData> SqliteVolSurfaceMarketData::Load(
         surfaces.emplace(underlying_id, std::move(*leg));
     }
 
-    return std::make_unique<SqliteVolSurfaceMarketData>(valuation_date, std::move(spots), risk_free_rate,
+    return std::make_unique<SqliteVolSurfaceMarketData>(valuation_date, std::move(quotes), risk_free_rate,
                                                         std::move(dividend_yields), std::move(surfaces),
                                                         flat_implied_volatility_fallback);
 }
 
 const schedule::Date& SqliteVolSurfaceMarketData::ValuationDate() const { return valuation_date_; }
 
-double SqliteVolSurfaceMarketData::Spot(const std::string_view underlying_id) const {
+double SqliteVolSurfaceMarketData::Quote(const std::string_view underlying_id) const {
     const std::string key(underlying_id);
-    const auto it = spots_.find(key);
-    if (it == spots_.end()) {
-        throw MarketDataError("Spot: unknown underlying \"" + key + "\"");
+    const auto it = quotes_.find(key);
+    if (it == quotes_.end()) {
+        throw MarketDataError("Quote: unknown underlying \"" + key + "\"");
     }
     return it->second;
 }

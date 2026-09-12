@@ -21,8 +21,8 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
         return valuation_date_;
     }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return 0.03; }
@@ -42,10 +42,10 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
         return 0.20;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     numeraire::schedule::Date valuation_date_{.year = 2025, .month = 1, .day = 1};
 };
 
@@ -95,7 +95,7 @@ class IntrinsicCallPricer final : public numeraire::core::IPricer {
     [[nodiscard]] numeraire::core::PricingResult Price(const numeraire::core::IProduct& product,
                                                        const numeraire::core::IMarketData& market)
             const override {
-        const double spot = market.Spot(product.UnderlyingId());
+        const double spot = market.Quote(product.UnderlyingId());
         const double strike = product.Strike();
         numeraire::core::PricingResult out;
         out.SetNpv(spot > strike ? spot - strike : 0.0);
@@ -111,7 +111,7 @@ void ExpectAnalyticEngine(const numeraire::core::IPricer& p) {
 
 TEST(IPricerTest, StubPricesIntrinsicCall) {
     MapBackedMarketData mkt;
-    mkt.SetSpot("ZZZ", 105.0);
+    mkt.SetQuote("ZZZ", 105.0);
 
     const VanillaOptionProduct opt(
             "ZZZ", 100.0, numeraire::schedule::Date{.year = 2025, .month = 1, .day = 1},
@@ -127,7 +127,7 @@ TEST(IPricerTest, StubPricesIntrinsicCall) {
 
 TEST(IPricerTest, PolymorphicDispatchThroughInterface) {
     MapBackedMarketData mkt;
-    mkt.SetSpot("ZZZ", 90.0);
+    mkt.SetQuote("ZZZ", 90.0);
 
     const VanillaOptionProduct opt(
             "ZZZ", 100.0, numeraire::schedule::Date{.year = 2025, .month = 1, .day = 1},

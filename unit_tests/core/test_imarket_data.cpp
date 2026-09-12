@@ -15,7 +15,7 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
 
     double risk_free_rate{0.03};
 
-    void SetSpot(std::string ticker, const double value) { spots_[std::move(ticker)] = value; }
+    void SetQuote(std::string ticker, const double value) { quotes_[std::move(ticker)] = value; }
 
     void SetDividendYield(std::string ticker, const double value) {
         divs_[std::move(ticker)] = value;
@@ -29,8 +29,8 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
         return valuation_date_;
     }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return risk_free_rate; }
@@ -54,7 +54,7 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
     }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     std::unordered_map<std::string, double> divs_;
     double flat_vol_{0.25};
     numeraire::schedule::Date valuation_date_{.year = 2025, .month = 6, .day = 1};
@@ -64,12 +64,12 @@ class MapBackedMarketData final : public numeraire::core::IMarketData {
 
 TEST(IMarketDataTest, ConcreteImplementationReturnsConfiguredValues) {
     MapBackedMarketData m;
-    m.SetSpot("AAPL", 180.0);
+    m.SetQuote("AAPL", 180.0);
     m.SetDividendYield("AAPL", 0.005);
     m.risk_free_rate = 0.04;
     m.SetVol(0.22);
 
-    EXPECT_DOUBLE_EQ(m.Spot("AAPL"), 180.0);
+    EXPECT_DOUBLE_EQ(m.Quote("AAPL"), 180.0);
     EXPECT_DOUBLE_EQ(m.DividendYield("AAPL"), 0.005);
     EXPECT_DOUBLE_EQ(m.RiskFreeRate(), 0.04);
     EXPECT_DOUBLE_EQ(m.ImpliedVolatility("AAPL", 170.0, 0.25, numeraire::OptionType::kCall), 0.22);

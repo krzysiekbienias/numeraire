@@ -88,7 +88,7 @@ Cash underlier positions for **delta hedging** (same `portfolio_id` as the optio
 - `option_type` / `strike` / `expiry_date`: **null** (no maturity).
 - Rebalances = **additional** spot trades (do not rewrite the first hedge leg).
 - Templates: [`trade_bundle_equity_spot.sample.json`](trade_bundle_equity_spot.sample.json), [`trade_bundle_index_spot.sample.json`](trade_bundle_index_spot.sample.json).
-- Spot resolves from `equity_daily_eod` or `index_daily_eod` (e.g. NDX → `I:NDX`) when `NUMERAIRE_DEV_SPOT_SOURCE=db`.
+- The underlier mark resolves from `equity_daily_eod` or `index_daily_eod` (e.g. NDX → `I:NDX`) when `NUMERAIRE_DEV_QUOTE_SOURCE=db`.
 
 ## Commodity futures forward (catalog CFF)
 

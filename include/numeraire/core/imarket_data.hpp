@@ -11,9 +11,11 @@ namespace numeraire::core {
 /// (static provider, DB, live feed, …).
 ///
 /// Conventions (document for each concrete provider):
-/// — `ValuationDate`: calendar date for which spots and other inputs are valid
+/// — `ValuationDate`: calendar date for which quotes and other inputs are valid
 ///   (EOD as-of). Time to expiry in pricers is from `ValuationDate` to product
 ///   `ExpiryDate()`, on Act/365 Fixed unless documented otherwise.
+/// — `Quote(id)`: observed mark for that key — equity/index close, or a dated
+///   futures settle when `id` is a contract ticker. Not cash commodity spot.
 /// — `RiskFreeRate`: continuous or simple; pricer and model must match.
 /// — `ImpliedVolatility(underlying, strike, T)`: flat or surface slice; `T` is
 ///   year fraction in the same basis the pricer uses for that slice.
@@ -30,8 +32,8 @@ public:
     IMarketData& operator=(IMarketData&&) = delete;
 
     [[nodiscard]] virtual const schedule::Date& ValuationDate() const = 0;
-
-    [[nodiscard]] virtual double Spot(std::string_view underlying_id) const = 0;
+    // Quote is a Spot or Future or Forward - generic name on underlier's market price
+    [[nodiscard]] virtual double Quote(std::string_view underlying_id) const = 0;
 
     [[nodiscard]] virtual double RiskFreeRate() const = 0;
 

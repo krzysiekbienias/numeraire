@@ -25,7 +25,7 @@ class CurvedRateMarketData final : public core::IMarketData {
 
     [[nodiscard]] const schedule::Date& ValuationDate() const override;
 
-    [[nodiscard]] double Spot(std::string_view underlying_id) const override;
+    [[nodiscard]] double Quote(std::string_view underlying_id) const override;
 
     [[nodiscard]] double RiskFreeRate() const override;
 

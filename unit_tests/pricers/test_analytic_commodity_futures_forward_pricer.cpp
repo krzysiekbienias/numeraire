@@ -22,8 +22,8 @@ class MapMarket final : public numeraire::core::IMarketData {
         return valuation_date_;
     }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return r_; }
@@ -35,12 +35,12 @@ class MapMarket final : public numeraire::core::IMarketData {
         return 0.2;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
     void SetRate(const double r) { r_ = r; }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     double r_ = 0.0;
     numeraire::schedule::Date valuation_date_{.year = 2026, .month = 8, .day = 11};
 };
@@ -54,7 +54,7 @@ TEST(AnalyticCommodityFuturesForwardPricerTest, DiscountedFuturesMinusStrike) {
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("CLX6", 98.40);
+    m.SetQuote("CLX6", 98.40);
     m.SetRate(0.05);
 
     const numeraire::products::CommodityFuturesForwardProduct fwd("CLX6", "CL", 80.31, trade, expiry);
@@ -73,7 +73,7 @@ TEST(AnalyticCommodityFuturesForwardPricerTest, ZeroTimeIsFuturesMinusStrike) {
     const numeraire::schedule::Date d{.year = 2026, .month = 10, .day = 20};
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("CLX6", 98.40);
+    m.SetQuote("CLX6", 98.40);
     m.SetRate(0.05);
 
     const numeraire::products::CommodityFuturesForwardProduct fwd("CLX6", "CL", 80.31, d, d);
@@ -88,7 +88,7 @@ TEST(AnalyticCommodityFuturesForwardPricerTest, ZeroTimeIsFuturesMinusStrike) {
 
 TEST(AnalyticCommodityFuturesForwardPricerTest, RejectsOutright) {
     MapMarket m;
-    m.SetSpot("CLX6", 80.31);
+    m.SetQuote("CLX6", 80.31);
     const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
     const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
     const numeraire::products::CommodityFuturesOutrightProduct outright("CLX6", "CL", trade, expiry);
@@ -98,7 +98,7 @@ TEST(AnalyticCommodityFuturesForwardPricerTest, RejectsOutright) {
 
 TEST(AnalyticCompositePricerTest, RoutesCommodityFuturesForward) {
     MapMarket m;
-    m.SetSpot("CLX6", 80.31);
+    m.SetQuote("CLX6", 80.31);
     m.SetRate(0.0);
     const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
     const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};

@@ -11,7 +11,7 @@ namespace {
 
 [[nodiscard]] core::PricingResult PriceFuturesOutright(
         const products::CommodityFuturesOutrightProduct& fut, const core::IMarketData& market) {
-    const double pv_unit = market.Spot(fut.UnderlyingId());
+    const double pv_unit = market.Quote(fut.UnderlyingId());
 
     core::PricingResult result;
     result.SetNpv(pv_unit);

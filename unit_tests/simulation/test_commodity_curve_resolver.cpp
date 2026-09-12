@@ -97,7 +97,7 @@ const std::vector<std::string> kFactors{"CL_M1", "CL_M2", "CL_M3"};
     std::vector<double> out;
     for (std::size_t step = 0; step < grid.NumSteps(); ++step) {
         market.SetSlice(step, 0);
-        out.push_back(market.Spot(ticker));
+        out.push_back(market.Quote(ticker));
     }
     return out;
 }
@@ -176,7 +176,7 @@ TEST(CommodityCurveResolverTest, RejectsContractBeyondTheCalibratedStrip) {
     fs::remove(path);
 }
 
-TEST(CommodityCurveResolverTest, SpotResolvesDatedTickerThroughThePillars) {
+TEST(CommodityCurveResolverTest, QuoteResolvesDatedTickerThroughThePillars) {
     const fs::path path = SeedCurve();
     const auto grid = GridOf({kAsOf, "2026-09-17"});
     const auto factor_map = BuildFactorIndexByUnderlying(kFactors);
@@ -201,16 +201,16 @@ TEST(CommodityCurveResolverTest, SpotResolvesDatedTickerThroughThePillars) {
 
     // At inception the dated ticker must return its own settle, not a blend.
     market.SetSlice(0, 0);
-    EXPECT_DOUBLE_EQ(market.Spot("CLX6"), 88.0);
+    EXPECT_DOUBLE_EQ(market.Quote("CLX6"), 88.0);
 
     // Aged past M2 but not yet inside M1, so strictly between their levels.
     market.SetSlice(1, 0);
-    const double rolled = market.Spot("CLX6");
+    const double rolled = market.Quote("CLX6");
     EXPECT_GT(rolled, 88.0);
     EXPECT_LT(rolled, 90.0);
 
     // Pillar ids keep resolving directly alongside dated tickers.
-    EXPECT_DOUBLE_EQ(market.Spot("CL_M3"), 86.0);
+    EXPECT_DOUBLE_EQ(market.Quote("CL_M3"), 86.0);
 
     fs::remove(path);
 }

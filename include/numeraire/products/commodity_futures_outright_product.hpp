@@ -12,7 +12,7 @@
 namespace numeraire::products {
 
 /// Listed commodity **futures outright**: mark-to-market at the contract
-/// settlement (via `IMarketData::Spot` keyed by `contract_ticker`).
+/// settlement (via `IMarketData::Quote` keyed by `contract_ticker`).
 ///
 /// `UnderlyingId()` returns the **contract ticker** (e.g. `CLX6`), not the
 /// product family (`CL`). Listed futures are daily-margined — no discount /

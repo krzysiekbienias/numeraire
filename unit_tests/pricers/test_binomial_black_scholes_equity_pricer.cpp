@@ -23,8 +23,8 @@ class MapMarket final : public numeraire::core::IMarketData {
 
     [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override { return valuation_date_; }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return r_; }
@@ -45,7 +45,7 @@ class MapMarket final : public numeraire::core::IMarketData {
         return vol_;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
     void SetRate(const double r) { r_ = r; }
 
@@ -54,7 +54,7 @@ class MapMarket final : public numeraire::core::IMarketData {
     void SetVol(const double v) { vol_ = v; }
 
    private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     double r_ = 0.0;
     double q_ = 0.0;
     double vol_ = 0.2;
@@ -90,7 +90,7 @@ TEST(BinomialBlackScholesEquityPricerTest, EuropeanCallNearAnalytic) {
                                                                expiry);
 
     MapMarket market;
-    market.SetSpot("AAPL", 100.0);
+    market.SetQuote("AAPL", 100.0);
     market.SetRate(0.05);
     market.SetDivYield(0.02);
     market.SetVol(0.25);
@@ -116,7 +116,7 @@ TEST(BinomialBlackScholesEquityPricerTest, AmericanPutAboveEuropean) {
                                                              expiry);
 
     MapMarket market;
-    market.SetSpot("AAPL", 100.0);
+    market.SetQuote("AAPL", 100.0);
     market.SetRate(0.05);
     market.SetDivYield(0.0);
     market.SetVol(0.25);
@@ -137,7 +137,7 @@ TEST(BinomialBlackScholesEquityPricerTest, AmericanProducesBumpGreeks) {
                                                               expiry);
 
     MapMarket market;
-    market.SetSpot("AAPL", 100.0);
+    market.SetQuote("AAPL", 100.0);
     market.SetRate(0.04);
     market.SetDivYield(0.0);
     market.SetVol(0.22);
@@ -162,7 +162,7 @@ TEST(BinomialBlackScholesEquityPricerTest, ZeroTimeIsIntrinsic) {
 
     MapMarket market;
     market.SetValuationDate(d);
-    market.SetSpot("AAPL", 112.0);
+    market.SetQuote("AAPL", 112.0);
     market.SetRate(0.05);
     market.SetVol(0.2);
 

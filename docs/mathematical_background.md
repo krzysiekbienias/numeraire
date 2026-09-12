@@ -21,7 +21,7 @@ $$S,\ K,\ r,\ q,\ \sigma,\ \tau,\ \Phi(\cdot),\ \phi(\cdot),\ d_1,\ d_2,\ M,\ E_
 
 | LaTeX | Meaning | Code / config |
 | ----- | ------- | ------------- |
-| see above | Spot | `market.Spot()` |
+| see above | Underlier mark (equity \(S\) or futures \(F\)) | `market.Quote()` |
 | see above | Strike | `vanilla.Strike()` |
 | see above | Risk-free rate (continuous) | `market.RiskFreeRate()`, `NUMERAIRE_DEV_RATE` |
 | see above | Dividend yield (continuous) | `market.DividendYield()`, `NUMERAIRE_DEV_DIV_YIELD` |

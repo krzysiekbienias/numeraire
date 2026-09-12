@@ -356,7 +356,10 @@ int TryRunVolSurfaceEodBuild(const int argc, char** argv, const numeraire::utils
     const std::filesystem::path db_path = ResolveDatabasePath(cfg);
     BootstrapTradeDatabaseSchema(db_path, "sql/schema_v1.sql");
 
-    const int adjusted = EnvDouble("NUMERAIRE_DEV_SPOT_ADJUSTED", 1.0) >= 0.5 ? 1 : 0;
+    const int adjusted =
+            EnvDouble("NUMERAIRE_DEV_QUOTE_ADJUSTED", EnvDouble("NUMERAIRE_DEV_SPOT_ADJUSTED", 1.0)) >= 0.5
+                    ? 1
+                    : 0;
     const double rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
     const double div = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
     if (curve_id.empty()) {

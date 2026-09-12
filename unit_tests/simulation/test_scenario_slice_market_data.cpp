@@ -35,7 +35,7 @@ ExposureTimeGrid SimpleGrid() {
 
 }  // namespace
 
-TEST(ScenarioSliceMarketDataTest, SpotMatchesScenarioBufferSlice) {
+TEST(ScenarioSliceMarketDataTest, QuoteMatchesScenarioBufferSlice) {
     const auto grid = SimpleGrid();
     ScenarioBuffer buffer(1, grid.NumSteps(), 2);
     buffer.At(0, 0, 0) = 100.0;
@@ -51,13 +51,13 @@ TEST(ScenarioSliceMarketDataTest, SpotMatchesScenarioBufferSlice) {
 
     ScenarioSliceMarketData market(buffer, grid, factor_map, market_config);
     market.SetSlice(0, 1);
-    EXPECT_DOUBLE_EQ(market.Spot("AAPL"), 101.0);
+    EXPECT_DOUBLE_EQ(market.Quote("AAPL"), 101.0);
     EXPECT_EQ(market.ValuationDate().year, 2026);
     EXPECT_EQ(market.ValuationDate().month, 6);
     EXPECT_EQ(market.ValuationDate().day, 15);
 
     market.SetSlice(1, 0);
-    EXPECT_DOUBLE_EQ(market.Spot("AAPL"), 110.0);
+    EXPECT_DOUBLE_EQ(market.Quote("AAPL"), 110.0);
     EXPECT_DOUBLE_EQ(market.RiskFreeRate(), 0.03);
     EXPECT_DOUBLE_EQ(market.ImpliedVolatility("AAPL", 100.0, 0.5, OptionType::kCall), 0.2);
 }

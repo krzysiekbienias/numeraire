@@ -164,6 +164,45 @@ struct MtmEngineRun {
     return static_cast<int>(v);
 }
 
+/// Prefer `primary`; fall back to the pre-rename alias so existing `.env` / cron still work.
+[[nodiscard]] const char* EnvFirstNonEmpty(const char* primary, const char* alias) noexcept {
+    const char* raw = std::getenv(primary);
+    if (raw != nullptr && raw[0] != '\0') {
+        return raw;
+    }
+    raw = std::getenv(alias);
+    if (raw != nullptr && raw[0] != '\0') {
+        return raw;
+    }
+    return nullptr;
+}
+
+[[nodiscard]] double EnvDoubleAliased(const char* primary, const char* alias, const double default_value) noexcept {
+    const char* raw = EnvFirstNonEmpty(primary, alias);
+    if (raw == nullptr) {
+        return default_value;
+    }
+    char* end = nullptr;
+    const double v = std::strtod(raw, &end);
+    if (end == raw) {
+        return default_value;
+    }
+    return v;
+}
+
+[[nodiscard]] int EnvIntAliased(const char* primary, const char* alias, const int default_value) noexcept {
+    const char* raw = EnvFirstNonEmpty(primary, alias);
+    if (raw == nullptr) {
+        return default_value;
+    }
+    char* end = nullptr;
+    const long v = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return default_value;
+    }
+    return static_cast<int>(v);
+}
+
 [[nodiscard]] bool EqualsAsciiIgnoreCase(const std::string_view a, const std::string_view b) noexcept {
     if (a.size() != b.size()) {
         return false;
@@ -193,14 +232,14 @@ struct MtmEngineRun {
 }
 
 struct DevMainMarketQuotesConfig {
-    enum class SpotSourceKind { kEnv, kDb };
+    enum class QuoteSourceKind { kEnv, kDb };
     enum class VolSourceKind { kEnv, kDb };
     enum class RateSourceKind { kEnv, kDb };
 
-    SpotSourceKind spot_source{SpotSourceKind::kEnv};
+    QuoteSourceKind quote_source{QuoteSourceKind::kEnv};
     VolSourceKind vol_source{VolSourceKind::kEnv};
     RateSourceKind rate_source{RateSourceKind::kEnv};
-    double env_fallback_spot{240.0};
+    double env_fallback_quote{240.0};
     std::string as_of_iso;
     int equity_eod_adjusted{1};
     std::string discount_curve_id{"USD_TREASURY_PAR_FRED"};
@@ -209,16 +248,19 @@ struct DevMainMarketQuotesConfig {
 [[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(const std::optional<std::string>& cli_as_of,
                                                                       const bool require_valuation_date) {
     DevMainMarketQuotesConfig c;
-    const char* const src_raw = std::getenv("NUMERAIRE_DEV_SPOT_SOURCE");
+    const char* const src_raw =
+            EnvFirstNonEmpty("NUMERAIRE_DEV_QUOTE_SOURCE", "NUMERAIRE_DEV_SPOT_SOURCE");
     if (src_raw != nullptr && src_raw[0] != '\0') {
         const std::string_view sv{src_raw};
         if (EqualsAsciiIgnoreCase(sv, "db")) {
-            c.spot_source = DevMainMarketQuotesConfig::SpotSourceKind::kDb;
+            c.quote_source = DevMainMarketQuotesConfig::QuoteSourceKind::kDb;
         } else if (EqualsAsciiIgnoreCase(sv, "env")) {
-            c.spot_source = DevMainMarketQuotesConfig::SpotSourceKind::kEnv;
+            c.quote_source = DevMainMarketQuotesConfig::QuoteSourceKind::kEnv;
         } else {
-            throw numeraire::ValidationError(std::string{"NUMERAIRE_DEV_SPOT_SOURCE must be 'env' or 'db' (got: "} +
-                                             src_raw + ")");
+            throw numeraire::ValidationError(
+                    std::string{"NUMERAIRE_DEV_QUOTE_SOURCE (or NUMERAIRE_DEV_SPOT_SOURCE) must be "
+                                "'env' or 'db' (got: "} +
+                    src_raw + ")");
         }
     }
 
@@ -253,7 +295,7 @@ struct DevMainMarketQuotesConfig {
         c.discount_curve_id = curve_id;
     }
 
-    c.env_fallback_spot = EnvDouble("NUMERAIRE_DEV_SPOT", 240.0);
+    c.env_fallback_quote = EnvDoubleAliased("NUMERAIRE_DEV_QUOTE", "NUMERAIRE_DEV_SPOT", 240.0);
     if (cli_as_of.has_value()) {
         c.as_of_iso = *cli_as_of;
     } else if (require_valuation_date) {
@@ -261,7 +303,7 @@ struct DevMainMarketQuotesConfig {
             c.as_of_iso = ao;
         }
     }
-    const int adj_raw = EnvInt("NUMERAIRE_DEV_SPOT_ADJUSTED", 1);
+    const int adj_raw = EnvIntAliased("NUMERAIRE_DEV_QUOTE_ADJUSTED", "NUMERAIRE_DEV_SPOT_ADJUSTED", 1);
     c.equity_eod_adjusted = (adj_raw != 0) ? 1 : 0;
 
     if (require_valuation_date && (c.as_of_iso.empty() || !LooksIsoDate(c.as_of_iso))) {
@@ -331,10 +373,10 @@ struct PricingArgvScan {
 
 [[nodiscard]] std::string BuildMtmRemarks(const DevMainMarketQuotesConfig& mq) {
     std::ostringstream oss;
-    if (mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb) {
-        oss << "SPOT_DB;";
+    if (mq.quote_source == DevMainMarketQuotesConfig::QuoteSourceKind::kDb) {
+        oss << "QUOTE_DB;";
     } else {
-        oss << "SPOT_ENV;";
+        oss << "QUOTE_ENV;";
     }
     if (mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb) {
         oss << "IV_DB;";
@@ -409,7 +451,7 @@ struct PricingArgvScan {
         }
 
         const std::string underlying = std::string(product->UnderlyingId());
-        const double spot_used = mkt.Spot(underlying);
+        const double quote_used = mkt.Quote(underlying);
 
         const bool is_spot =
                 dynamic_cast<const numeraire::products::EquitySpotProduct*>(product.get()) != nullptr;
@@ -431,7 +473,7 @@ struct PricingArgvScan {
         mtm.trade_id = bundle.trade.trade_id;
         mtm.leg_id = row.leg.leg_id;
         mtm.batch_run_id = batch_run_id;
-        mtm.underlying_spot = spot_used;
+        mtm.underlying_spot = quote_used;
         mtm.risk_free_rate = mkt.RiskFreeRateForTenor(years_to_maturity > 0.0 ? years_to_maturity : 0.0);
         mtm.dividend_yield = DividendYieldForUnderlying(snap, underlying);
         // Linear / spot / futures payoffs never query the surface, so storing a vol against them
@@ -553,7 +595,8 @@ void PrintUsage() {
             "linear forward). "
             "Matured LIVE trades become EXPIRED on the first as_of after max leg expiry (before MTM/sim). "
             "MTM requires LIVE + booked legs.\n"
-            "Pricing spot: NUMERAIRE_DEV_SPOT_SOURCE=env|db (`db` reads equity_daily_eod.close on that date). "
+            "Pricing quote: NUMERAIRE_DEV_QUOTE_SOURCE=env|db (`db` reads equity close or futures settle; "
+            "NUMERAIRE_DEV_SPOT_SOURCE is still accepted). "
             "Implied vol: NUMERAIRE_DEV_VOL_SOURCE=env|db (`db` reads vol_surface_eod; needs --build-vol-surface-eod). "
             "Rate: NUMERAIRE_DEV_RATE_SOURCE=env|db (`db` reads discount_curve_eod; run daily_market_prep first). "
             "Flat fallbacks: NUMERAIRE_DEV_RATE / NUMERAIRE_DEV_VOL / NUMERAIRE_DEV_DIV_YIELD.\n"
@@ -645,10 +688,10 @@ namespace {
 
 }  // namespace
 
-void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
-                                      const std::vector<TradeCatalogBundle>& bundles,
-                                      const std::filesystem::path& db_path_file,
-                                      const DevMainMarketQuotesConfig& mq) {
+void FillUnderlyingQuotesAcrossBundles(MarketSnapshot& snap,
+                                       const std::vector<TradeCatalogBundle>& bundles,
+                                       const std::filesystem::path& db_path_file,
+                                       const DevMainMarketQuotesConfig& mq) {
     std::unordered_set<std::string> seen;
     for (const TradeCatalogBundle& bundle : bundles) {
         for (const auto& row : bundle.legs) {
@@ -660,11 +703,11 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
             }
             seen.insert(market_key);
 
-            if (mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kEnv) {
-                snap.spots[market_key] = mq.env_fallback_spot;
+            if (mq.quote_source == DevMainMarketQuotesConfig::QuoteSourceKind::kEnv) {
+                snap.quotes[market_key] = mq.env_fallback_quote;
                 Logger::NumInfo(
-                        "Underlying {} spot={} from env (NUMERAIRE_DEV_SPOT, NUMERAIRE_DEV_SPOT_SOURCE=env).",
-                        market_key, mq.env_fallback_spot);
+                        "Underlying {} quote={} from env (NUMERAIRE_DEV_QUOTE, NUMERAIRE_DEV_QUOTE_SOURCE=env).",
+                        market_key, mq.env_fallback_quote);
                 continue;
             }
 
@@ -675,9 +718,9 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
                     throw numeraire::ValidationError(
                             "missing futures EOD settle for ticker=" + market_key +
                             " as_of=" + mq.as_of_iso +
-                            " — ingest futures_daily_eod before NUMERAIRE_DEV_SPOT_SOURCE=db.");
+                            " — ingest futures_daily_eod before NUMERAIRE_DEV_QUOTE_SOURCE=db.");
                 }
-                snap.spots[market_key] = *settle;
+                snap.quotes[market_key] = *settle;
                 Logger::NumInfo("Futures {} settle={} from futures_daily_eod (as_of={}).", market_key,
                                 *settle, mq.as_of_iso);
                 continue;
@@ -687,12 +730,12 @@ void FillUnderlyingSpotsAcrossBundles(MarketSnapshot& snap,
                     db_path_file, market_key, mq.as_of_iso, mq.equity_eod_adjusted);
             if (!close.has_value()) {
                 throw numeraire::ValidationError(
-                        "missing EOD spot for underlying=" + market_key + " as_of=" + mq.as_of_iso +
+                        "missing EOD quote for underlying=" + market_key + " as_of=" + mq.as_of_iso +
                         " adjusted=" + std::to_string(mq.equity_eod_adjusted) +
                         " — ingest equity_daily_eod or index_daily_eod (e.g. NDX → I:NDX) before "
-                        "NUMERAIRE_DEV_SPOT_SOURCE=db.");
+                        "NUMERAIRE_DEV_QUOTE_SOURCE=db.");
             }
-            snap.spots[market_key] = *close;
+            snap.quotes[market_key] = *close;
             if (LookupEquityDailyClose(db_path_file.string(), market_key, mq.as_of_iso, mq.equity_eod_adjusted)
                         .has_value()) {
                 Logger::NumInfo("Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
@@ -771,13 +814,13 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
                     "NUMERAIRE_DEV_VOL_SOURCE=db requires a valuation date (--as-of or NUMERAIRE_DEV_AS_OF).");
         }
         std::vector<std::string> underlying_ids;
-        underlying_ids.reserve(snap.spots.size());
-        for (const auto& [uid, _] : snap.spots) {
+        underlying_ids.reserve(snap.quotes.size());
+        for (const auto& [uid, _] : snap.quotes) {
             underlying_ids.push_back(uid);
         }
         if (underlying_ids.empty()) {
             throw numeraire::ValidationError(
-                    "NUMERAIRE_DEV_VOL_SOURCE=db: no underlyings in spot map — price spots first.");
+                    "NUMERAIRE_DEV_VOL_SOURCE=db: no underlyings in quote map — load marks first.");
         }
         std::vector<std::string> iv_db_ids;
         std::vector<std::string> iv_env_ids;
@@ -798,7 +841,7 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
                 snap.flat_implied_volatility);
         const double flat_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
         return numeraire::market_data::CurvedRateMarketData::MaybeWrap(
-                numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.spots,
+                numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.quotes,
                                                                          snap.risk_free_rate, snap.dividend_yields,
                                                                          underlying_ids, mq.as_of_iso,
                                                                          snap.flat_implied_volatility),
@@ -866,20 +909,20 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
     snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
     const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
 
-    FillUnderlyingSpotsAcrossBundles(snap, bundles, db_path, mq);
+    FillUnderlyingQuotesAcrossBundles(snap, bundles, db_path, mq);
     FillDividendYieldsAcrossBundles(snap, bundles, q);
     AttachDiscountCurveToSnapshot(mq, db_path.string(), snap);
 
     Logger::NumInfo(
             "Quotes: risk_free_rate={} ({} curve_as_of={}) vol_source={} flat_iv_fallback={} dividends={} (env); "
-            "spot_source={} as_of={}.",
+            "quote_source={} as_of={}.",
             snap.risk_free_rate,
             mq.rate_source == DevMainMarketQuotesConfig::RateSourceKind::kDb ? "db" : "env",
             snap.discount_curve.has_value() ? snap.discount_curve->as_of : "-",
             mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb ? "db" : "env",
             snap.flat_implied_volatility,
             q,
-            mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb ? "db" : "env",
+            mq.quote_source == DevMainMarketQuotesConfig::QuoteSourceKind::kDb ? "db" : "env",
             mq.as_of_iso);
 
     const MarketSnapshot snap_for_mtm = snap;
@@ -1009,16 +1052,16 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
         snap.flat_implied_volatility = EnvDouble("NUMERAIRE_DEV_VOL", 0.20);
         const double q = EnvDouble("NUMERAIRE_DEV_DIV_YIELD", 0.0);
 
-        FillUnderlyingSpotsAcrossBundles(snap, {bundle}, db_path, mq);
+        FillUnderlyingQuotesAcrossBundles(snap, {bundle}, db_path, mq);
         FillDividendYieldsAcrossBundles(snap, {bundle}, q);
         AttachDiscountCurveToSnapshot(mq, db_path.string(), snap);
 
         Logger::NumInfo(
-                "Booking quotes trade_id={} trade_date={} spot_source={} vol_source={} rate_source={} "
+                "Booking quotes trade_id={} trade_date={} quote_source={} vol_source={} rate_source={} "
                 "risk_free_rate={} flat_iv_fallback={}.",
                 tid,
                 mq.as_of_iso,
-                mq.spot_source == DevMainMarketQuotesConfig::SpotSourceKind::kDb ? "db" : "env",
+                mq.quote_source == DevMainMarketQuotesConfig::QuoteSourceKind::kDb ? "db" : "env",
                 mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb ? "db" : "env",
                 mq.rate_source == DevMainMarketQuotesConfig::RateSourceKind::kDb ? "db" : "env",
                 snap.risk_free_rate,

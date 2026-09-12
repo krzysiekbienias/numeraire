@@ -33,7 +33,7 @@ namespace {
 
     const double time_to_expiry =
             schedule::Act365FixedYearFraction(market.ValuationDate(), vanilla.ExpiryDate());
-    const double spot = market.Spot(vanilla.UnderlyingId());
+    const double spot = market.Quote(vanilla.UnderlyingId());
     const double strike = vanilla.Strike();
     const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(vanilla.UnderlyingId());
@@ -67,7 +67,7 @@ namespace {
     }
 
     const double time_to_expiry = schedule::Act365FixedYearFraction(market.ValuationDate(), aon.ExpiryDate());
-    const double spot = market.Spot(aon.UnderlyingId());
+    const double spot = market.Quote(aon.UnderlyingId());
     const double strike = aon.Strike();
     const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(aon.UnderlyingId());
@@ -95,7 +95,7 @@ namespace {
     }
 
     const double time_to_expiry = schedule::Act365FixedYearFraction(market.ValuationDate(), con.ExpiryDate());
-    const double spot = market.Spot(con.UnderlyingId());
+    const double spot = market.Quote(con.UnderlyingId());
     const double strike = con.Strike();
     const double cash_payout = con.CashPayoutPerShare();
     const double r = market.RiskFreeRateForTenor(time_to_expiry);

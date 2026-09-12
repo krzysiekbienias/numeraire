@@ -15,7 +15,7 @@ namespace {
         const products::CommodityFuturesForwardProduct& fwd, const core::IMarketData& market) {
     const double time_to_expiry =
             schedule::Act365FixedYearFraction(market.ValuationDate(), fwd.ExpiryDate());
-    const double futures_price = market.Spot(fwd.UnderlyingId());
+    const double futures_price = market.Quote(fwd.UnderlyingId());
     const double k = fwd.Strike();
     const double r = market.RiskFreeRateForTenor(time_to_expiry > 0.0 ? time_to_expiry : 0.0);
 

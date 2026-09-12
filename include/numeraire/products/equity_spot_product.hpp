@@ -11,7 +11,7 @@
 
 namespace numeraire::products {
 
-/// Cash equity **or** index spot position: mark-to-market at `IMarketData::Spot`.
+/// Cash equity **or** index spot position: mark-to-market at `IMarketData::Quote`.
 /// Used for delta-hedge legs next to options in the same portfolio.
 ///
 /// Catalog: `equity_spot` (shares) or `index_spot` (index units). No strike, no

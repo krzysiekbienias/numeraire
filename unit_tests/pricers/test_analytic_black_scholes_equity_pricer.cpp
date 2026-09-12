@@ -28,8 +28,8 @@ public:
 
     [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override { return valuation_date_; }
 
-    [[nodiscard]] double Spot(const std::string_view underlying_id) const override {
-        return spots_.at(std::string(underlying_id));
+    [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
+        return quotes_.at(std::string(underlying_id));
     }
 
     [[nodiscard]] double RiskFreeRate() const override { return r_; }
@@ -50,7 +50,7 @@ public:
         return vol_;
     }
 
-    void SetSpot(std::string id, const double v) { spots_[std::move(id)] = v; }
+    void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
     void SetRate(const double r) { r_ = r; }
 
@@ -59,7 +59,7 @@ public:
     void SetVol(const double v) { vol_ = v; }
 
 private:
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     double r_ = 0.0;
     double q_ = 0.0;
     double vol_ = 0.2;
@@ -141,7 +141,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingCallMatchesClosedForm) 
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("AAPL", 100.0);
+    m.SetQuote("AAPL", 100.0);
     m.SetRate(0.05);
     m.SetDivYield(0.02);
     m.SetVol(0.25);
@@ -165,7 +165,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingPutMatchesClosedForm) {
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("GOOGL", 100.0);
+    m.SetQuote("GOOGL", 100.0);
     m.SetRate(0.03);
     m.SetDivYield(0.0);
     m.SetVol(0.20);
@@ -186,7 +186,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingZeroTimeIsSpotIfItm) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 105.0);
+    m.SetQuote("AAPL", 105.0);
     m.SetRate(0.05);
     m.SetVol(0.2);
 
@@ -210,7 +210,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, AssetOrNothingZeroTimeOtmIsZero) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 95.0);
+    m.SetQuote("AAPL", 95.0);
     m.SetRate(0.05);
     m.SetVol(0.2);
 
@@ -231,7 +231,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingCallMatchesClosedForm) {
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("NVDA", 250.0);
+    m.SetQuote("NVDA", 250.0);
     m.SetRate(0.03);
     m.SetDivYield(0.0);
     m.SetVol(0.35);
@@ -257,7 +257,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingPutMatchesClosedForm) {
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("AAPL", 280.0);
+    m.SetQuote("AAPL", 280.0);
     m.SetRate(0.03);
     m.SetDivYield(0.0);
     m.SetVol(0.22);
@@ -281,7 +281,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingZeroTimeIsPayoutIfItm) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 300.0);
+    m.SetQuote("AAPL", 300.0);
     m.SetRate(0.05);
     m.SetVol(0.2);
 
@@ -305,7 +305,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingZeroTimeOtmIsZero) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 290.0);
+    m.SetQuote("AAPL", 290.0);
     m.SetRate(0.05);
     m.SetVol(0.2);
 
@@ -324,7 +324,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, RejectsForwardProduct) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("AAPL", 100.0);
+    m.SetQuote("AAPL", 100.0);
 
     const numeraire::products::EquityForwardProduct forward("AAPL", 95.0, d, d);
     const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
@@ -338,7 +338,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, EuropeanCallMatchesQuantLibBenchmark)
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("SPX", 100.0);
+    m.SetQuote("SPX", 100.0);
     m.SetRate(0.05);
     m.SetDivYield(0.02);
     m.SetVol(0.25);
@@ -370,7 +370,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, EuropeanPutMatchesQuantLibBenchmark) 
 
     MapMarket m;
     m.SetValuationDate(trade);
-    m.SetSpot("SPX", 100.0);
+    m.SetQuote("SPX", 100.0);
     m.SetRate(0.05);
     m.SetDivYield(0.02);
     m.SetVol(0.25);
@@ -399,7 +399,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, ZeroTimeIsIntrinsic) {
 
     MapMarket m;
     m.SetValuationDate(d);
-    m.SetSpot("SPX", 105.0);
+    m.SetQuote("SPX", 105.0);
     m.SetRate(0.05);
     m.SetVol(0.2);
     const numeraire::products::VanillaEquityOptionProduct opt(
@@ -414,7 +414,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, ZeroTimeIsIntrinsic) {
 TEST(AnalyticBlackScholesEquityPricerTest, AmericanExerciseThrows) {
     MapMarket m;
     m.SetValuationDate(numeraire::schedule::Date{.year = 2025, .month = 1, .day = 1});
-    m.SetSpot("SPX", 100.0);
+    m.SetQuote("SPX", 100.0);
     m.SetRate(0.05);
     m.SetVol(0.2);
 
@@ -437,7 +437,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, TimeToExpiryUsesValuationDateNotTrade
 
     MapMarket m;
     m.SetValuationDate(valuation);
-    m.SetSpot("SPX", 100.0);
+    m.SetQuote("SPX", 100.0);
     m.SetRate(0.05);
     m.SetDivYield(0.0);
     m.SetVol(0.25);
@@ -460,7 +460,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, TimeToExpiryUsesValuationDateNotTrade
 TEST(AnalyticBlackScholesEquityPricerTest, WrongProductTypeThrows) {
     MapMarket m;
     m.SetValuationDate(numeraire::schedule::Date{.year = 2025, .month = 6, .day = 1});
-    m.SetSpot("X", 100.0);
+    m.SetQuote("X", 100.0);
     const WrongProduct wrong;
     const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
     EXPECT_THROW(static_cast<void>(pricer.Price(wrong, m)), numeraire::ValidationError);
@@ -490,7 +490,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, VanillaPathAgreesWithQuantClosedForm)
             for (const double vol : {0.15, 0.25, 0.40}) {
                 MapMarket m;
                 m.SetValuationDate(trade);
-                m.SetSpot("SPX", kSpot);
+                m.SetQuote("SPX", kSpot);
                 m.SetRate(kRate);
                 m.SetDivYield(kDiv);
                 m.SetVol(vol);

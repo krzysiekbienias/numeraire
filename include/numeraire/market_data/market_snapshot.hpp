@@ -12,7 +12,7 @@ namespace numeraire::market_data {
 /// Immutable bundle of quotes fed into pricing (`IMarketData`).
 struct MarketSnapshot {
     schedule::Date valuation_date{};  // as_of
-    std::unordered_map<std::string, double> spots;
+    std::unordered_map<std::string, double> quotes;
     double risk_free_rate{0.0};
     std::unordered_map<std::string, double> dividend_yields;
     /// Used for all `ImpliedVolatility` calls until a surface ships.

@@ -122,10 +122,11 @@ per leg (composite pricer: Black–Scholes for options/binaries, dedicated forwa
 - **Which trades** — `dev_main [--as-of DATE] …`: **`--as-of`** may appear in any
   position alongside `<trade_id>`, `--all`, or `--trades-json`
   (e.g. `dev_main --as-of 2026-05-01 TRD_001`).
-- **Synthetic vs DB spot** — **`NUMERAIRE_DEV_SPOT_SOURCE=env`** (default):
-  **`NUMERAIRE_DEV_SPOT`** per underlying. **`NUMERAIRE_DEV_SPOT_SOURCE=db`**:
-  **`equity_daily_eod.close`** on the valuation date (`timespan='1d'`;
-  **`NUMERAIRE_DEV_SPOT_ADJUSTED`**, default `1`). **`NUMERAIRE_DEV_RATE`**,
+- **Synthetic vs DB quote** — **`NUMERAIRE_DEV_QUOTE_SOURCE=env`** (default):
+  **`NUMERAIRE_DEV_QUOTE`** per underlying. **`NUMERAIRE_DEV_QUOTE_SOURCE=db`**:
+  equity/index close or futures settle on the valuation date (`timespan='1d'`;
+  **`NUMERAIRE_DEV_QUOTE_ADJUSTED`**, default `1`). Legacy `NUMERAIRE_DEV_SPOT*`
+  names still work. **`NUMERAIRE_DEV_RATE`**,
   **`NUMERAIRE_DEV_VOL`**, **`NUMERAIRE_DEV_DIV_YIELD`** remain env-driven.
 - **MTM** — When a valuation date is set, one row per leg is written to
   **`trade_leg_mtm_eod`** (official) plus **`trade_leg_mtm_eod_archive`** (append-only
@@ -137,7 +138,7 @@ Examples:
 ```bash
 # Requires --as-of or NUMERAIRE_DEV_AS_OF (e.g. from .env)
 ./build/dev_main --as-of 2026-05-15 TRD_001
-NUMERAIRE_DEV_SPOT_SOURCE=db ./build/dev_main --as-of 2026-05-15 TRD_001
+NUMERAIRE_DEV_QUOTE_SOURCE=db ./build/dev_main --as-of 2026-05-15 TRD_001
 ./build/dev_main --as-of 2026-05-15 --all
 ./build/dev_main --trades-json trades/incoming/pricing_batch.sample.json --as-of 2026-05-15
 ```

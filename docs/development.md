@@ -32,7 +32,7 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 
 **What a good fix-level DoD contains**
 
-1. **Inputs** — trade id, `as_of` values, env vars held constant between runs (`NUMERAIRE_DEV_SPOT_SOURCE`, spot/rate/vol, …). See [`README.md`](../README.md) § *dev_main*.
+1. **Inputs** — trade id, `as_of` values, env vars held constant between runs (`NUMERAIRE_DEV_QUOTE_SOURCE`, spot/rate/vol, …). See [`README.md`](../README.md) § *dev_main*.
 2. **Observable outcomes** — relations or tolerances (not only “looks correct”). Example patterns:
    - Two valuation dates: `T(as_of₁) − T(as_of₂) ≈ Act365(as_of₁, as_of₂)`; PV may move with `T` if spot/r/vol are fixed.
    - `as_of` on expiry: `years_to_maturity = 0`, `pv_unit` = intrinsic (same idea as `ZeroTimeIsIntrinsic` in pricer unit tests).
@@ -46,7 +46,7 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 
 ### Batch `--as-of` reruns (weekdays)
 
-`dev_main` accepts **one** valuation date per run (`--as-of` or `NUMERAIRE_DEV_AS_OF`). For a date range, loop from the **repository root** after `cmake --build build`. Use `NUMERAIRE_DEV_SPOT_SOURCE=db` only when `equity_daily_eod` has a bar for each day you price (weekends and holidays usually do not).
+`dev_main` accepts **one** valuation date per run (`--as-of` or `NUMERAIRE_DEV_AS_OF`). For a date range, loop from the **repository root** after `cmake --build build`. Use `NUMERAIRE_DEV_QUOTE_SOURCE=db` only when `equity_daily_eod` has a bar for each day you price (weekends and holidays usually do not).
 
 ```bash
 d=2026-05-01
@@ -61,7 +61,7 @@ done
 ```
 
 - **`|| break`** — stop the whole batch on the first failed run (missing EOD, bad trade id, …). Use **`|| continue`** to skip bad days and keep going.
-- Adjust `d`, `end`, and the trade id; override env per run if needed (`NUMERAIRE_DEV_SPOT_SOURCE=db`, rate/vol from `.env`).
+- Adjust `d`, `end`, and the trade id; override env per run if needed (`NUMERAIRE_DEV_QUOTE_SOURCE=db`, rate/vol from `.env`).
 
 Quick check in SQLite after the loop:
 
@@ -96,19 +96,19 @@ To drive dates only from rows that exist in the market table (no weekend gaps), 
 # 1 — book structure (already shipped)
 python3 scripts/import_trade_bundle.py trades/incoming/my_trade.json --db db.sqlite3
 
-# 2 — EOD on trade_date for each underlying (when SPOT_SOURCE=db)
+# 2 — EOD on trade_date for each underlying (when QUOTE_SOURCE=db)
 ./build/dev_main --fetch-eod-daily --from 2026-06-01 --to 2026-06-01 --ticker AAPL
 
 # 3 — booking (trade must be PENDING in DB)
 ./build/dev_main --price-booking TRD_10004
 
 # 4 — MTM (shipped; as_of >= trade_date)
-NUMERAIRE_DEV_SPOT_SOURCE=db ./build/dev_main --as-of 2026-06-01 TRD_10004
+NUMERAIRE_DEV_QUOTE_SOURCE=db ./build/dev_main --as-of 2026-06-01 TRD_10004
 ```
 
 ### Fix-level acceptance criteria (for the implementation PR)
 
-1. **Given** a **PENDING** trade with valid `trade_date`, legs with `execution_price = 0`, and market data available on `trade_date` (env spot or `equity_daily_eod` when `NUMERAIRE_DEV_SPOT_SOURCE=db`).
+1. **Given** a **PENDING** trade with valid `trade_date`, legs with `execution_price = 0`, and market data available on `trade_date` (env spot or `equity_daily_eod` when `NUMERAIRE_DEV_QUOTE_SOURCE=db`).
 2. **When** `dev_main --price-booking <trade_id>` runs with fixed `NUMERAIRE_DEV_RATE` / `VOL` / `DIV_YIELD`.
 3. **Then** for each leg: `trade_legs.execution_price` equals the **pv_unit** that the same pricer would produce if `ValuationDate = trade_date` (within float tolerance vs a unit test seed).
 4. **And** `trade_leg_mtm_eod` row count unchanged by the booking run.
@@ -331,7 +331,7 @@ Original sprint rows **5–9** were summarized next to the architecture doc; bel
 | **5** | `core`: `IProduct` / `IPricer` / `IModel` / `IMarketData`, `PricingEngine`, `PricingResult` | **Shipped** — [`pricing_engine.hpp`](../include/numeraire/core/pricing_engine.hpp), related interfaces under [`include/numeraire/core/`](../include/numeraire/core/) |
 | **6** | Factories (`ProductFactory`, `PricerFactory`) | **Shipped** — [`products/`](../include/numeraire/products/), [`pricers/`](../include/numeraire/pricers/) |
 | **7** | Trade persistence (`TradeDto`, `ITradeRepository`, …) | **Shipped as SQLite-first** — reference DDL [`sql/schema_v1.sql`](../sql/schema_v1.sql); [`SqliteTradeRepository`](../include/numeraire/database/sqlite_trade_repository.hpp); bootstrap from [`sqlite_schema`](../include/numeraire/database/sqlite_schema.hpp); bundle import [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py). *(An in-memory repository was discussed early on; the runnable path is SQLite.)* |
-| **8** | `market_data`: snapshots + providers | **Partially shipped** — [`MarketSnapshot`](../include/numeraire/market_data/market_snapshot.hpp), [`StaticMarketDataProvider`](../include/numeraire/market_data/static_market_data_provider.hpp). **Persisted Polygon daily bars**: [`market_data_providers`](../src/market_data_providers/) → `equity_daily_eod` / `index_daily_eod` / `option_contract` / `option_daily_price_eod`, [`dev_main`](../app/dev_main.cpp) ingest flags. **Vol surface DDL**: `vol_surface_eod` + `vol_surface_point_eod` in [`schema_v1.sql`](../sql/schema_v1.sql) (sparse points; build/interpolate job still open). **Spot-on-date for pricing**: `NUMERAIRE_DEV_SPOT_SOURCE=db` reads `equity_daily_eod.close` into the snapshot (**`NUMERAIRE_DEV_RATE` / `VOL` still env**). **Still open:** IV inversion + surface publish job; `SqliteMarketDataProvider` implementing `IMarketData` from DB surfaces. |
+| **8** | `market_data`: snapshots + providers | **Partially shipped** — [`MarketSnapshot`](../include/numeraire/market_data/market_snapshot.hpp), [`StaticMarketDataProvider`](../include/numeraire/market_data/static_market_data_provider.hpp). **Persisted Polygon daily bars**: [`market_data_providers`](../src/market_data_providers/) → `equity_daily_eod` / `index_daily_eod` / `option_contract` / `option_daily_price_eod`, [`dev_main`](../app/dev_main.cpp) ingest flags. **Vol surface DDL**: `vol_surface_eod` + `vol_surface_point_eod` in [`schema_v1.sql`](../sql/schema_v1.sql) (sparse points; build/interpolate job still open). **Quote-on-date for pricing**: `NUMERAIRE_DEV_QUOTE_SOURCE=db` reads equity close or futures settle into the snapshot (**`NUMERAIRE_DEV_RATE` / `VOL` still env**). **Still open:** IV inversion + surface publish job; `SqliteMarketDataProvider` implementing `IMarketData` from DB surfaces. |
 | **9** | Polish, CI, tightening | **Ongoing** — incremental |
 | **—** | **Booking price** (`--price-booking`) | **Shipped** — see § *Booking price* above |
 

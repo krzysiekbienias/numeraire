@@ -43,7 +43,7 @@ const schedule::Date& ScenarioSliceMarketData::ValuationDate() const {
     return time_grid_.nodes[step_].date;
 }
 
-double ScenarioSliceMarketData::Spot(const std::string_view underlying_id) const {
+double ScenarioSliceMarketData::Quote(const std::string_view underlying_id) const {
     const std::string key(underlying_id);
     const auto it = factor_by_underlying_.find(key);
     if (it != factor_by_underlying_.end()) {
@@ -107,9 +107,9 @@ double ScenarioSliceMarketData::ImpliedVolatility(const std::string_view underly
     }
 
     const database::VolSurfaceEodRead& surface = surface_it->second;
-    const double spot = Spot(underlying_id);
+    const double spot = Quote(underlying_id);
     if (spot <= 0.0) {
-        throw MarketDataError("ScenarioSliceMarketData::ImpliedVolatility: spot must be positive for \"" +
+        throw MarketDataError("ScenarioSliceMarketData::ImpliedVolatility: quote must be positive for \"" +
                               std::string(underlying_id) + "\"");
     }
 

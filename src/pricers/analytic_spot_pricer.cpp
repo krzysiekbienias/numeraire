@@ -11,7 +11,7 @@ namespace {
 
 [[nodiscard]] core::PricingResult PriceSpot(const products::EquitySpotProduct& spot,
                                             const core::IMarketData& market) {
-    const double pv_unit = market.Spot(spot.UnderlyingId());
+    const double pv_unit = market.Quote(spot.UnderlyingId());
 
     core::PricingResult result;
     result.SetNpv(pv_unit);

@@ -14,7 +14,7 @@ namespace numeraire::market_data {
 class SqliteVolSurfaceMarketData final : public core::IMarketData {
    public:
     SqliteVolSurfaceMarketData(schedule::Date valuation_date,
-                               std::unordered_map<std::string, double> spots,
+                               std::unordered_map<std::string, double> quotes,
                                double risk_free_rate,
                                std::unordered_map<std::string, double> dividend_yields,
                                std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces,
@@ -24,7 +24,7 @@ class SqliteVolSurfaceMarketData final : public core::IMarketData {
     [[nodiscard]] static std::unique_ptr<SqliteVolSurfaceMarketData> Load(
             const std::string& database_file_path,
             schedule::Date valuation_date,
-            std::unordered_map<std::string, double> spots,
+            std::unordered_map<std::string, double> quotes,
             double risk_free_rate,
             std::unordered_map<std::string, double> dividend_yields,
             const std::vector<std::string>& underlying_ids,
@@ -34,7 +34,7 @@ class SqliteVolSurfaceMarketData final : public core::IMarketData {
 
     [[nodiscard]] const schedule::Date& ValuationDate() const override;
 
-    [[nodiscard]] double Spot(std::string_view underlying_id) const override;
+    [[nodiscard]] double Quote(std::string_view underlying_id) const override;
 
     [[nodiscard]] double RiskFreeRate() const override;
 
@@ -49,7 +49,7 @@ class SqliteVolSurfaceMarketData final : public core::IMarketData {
 
    private:
     schedule::Date valuation_date_;
-    std::unordered_map<std::string, double> spots_;
+    std::unordered_map<std::string, double> quotes_;
     double risk_free_rate_;
     std::unordered_map<std::string, double> dividend_yields_;
     std::unordered_map<std::string, database::VolSurfaceEodRead> surfaces_;

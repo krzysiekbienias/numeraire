@@ -49,7 +49,7 @@ public:
 
     [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override { return valuation_; }
 
-    [[nodiscard]] double Spot(const std::string_view) const override { return spot_; }
+    [[nodiscard]] double Quote(const std::string_view) const override { return spot_; }
 
     [[nodiscard]] double RiskFreeRate() const override { return rate_; }
 
