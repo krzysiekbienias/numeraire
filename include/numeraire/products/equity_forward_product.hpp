@@ -5,7 +5,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <optional>
 #include <string>
 
@@ -16,9 +15,12 @@ namespace numeraire::products {
 /// \(S e^{-qT} - K e^{-rT}\); leg `direction` applies sign at position level.
 /// `OptionKind()` is unused for pricing — pricers must branch on this type.
 class EquityForwardProduct final : public core::IProduct {
-   public:
-    EquityForwardProduct(std::string underlying_id, double forward_price, schedule::Date trade_date,
-                         schedule::Date expiry_date, std::optional<schedule::Schedule> payments = std::nullopt);
+public:
+    EquityForwardProduct(std::string underlying_id,
+                         double forward_price,
+                         schedule::Date trade_date,
+                         schedule::Date expiry_date,
+                         std::optional<schedule::Schedule> payments = std::nullopt);
 
     [[nodiscard]] std::string_view UnderlyingId() const override;
 
@@ -34,7 +36,11 @@ class EquityForwardProduct final : public core::IProduct {
 
     [[nodiscard]] const schedule::Schedule* PaymentSchedule() const override;
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override;
+
+    [[nodiscard]] bool HasCalendarMaturity() const override;
+
+private:
     std::string underlying_id_;
     double forward_price_;
     schedule::Date trade_date_;

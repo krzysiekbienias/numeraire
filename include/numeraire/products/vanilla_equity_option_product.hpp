@@ -5,7 +5,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <optional>
 #include <string>
 
@@ -13,9 +12,13 @@ namespace numeraire::products {
 
 /// Single-underlying European-style equity vanilla built from catalog rows.
 class VanillaEquityOptionProduct final : public core::IProduct {
-   public:
-    VanillaEquityOptionProduct(std::string underlying_id, OptionType kind, ExerciseStyle exercise,
-                               double strike, schedule::Date trade_date, schedule::Date expiry_date,
+public:
+    VanillaEquityOptionProduct(std::string underlying_id,
+                               OptionType kind,
+                               ExerciseStyle exercise,
+                               double strike,
+                               schedule::Date trade_date,
+                               schedule::Date expiry_date,
                                std::optional<schedule::Schedule> payments = std::nullopt);
 
     [[nodiscard]] std::string_view UnderlyingId() const override;
@@ -32,7 +35,11 @@ class VanillaEquityOptionProduct final : public core::IProduct {
 
     [[nodiscard]] const schedule::Schedule* PaymentSchedule() const override;
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override;
+
+    [[nodiscard]] bool HasCalendarMaturity() const override;
+
+private:
     std::string underlying_id_;
     OptionType kind_;
     ExerciseStyle exercise_;

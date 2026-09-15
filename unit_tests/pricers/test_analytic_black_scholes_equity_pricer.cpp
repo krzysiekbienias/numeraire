@@ -82,6 +82,10 @@ public:
 
     [[nodiscard]] const numeraire::schedule::Schedule* PaymentSchedule() const override { return nullptr; }
 
+    [[nodiscard]] bool UsesImpliedVolatility() const override { return true; }
+
+    [[nodiscard]] bool HasCalendarMaturity() const override { return true; }
+
 private:
     numeraire::schedule::Date d_{.year = 2025, .month = 6, .day = 1};
 };
@@ -112,8 +116,7 @@ private:
                                             const double tau) {
     const auto payoff = QuantLib::ext::make_shared<QuantLib::AssetOrNothingPayoff>(
             numeraire::utils::quantlib_bridge::ToQuantLib(kind), strike);
-    return QuantLib::BlackCalculator(payoff, spot * std::exp((r - q) * tau), vol * std::sqrt(tau),
-                                     std::exp(-r * tau))
+    return QuantLib::BlackCalculator(payoff, spot * std::exp((r - q) * tau), vol * std::sqrt(tau), std::exp(-r * tau))
             .value();
 }
 
@@ -127,8 +130,7 @@ private:
                                            const double tau) {
     const auto payoff = QuantLib::ext::make_shared<QuantLib::CashOrNothingPayoff>(
             numeraire::utils::quantlib_bridge::ToQuantLib(kind), strike, cash_payout);
-    return QuantLib::BlackCalculator(payoff, spot * std::exp((r - q) * tau), vol * std::sqrt(tau),
-                                     std::exp(-r * tau))
+    return QuantLib::BlackCalculator(payoff, spot * std::exp((r - q) * tau), vol * std::sqrt(tau), std::exp(-r * tau))
             .value();
 }
 
@@ -237,14 +239,13 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingCallMatchesClosedForm) {
     m.SetVol(0.35);
 
     const numeraire::products::EquityCashOrNothingProduct opt(
-            "NVDA", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 220.0, 1.0, trade,
-            expiry);
+            "NVDA", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 220.0, 1.0, trade, expiry);
 
     const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
     const numeraire::core::PricingResult out = pricer.Price(opt, m);
 
-    const double expected = BenchCashOrNothingNpv(
-            numeraire::OptionType::kCall, 250.0, 220.0, 1.0, 0.03, 0.0, 0.35, tau);
+    const double expected =
+            BenchCashOrNothingNpv(numeraire::OptionType::kCall, 250.0, 220.0, 1.0, 0.03, 0.0, 0.35, tau);
     ASSERT_TRUE(out.Npv().has_value());
     EXPECT_NEAR(*out.Npv(), expected, 1e-12);
     EXPECT_FALSE(out.Greeks().has_value());
@@ -263,14 +264,12 @@ TEST(AnalyticBlackScholesEquityPricerTest, CashOrNothingPutMatchesClosedForm) {
     m.SetVol(0.22);
 
     const numeraire::products::EquityCashOrNothingProduct opt(
-            "AAPL", numeraire::OptionType::kPut, numeraire::ExerciseStyle::kEuropean, 295.0, 1.0, trade,
-            expiry);
+            "AAPL", numeraire::OptionType::kPut, numeraire::ExerciseStyle::kEuropean, 295.0, 1.0, trade, expiry);
 
     const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
     const numeraire::core::PricingResult out = pricer.Price(opt, m);
 
-    const double expected = BenchCashOrNothingNpv(
-            numeraire::OptionType::kPut, 280.0, 295.0, 1.0, 0.03, 0.0, 0.22, tau);
+    const double expected = BenchCashOrNothingNpv(numeraire::OptionType::kPut, 280.0, 295.0, 1.0, 0.03, 0.0, 0.22, tau);
     ASSERT_TRUE(out.Npv().has_value());
     EXPECT_NEAR(*out.Npv(), expected, 1e-12);
 }
@@ -484,8 +483,7 @@ TEST(AnalyticBlackScholesEquityPricerTest, VanillaPathAgreesWithQuantClosedForm)
     constexpr double kDiv = 0.02;
     const numeraire::pricers::AnalyticBlackScholesEquityPricer pricer;
 
-    for (const numeraire::OptionType kind :
-         {numeraire::OptionType::kCall, numeraire::OptionType::kPut}) {
+    for (const numeraire::OptionType kind : {numeraire::OptionType::kCall, numeraire::OptionType::kPut}) {
         for (const double strike : {90.0, 100.0, 110.0}) {
             for (const double vol : {0.15, 0.25, 0.40}) {
                 MapMarket m;
@@ -499,13 +497,13 @@ TEST(AnalyticBlackScholesEquityPricerTest, VanillaPathAgreesWithQuantClosedForm)
                         "SPX", kind, numeraire::ExerciseStyle::kEuropean, strike, trade, expiry);
                 const numeraire::core::PricingResult out = pricer.Price(opt, m);
 
-                const double expected_npv = numeraire::quant::EuropeanVanillaPrice(
-                        kind, kSpot, strike, kRate, kDiv, vol, tau);
+                const double expected_npv =
+                        numeraire::quant::EuropeanVanillaPrice(kind, kSpot, strike, kRate, kDiv, vol, tau);
                 ASSERT_TRUE(out.Npv().has_value()) << "strike=" << strike << " vol=" << vol;
                 EXPECT_NEAR(*out.Npv(), expected_npv, 1.0e-12) << "strike=" << strike << " vol=" << vol;
 
-                const auto expected_greeks = numeraire::quant::EuropeanVanillaAllGreeks(
-                        kind, kSpot, strike, kRate, kDiv, vol, tau);
+                const auto expected_greeks =
+                        numeraire::quant::EuropeanVanillaAllGreeks(kind, kSpot, strike, kRate, kDiv, vol, tau);
                 ASSERT_TRUE(out.Greeks().has_value());
                 EXPECT_NEAR(*out.Greeks()->delta, expected_greeks.delta, 1.0e-12);
                 EXPECT_NEAR(*out.Greeks()->gamma, expected_greeks.gamma, 1.0e-12);

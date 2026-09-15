@@ -1,10 +1,9 @@
 #pragma once
 
+#include <memory>
 #include <numeraire/core/ipricer.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
-
-#include <memory>
 
 namespace numeraire::pricers {
 
@@ -12,7 +11,7 @@ namespace numeraire::pricers {
 /// `kAnalytic` + `kBlackScholes` returns `AnalyticCompositePricer` (equity options +
 /// forwards). Unsupported pairs throw `ValidationError`.
 class PricerFactory {
-   public:
+public:
     [[nodiscard]] static std::unique_ptr<core::IPricer> Make(PricingEngineType engine, ModelType model);
 };
 

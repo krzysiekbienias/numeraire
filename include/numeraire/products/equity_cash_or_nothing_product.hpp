@@ -5,7 +5,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <optional>
 #include <string>
 
@@ -15,10 +14,15 @@ namespace numeraire::products {
 /// `CashPayoutPerShare()` (per-share scale, same as `pv_unit`) if ITM (call:
 /// \(S_T > K\), put: \(S_T < K\)), otherwise zero. `Strike()` is the barrier \(K\).
 class EquityCashOrNothingProduct final : public core::IProduct {
-   public:
-    EquityCashOrNothingProduct(std::string underlying_id, OptionType kind, ExerciseStyle exercise,
-                               double strike, double cash_payout_per_share, schedule::Date trade_date,
-                               schedule::Date expiry_date, std::optional<schedule::Schedule> payments = std::nullopt);
+public:
+    EquityCashOrNothingProduct(std::string underlying_id,
+                               OptionType kind,
+                               ExerciseStyle exercise,
+                               double strike,
+                               double cash_payout_per_share,
+                               schedule::Date trade_date,
+                               schedule::Date expiry_date,
+                               std::optional<schedule::Schedule> payments = std::nullopt);
 
     [[nodiscard]] std::string_view UnderlyingId() const override;
 
@@ -36,7 +40,11 @@ class EquityCashOrNothingProduct final : public core::IProduct {
 
     [[nodiscard]] const schedule::Schedule* PaymentSchedule() const override;
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override;
+
+    [[nodiscard]] bool HasCalendarMaturity() const override;
+
+private:
     std::string underlying_id_;
     OptionType kind_;
     ExerciseStyle exercise_;

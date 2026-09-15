@@ -5,7 +5,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <optional>
 #include <string>
 
@@ -16,9 +15,11 @@ namespace numeraire::products {
 /// (`UnderlyingId()` = contract ticker, e.g. `CLX6`). Analytic PV:
 /// \(e^{-r\tau}(F_{t,T}-K)\). `OptionKind()` is unused for pricing.
 class CommodityFuturesForwardProduct final : public core::IProduct {
-   public:
-    CommodityFuturesForwardProduct(std::string contract_ticker, std::string product_code,
-                                   double forward_price, schedule::Date trade_date,
+public:
+    CommodityFuturesForwardProduct(std::string contract_ticker,
+                                   std::string product_code,
+                                   double forward_price,
+                                   schedule::Date trade_date,
                                    schedule::Date expiry_date,
                                    std::optional<schedule::Schedule> payments = std::nullopt);
 
@@ -38,7 +39,11 @@ class CommodityFuturesForwardProduct final : public core::IProduct {
 
     [[nodiscard]] std::string_view ProductCode() const;
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override;
+
+    [[nodiscard]] bool HasCalendarMaturity() const override;
+
+private:
     std::string contract_ticker_;
     std::string product_code_;
     double forward_price_{};

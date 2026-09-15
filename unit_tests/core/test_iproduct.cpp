@@ -1,10 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <numeraire/core/iproduct.hpp>
 #include <numeraire/enums/exercise_style.hpp>
 #include <numeraire/enums/option_type.hpp>
-
-#include <memory>
 #include <optional>
 #include <string>
 
@@ -12,18 +11,21 @@ namespace {
 
 /// Vanilla equity option with optional owned schedule (bullet when unset).
 class VanillaOptionProduct final : public numeraire::core::IProduct {
-   public:
-    VanillaOptionProduct(std::string underlying, const numeraire::OptionType kind,
-                         const numeraire::ExerciseStyle exercise, const double strike,
-                         numeraire::schedule::Date trade, numeraire::schedule::Date expiry,
+public:
+    VanillaOptionProduct(std::string underlying,
+                         const numeraire::OptionType kind,
+                         const numeraire::ExerciseStyle exercise,
+                         const double strike,
+                         numeraire::schedule::Date trade,
+                         numeraire::schedule::Date expiry,
                          std::optional<numeraire::schedule::Schedule> payments = std::nullopt)
-            : underlying_(std::move(underlying)),
-              kind_(kind),
-              exercise_(exercise),
-              strike_(strike),
-              trade_(trade),
-              expiry_(expiry),
-              payments_(std::move(payments)) {}
+        : underlying_(std::move(underlying)),
+          kind_(kind),
+          exercise_(exercise),
+          strike_(strike),
+          trade_(trade),
+          expiry_(expiry),
+          payments_(std::move(payments)) {}
 
     [[nodiscard]] std::string_view UnderlyingId() const override { return underlying_; }
 
@@ -41,7 +43,11 @@ class VanillaOptionProduct final : public numeraire::core::IProduct {
         return payments_ ? &(*payments_) : nullptr;
     }
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override { return true; }
+
+    [[nodiscard]] bool HasCalendarMaturity() const override { return true; }
+
+private:
     std::string underlying_;
     numeraire::OptionType kind_;
     numeraire::ExerciseStyle exercise_;
@@ -59,13 +65,17 @@ void ExpectVanillaThroughInterface(const numeraire::core::IProduct& p) {
     EXPECT_EQ(p.TradeDate().year, 2025);
     EXPECT_EQ(p.ExpiryDate().month, 11);
     EXPECT_EQ(p.PaymentSchedule(), nullptr);
+    EXPECT_TRUE(p.UsesImpliedVolatility());
+    EXPECT_TRUE(p.HasCalendarMaturity());
 }
 
 }  // namespace
 
 TEST(IProductTest, BulletVanillaExposesFieldsAndNullSchedule) {
-    const VanillaOptionProduct opt("AAPL", numeraire::OptionType::kCall,
-                                   numeraire::ExerciseStyle::kEuropean, 233.0,
+    const VanillaOptionProduct opt("AAPL",
+                                   numeraire::OptionType::kCall,
+                                   numeraire::ExerciseStyle::kEuropean,
+                                   233.0,
                                    numeraire::schedule::Date{.year = 2025, .month = 8, .day = 4},
                                    numeraire::schedule::Date{.year = 2025, .month = 11, .day = 4});
 
@@ -73,10 +83,13 @@ TEST(IProductTest, BulletVanillaExposesFieldsAndNullSchedule) {
 }
 
 TEST(IProductTest, PolymorphicCallThroughInterface) {
-    const auto opt = std::make_unique<VanillaOptionProduct>(
-            "AAPL", numeraire::OptionType::kCall, numeraire::ExerciseStyle::kEuropean, 233.0,
-            numeraire::schedule::Date{.year = 2025, .month = 8, .day = 4},
-            numeraire::schedule::Date{.year = 2025, .month = 11, .day = 4});
+    const auto opt =
+            std::make_unique<VanillaOptionProduct>("AAPL",
+                                                   numeraire::OptionType::kCall,
+                                                   numeraire::ExerciseStyle::kEuropean,
+                                                   233.0,
+                                                   numeraire::schedule::Date{.year = 2025, .month = 8, .day = 4},
+                                                   numeraire::schedule::Date{.year = 2025, .month = 11, .day = 4});
 
     const numeraire::core::IProduct& ref = *opt;
     ExpectVanillaThroughInterface(ref);
@@ -84,13 +97,13 @@ TEST(IProductTest, PolymorphicCallThroughInterface) {
 
 TEST(IProductTest, OptionalPaymentScheduleNonNull) {
     numeraire::schedule::Schedule payments;
-    payments.dates.push_back(
-            numeraire::schedule::Date{.year = 2025, .month = 8, .day = 4});
-    payments.dates.push_back(
-            numeraire::schedule::Date{.year = 2025, .month = 11, .day = 4});
+    payments.dates.push_back(numeraire::schedule::Date{.year = 2025, .month = 8, .day = 4});
+    payments.dates.push_back(numeraire::schedule::Date{.year = 2025, .month = 11, .day = 4});
 
-    const VanillaOptionProduct opt("MSFT", numeraire::OptionType::kPut,
-                                   numeraire::ExerciseStyle::kEuropean, 100.0,
+    const VanillaOptionProduct opt("MSFT",
+                                   numeraire::OptionType::kPut,
+                                   numeraire::ExerciseStyle::kEuropean,
+                                   100.0,
                                    numeraire::schedule::Date{.year = 2025, .month = 1, .day = 1},
                                    numeraire::schedule::Date{.year = 2025, .month = 12, .day = 31},
                                    payments);

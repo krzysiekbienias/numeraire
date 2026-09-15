@@ -9,28 +9,24 @@
 #include <numeraire/core/imarket_data.hpp>
 #include <numeraire/core/pricing_engine.hpp>
 #include <numeraire/core/pricing_result.hpp>
+#include <numeraire/database/discount_curve_eod_builder.hpp>
+#include <numeraire/database/discount_curve_eod_read.hpp>
 #include <numeraire/database/equity_daily_eod_lookup.hpp>
 #include <numeraire/database/futures_daily_eod_lookup.hpp>
 #include <numeraire/database/index_daily_eod_lookup.hpp>
 #include <numeraire/database/leg_mtm_pnl.hpp>
 #include <numeraire/database/leg_pv.hpp>
+#include <numeraire/database/option_universe_eod_builder.hpp>
 #include <numeraire/database/sqlite_schema.hpp>
 #include <numeraire/database/sqlite_trade_leg_booking_repository.hpp>
 #include <numeraire/database/sqlite_trade_leg_mtm_repository.hpp>
 #include <numeraire/database/sqlite_trade_repository.hpp>
 #include <numeraire/database/trade_booking_rules.hpp>
-#include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/database/trade_leg_booking_update.hpp>
 #include <numeraire/database/trade_leg_mtm_eod_row.hpp>
-#include <numeraire/database/option_universe_eod_builder.hpp>
-#include <numeraire/database/discount_curve_eod_read.hpp>
-#include <numeraire/database/vol_surface_eod_read.hpp>
-#include <numeraire/database/discount_curve_eod_builder.hpp>
+#include <numeraire/database/trade_lifecycle.hpp>
 #include <numeraire/database/vol_surface_eod_builder.hpp>
-#include <numeraire/simulation/curve_lab.hpp>
-#include <numeraire/simulation/gabillon_calibration_builder.hpp>
-#include <numeraire/simulation/historical_calibration_eod_builder.hpp>
-#include <numeraire/simulation/historical_gbm_simulate.hpp>
+#include <numeraire/database/vol_surface_eod_read.hpp>
 #include <numeraire/enums/model_type.hpp>
 #include <numeraire/enums/position_direction.hpp>
 #include <numeraire/enums/pricing_engine_type.hpp>
@@ -48,12 +44,12 @@
 #include <numeraire/market_data_providers/polygon_option_daily_price_eod_fetch.hpp>
 #include <numeraire/pricers/monte_carlo_gbm_european_pricer.hpp>
 #include <numeraire/pricers/pricer_factory.hpp>
-#include <numeraire/products/commodity_futures_forward_product.hpp>
-#include <numeraire/products/commodity_futures_outright_product.hpp>
-#include <numeraire/products/equity_forward_product.hpp>
-#include <numeraire/products/equity_spot_product.hpp>
 #include <numeraire/products/product_factory.hpp>
 #include <numeraire/schedule/date.hpp>
+#include <numeraire/simulation/curve_lab.hpp>
+#include <numeraire/simulation/gabillon_calibration_builder.hpp>
+#include <numeraire/simulation/historical_calibration_eod_builder.hpp>
+#include <numeraire/simulation/historical_gbm_simulate.hpp>
 #include <numeraire/utils/config.hpp>
 #include <numeraire/utils/database_path.hpp>
 #include <numeraire/utils/env_loader.hpp>
@@ -70,30 +66,22 @@
 
 using numeraire::PositionDirection;
 using numeraire::database::BootstrapTradeDatabaseSchema;
+using numeraire::database::HasVolSurfaceEod;
 using numeraire::database::LookupEquityDailyClose;
 using numeraire::database::LookupFuturesDailySettlement;
 using numeraire::database::LookupIndexDailyClose;
+using numeraire::database::PrintDiscountCurveEodBuildUsageLines;
+using numeraire::database::PrintOptionUniverseEodBuildUsageLines;
+using numeraire::database::PrintVolSurfaceEodBuildUsageLines;
 using numeraire::database::SqliteTradeLegBookingRepository;
 using numeraire::database::SqliteTradeLegMtmRepository;
 using numeraire::database::SqliteTradeRepository;
 using numeraire::database::TradeCatalogBundle;
 using numeraire::database::TradeLegBookingUpdate;
 using numeraire::database::TradeLegMtmEodRow;
-using numeraire::database::HasVolSurfaceEod;
-using numeraire::database::PrintDiscountCurveEodBuildUsageLines;
-using numeraire::database::PrintOptionUniverseEodBuildUsageLines;
-using numeraire::database::PrintVolSurfaceEodBuildUsageLines;
 using numeraire::database::TryRunDiscountCurveEodBuild;
 using numeraire::database::TryRunOptionUniverseEodBuild;
 using numeraire::database::TryRunVolSurfaceEodBuild;
-using numeraire::simulation::PrintHistoricalCalibrationEodBuildUsageLines;
-using numeraire::simulation::PrintHistoricalGbmSimulateUsageLines;
-using numeraire::simulation::PrintCurveLabUsageLines;
-using numeraire::simulation::PrintGabillonCalibrationUsageLines;
-using numeraire::simulation::TryRunCurveLab;
-using numeraire::simulation::TryRunGabillonCalibration;
-using numeraire::simulation::TryRunHistoricalCalibrationEodBuild;
-using numeraire::simulation::TryRunHistoricalGbmSimulate;
 using numeraire::market_data::MarketSnapshot;
 using numeraire::market_data::StaticMarketDataProvider;
 using numeraire::market_data_providers::PrintFetchUsageLines;
@@ -112,6 +100,14 @@ using numeraire::pricers::PricerFactory;
 using numeraire::products::ProductFactory;
 using numeraire::schedule::Act365FixedYearFraction;
 using numeraire::schedule::ParseIsoDate;
+using numeraire::simulation::PrintCurveLabUsageLines;
+using numeraire::simulation::PrintGabillonCalibrationUsageLines;
+using numeraire::simulation::PrintHistoricalCalibrationEodBuildUsageLines;
+using numeraire::simulation::PrintHistoricalGbmSimulateUsageLines;
+using numeraire::simulation::TryRunCurveLab;
+using numeraire::simulation::TryRunGabillonCalibration;
+using numeraire::simulation::TryRunHistoricalCalibrationEodBuild;
+using numeraire::simulation::TryRunHistoricalGbmSimulate;
 using numeraire::utils::Config;
 using numeraire::utils::EnvLoader;
 using numeraire::utils::Logger;
@@ -248,8 +244,7 @@ struct DevMainMarketQuotesConfig {
 [[nodiscard]] DevMainMarketQuotesConfig LoadDevMainMarketQuotesConfig(const std::optional<std::string>& cli_as_of,
                                                                       const bool require_valuation_date) {
     DevMainMarketQuotesConfig c;
-    const char* const src_raw =
-            EnvFirstNonEmpty("NUMERAIRE_DEV_QUOTE_SOURCE", "NUMERAIRE_DEV_SPOT_SOURCE");
+    const char* const src_raw = EnvFirstNonEmpty("NUMERAIRE_DEV_QUOTE_SOURCE", "NUMERAIRE_DEV_SPOT_SOURCE");
     if (src_raw != nullptr && src_raw[0] != '\0') {
         const std::string_view sv{src_raw};
         if (EqualsAsciiIgnoreCase(sv, "db")) {
@@ -453,20 +448,11 @@ struct PricingArgvScan {
         const std::string underlying = std::string(product->UnderlyingId());
         const double quote_used = mkt.Quote(underlying);
 
-        const bool is_spot =
-                dynamic_cast<const numeraire::products::EquitySpotProduct*>(product.get()) != nullptr;
-        const bool is_forward =
-                dynamic_cast<const numeraire::products::EquityForwardProduct*>(product.get()) != nullptr;
-        const bool is_futures_outright =
-                dynamic_cast<const numeraire::products::CommodityFuturesOutrightProduct*>(product.get()) !=
-                nullptr;
-        const bool is_commodity_forward =
-                dynamic_cast<const numeraire::products::CommodityFuturesForwardProduct*>(product.get()) !=
-                nullptr;
         // Spot has no maturity; keep the column at 0 rather than a negative τ from
         // ExpiryDate() == TradeDate(). Listed futures mark off settle — τ is informational.
-        const double years_to_maturity =
-                is_spot ? 0.0 : Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate());
+        const double years_to_maturity = product->HasCalendarMaturity()
+                                                 ? Act365FixedYearFraction(mkt.ValuationDate(), product->ExpiryDate())
+                                                 : 0.0;
 
         TradeLegMtmEodRow mtm{};
         mtm.as_of = mq.as_of_iso;
@@ -480,12 +466,11 @@ struct PricingArgvScan {
         // would claim an input the price never saw. Zero is the column's existing "not
         // applicable" marker (it already covers expired legs). The surface itself stays
         // ingested for the underlier — options written on it still need it.
-        const bool payoff_uses_volatility =
-                !is_spot && !is_forward && !is_futures_outright && !is_commodity_forward;
+
         const double strike = product->Strike();
-        if (payoff_uses_volatility && years_to_maturity > 0.0 && strike > 0.0) {
-            mtm.implied_vol_used =
-                    mkt.ImpliedVolatility(underlying, strike, years_to_maturity, product->OptionKind());
+
+        if (product->UsesImpliedVolatility() && years_to_maturity > 0.0 && strike > 0.0) {
+            mtm.implied_vol_used = mkt.ImpliedVolatility(underlying, strike, years_to_maturity, product->OptionKind());
         } else {
             mtm.implied_vol_used = 0.0;
         }
@@ -533,8 +518,7 @@ struct PricingArgvScan {
 
         const double booked_mark = numeraire::database::LegBookedMark(row);
         const std::optional prior_official = mtm_repo->LookupPriorOfficialMark(row.leg.leg_id, engine.name, mtm.as_of);
-        const double pv_total_prev =
-                numeraire::database::ResolvePvTotalPrevForDaily(prior_official, booked_mark);
+        const double pv_total_prev = numeraire::database::ResolvePvTotalPrevForDaily(prior_official, booked_mark);
         const double commission = numeraire::database::LegCommissionOrZero(row.leg);
         mtm.pnl_daily = numeraire::database::LegPnlDaily(pv_total, pv_total_prev);
         mtm.pnl_inception = numeraire::database::LegPnlInception(pv_total, booked_mark, commission);
@@ -696,8 +680,7 @@ void FillUnderlyingQuotesAcrossBundles(MarketSnapshot& snap,
     for (const TradeCatalogBundle& bundle : bundles) {
         for (const auto& row : bundle.legs) {
             const bool is_commodity = row.commodity.has_value();
-            const std::string market_key =
-                    is_commodity ? row.commodity->contract_ticker : row.equity.underlying_id;
+            const std::string market_key = is_commodity ? row.commodity->contract_ticker : row.equity.underlying_id;
             if (market_key.empty() || seen.contains(market_key)) {
                 continue;
             }
@@ -707,27 +690,27 @@ void FillUnderlyingQuotesAcrossBundles(MarketSnapshot& snap,
                 snap.quotes[market_key] = mq.env_fallback_quote;
                 Logger::NumInfo(
                         "Underlying {} quote={} from env (NUMERAIRE_DEV_QUOTE, NUMERAIRE_DEV_QUOTE_SOURCE=env).",
-                        market_key, mq.env_fallback_quote);
+                        market_key,
+                        mq.env_fallback_quote);
                 continue;
             }
 
             if (is_commodity) {
-                const std::optional<double> settle = LookupFuturesDailySettlement(
-                        db_path_file.string(), market_key, mq.as_of_iso);
+                const std::optional<double> settle =
+                        LookupFuturesDailySettlement(db_path_file.string(), market_key, mq.as_of_iso);
                 if (!settle.has_value()) {
                     throw numeraire::ValidationError(
-                            "missing futures EOD settle for ticker=" + market_key +
-                            " as_of=" + mq.as_of_iso +
+                            "missing futures EOD settle for ticker=" + market_key + " as_of=" + mq.as_of_iso +
                             " — ingest futures_daily_eod before NUMERAIRE_DEV_QUOTE_SOURCE=db.");
                 }
                 snap.quotes[market_key] = *settle;
-                Logger::NumInfo("Futures {} settle={} from futures_daily_eod (as_of={}).", market_key,
-                                *settle, mq.as_of_iso);
+                Logger::NumInfo(
+                        "Futures {} settle={} from futures_daily_eod (as_of={}).", market_key, *settle, mq.as_of_iso);
                 continue;
             }
 
-            const std::optional<double> close = LookupDbSpotForUnderlying(
-                    db_path_file, market_key, mq.as_of_iso, mq.equity_eod_adjusted);
+            const std::optional<double> close =
+                    LookupDbSpotForUnderlying(db_path_file, market_key, mq.as_of_iso, mq.equity_eod_adjusted);
             if (!close.has_value()) {
                 throw numeraire::ValidationError(
                         "missing EOD quote for underlying=" + market_key + " as_of=" + mq.as_of_iso +
@@ -739,13 +722,18 @@ void FillUnderlyingQuotesAcrossBundles(MarketSnapshot& snap,
             if (LookupEquityDailyClose(db_path_file.string(), market_key, mq.as_of_iso, mq.equity_eod_adjusted)
                         .has_value()) {
                 Logger::NumInfo("Underlying {} spot={} from equity_daily_eod (as_of={}, adjusted={}).",
-                                market_key, *close, mq.as_of_iso, mq.equity_eod_adjusted);
-            } else if (const std::optional<std::string> index_ticker =
-                               IndexDailyTickerForUnderlying(market_key);
+                                market_key,
+                                *close,
+                                mq.as_of_iso,
+                                mq.equity_eod_adjusted);
+            } else if (const std::optional<std::string> index_ticker = IndexDailyTickerForUnderlying(market_key);
                        index_ticker.has_value()) {
-                Logger::NumInfo(
-                        "Underlying {} spot={} from index_daily_eod ticker={} (as_of={}, adjusted={}).",
-                        market_key, *close, *index_ticker, mq.as_of_iso, mq.equity_eod_adjusted);
+                Logger::NumInfo("Underlying {} spot={} from index_daily_eod ticker={} (as_of={}, adjusted={}).",
+                                market_key,
+                                *close,
+                                *index_ticker,
+                                mq.as_of_iso,
+                                mq.equity_eod_adjusted);
             }
         }
     }
@@ -783,31 +771,27 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
     std::optional<numeraire::database::DiscountCurveEodRead> curve =
             numeraire::database::TryLoadLatestDiscountCurveEod(db_path, mq.discount_curve_id, mq.as_of_iso);
     if (!curve.has_value()) {
-        Logger::NumWarn(
-                "No discount_curve_eod on or before as_of={} for curve_id={}; using env flat rate={}.",
-                mq.as_of_iso,
-                mq.discount_curve_id,
-                flat_rate);
+        Logger::NumWarn("No discount_curve_eod on or before as_of={} for curve_id={}; using env flat rate={}.",
+                        mq.as_of_iso,
+                        mq.discount_curve_id,
+                        flat_rate);
         snap.risk_free_rate = flat_rate;
         snap.discount_curve.reset();
         return;
     }
 
     snap.discount_curve = std::move(curve);
-    snap.risk_free_rate =
-            numeraire::market_data::RepresentativeRiskFreeRate(snap.discount_curve, flat_rate);
-    Logger::NumInfo(
-            "Discount curve curve_id={} loaded @ {} (requested as_of={}; representative 1Y r={}).",
-            mq.discount_curve_id,
-            snap.discount_curve->as_of,
-            mq.as_of_iso,
-            snap.risk_free_rate);
+    snap.risk_free_rate = numeraire::market_data::RepresentativeRiskFreeRate(snap.discount_curve, flat_rate);
+    Logger::NumInfo("Discount curve curve_id={} loaded @ {} (requested as_of={}; representative 1Y r={}).",
+                    mq.discount_curve_id,
+                    snap.discount_curve->as_of,
+                    mq.as_of_iso,
+                    snap.risk_free_rate);
 }
 
-[[nodiscard]] std::unique_ptr<numeraire::core::IMarketData> CreateDevMainMarketData(
-        const DevMainMarketQuotesConfig& mq,
-        const std::string& db_path,
-        MarketSnapshot snap) {
+[[nodiscard]] std::unique_ptr<numeraire::core::IMarketData> CreateDevMainMarketData(const DevMainMarketQuotesConfig& mq,
+                                                                                    const std::string& db_path,
+                                                                                    MarketSnapshot snap) {
     if (mq.vol_source == DevMainMarketQuotesConfig::VolSourceKind::kDb) {
         if (mq.as_of_iso.empty() || !LooksIsoDate(mq.as_of_iso)) {
             throw numeraire::ValidationError(
@@ -833,17 +817,20 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
                 iv_env_ids.push_back(uid);
             }
         }
-        Logger::NumInfo(
-                "Implied vol as_of={}: {} from vol_surface_eod; {} use env flat={}.",
-                mq.as_of_iso,
-                JoinCsv(iv_db_ids),
-                JoinCsv(iv_env_ids),
-                snap.flat_implied_volatility);
+        Logger::NumInfo("Implied vol as_of={}: {} from vol_surface_eod; {} use env flat={}.",
+                        mq.as_of_iso,
+                        JoinCsv(iv_db_ids),
+                        JoinCsv(iv_env_ids),
+                        snap.flat_implied_volatility);
         const double flat_rate = EnvDouble("NUMERAIRE_DEV_RATE", 0.03);
         return numeraire::market_data::CurvedRateMarketData::MaybeWrap(
-                numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path, snap.valuation_date, snap.quotes,
-                                                                         snap.risk_free_rate, snap.dividend_yields,
-                                                                         underlying_ids, mq.as_of_iso,
+                numeraire::market_data::SqliteVolSurfaceMarketData::Load(db_path,
+                                                                         snap.valuation_date,
+                                                                         snap.quotes,
+                                                                         snap.risk_free_rate,
+                                                                         snap.dividend_yields,
+                                                                         underlying_ids,
+                                                                         mq.as_of_iso,
                                                                          snap.flat_implied_volatility),
                 snap.discount_curve,
                 flat_rate);
@@ -869,17 +856,15 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
 
     const auto lifecycle = numeraire::database::ApplyTradeLifecycleAsOf(db_path.string(), mq.as_of_iso);
     if (!lifecycle.expired_trade_ids.empty()) {
-        Logger::NumInfo("MTM: expired {} matured trade(s) before as_of={}.",
-                        lifecycle.expired_trade_ids.size(),
-                        mq.as_of_iso);
+        Logger::NumInfo(
+                "MTM: expired {} matured trade(s) before as_of={}.", lifecycle.expired_trade_ids.size(), mq.as_of_iso);
     }
 
     std::vector<std::string> active_trade_ids;
     active_trade_ids.reserve(trade_ids.size());
     for (const std::string& tid : trade_ids) {
         const TradeCatalogBundle header_only = repo.GetCatalogForTrade(tid);
-        if (numeraire::database::TradeStatusEquals(header_only.trade.status,
-                                                 numeraire::database::kTradeStatusLive)) {
+        if (numeraire::database::TradeStatusEquals(header_only.trade.status, numeraire::database::kTradeStatusLive)) {
             active_trade_ids.push_back(tid);
         } else {
             Logger::NumInfo("MTM: skip trade {} (status={}).", tid, header_only.trade.status);
@@ -966,8 +951,7 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
         auto monte_carlo = std::make_unique<numeraire::pricers::MonteCarloGbmEuropeanPricer>();
         const auto mc_paths = static_cast<std::int64_t>(monte_carlo->NumPaths());
         const auto mc_seed = static_cast<std::int64_t>(monte_carlo->Seed());
-        engines.push_back(MtmEngineRun{
-                std::move(monte_carlo), kMtmPricingEngineMonteCarlo, false, mc_paths, mc_seed});
+        engines.push_back(MtmEngineRun{std::move(monte_carlo), kMtmPricingEngineMonteCarlo, false, mc_paths, mc_seed});
     }
 
     for (size_t i = 0; i < trade_ids.size(); ++i) {
@@ -1075,8 +1059,7 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
         const TradeCatalogBundle booked = repo.GetCatalogForTrade(tid);
         if (numeraire::database::AllLegsBooked(booked)) {
             booking_repo.SetTradeStatus(tid, std::string{numeraire::database::kTradeStatusLive});
-            Logger::NumInfo("Trade {} promoted to LIVE (legs booked; ATM forwards may have execution_price 0).",
-                            tid);
+            Logger::NumInfo("Trade {} promoted to LIVE (legs booked; ATM forwards may have execution_price 0).", tid);
         } else {
             Logger::NumInfo("Trade {} remains PENDING (at least one leg not booked after booking run).", tid);
         }

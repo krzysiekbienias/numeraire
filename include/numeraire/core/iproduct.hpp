@@ -4,7 +4,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <string_view>
 
 namespace numeraire::core {
@@ -12,10 +11,10 @@ namespace numeraire::core {
 /// Contract for a tradable / pricable instrument. Implementations live
 /// outside `core` (structs from DB, payoff libraries, …).
 class IProduct {
-   protected:
+protected:
     IProduct() = default;
 
-   public:
+public:
     virtual ~IProduct() = default;
 
     IProduct(const IProduct&) = delete;
@@ -34,6 +33,10 @@ class IProduct {
     [[nodiscard]] virtual const schedule::Date& TradeDate() const = 0;
 
     [[nodiscard]] virtual const schedule::Date& ExpiryDate() const = 0;
+
+    [[nodiscard]] virtual bool UsesImpliedVolatility() const = 0;
+
+    [[nodiscard]] virtual bool HasCalendarMaturity() const = 0;
 
     /// Optional cashflow / fixing grid. `nullptr` for **bullet** profiles
     /// (e.g. European vanilla settled at `ExpiryDate()` only).

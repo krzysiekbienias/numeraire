@@ -5,7 +5,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <optional>
 #include <string>
 
@@ -19,8 +18,9 @@ namespace numeraire::products {
 /// the spot pricer ignores \(\tau\). `OptionKind()` / `Strike()` are unused stubs
 /// (same pattern as `EquityForwardProduct`).
 class EquitySpotProduct final : public core::IProduct {
-   public:
-    EquitySpotProduct(std::string underlying_id, schedule::Date trade_date,
+public:
+    EquitySpotProduct(std::string underlying_id,
+                      schedule::Date trade_date,
                       std::optional<schedule::Schedule> payments = std::nullopt);
 
     [[nodiscard]] std::string_view UnderlyingId() const override;
@@ -37,7 +37,11 @@ class EquitySpotProduct final : public core::IProduct {
 
     [[nodiscard]] const schedule::Schedule* PaymentSchedule() const override;
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override;
+
+    [[nodiscard]] bool HasCalendarMaturity() const override;
+
+private:
     std::string underlying_id_;
     schedule::Date trade_date_;
     std::optional<schedule::Schedule> payments_;

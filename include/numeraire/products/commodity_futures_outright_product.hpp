@@ -5,7 +5,6 @@
 #include <numeraire/enums/option_type.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/schedule/schedule.hpp>
-
 #include <optional>
 #include <string>
 
@@ -19,9 +18,11 @@ namespace numeraire::products {
 /// carry in the analytic outright pricer. `OptionKind()` / `Strike()` are stubs
 /// (same pattern as `EquitySpotProduct`).
 class CommodityFuturesOutrightProduct final : public core::IProduct {
-   public:
-    CommodityFuturesOutrightProduct(std::string contract_ticker, std::string product_code,
-                                    schedule::Date trade_date, schedule::Date expiry_date,
+public:
+    CommodityFuturesOutrightProduct(std::string contract_ticker,
+                                    std::string product_code,
+                                    schedule::Date trade_date,
+                                    schedule::Date expiry_date,
                                     std::optional<schedule::Schedule> payments = std::nullopt);
 
     [[nodiscard]] std::string_view UnderlyingId() const override;
@@ -40,7 +41,11 @@ class CommodityFuturesOutrightProduct final : public core::IProduct {
 
     [[nodiscard]] std::string_view ProductCode() const;
 
-   private:
+    [[nodiscard]] bool UsesImpliedVolatility() const override;
+
+    [[nodiscard]] bool HasCalendarMaturity() const override;
+
+private:
     std::string contract_ticker_;
     std::string product_code_;
     schedule::Date trade_date_;
