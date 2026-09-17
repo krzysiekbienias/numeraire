@@ -55,6 +55,9 @@
         <a href="{% url 'admin:index' %}">
           <i class="bi bi-table"></i> Admin tables
         </a>
+        <a href="/docs/" target="_blank" rel="noopener noreferrer">
+          <i class="bi bi-code-slash"></i> C++ docs
+        </a>
         {% else %}
         <a href="{% url 'journal:quant_lab' %}"
            class="{% if request.resolver_match.url_name == 'quant_lab' or request.resolver_match.url_name == 'quant_lab_pricing' or request.resolver_match.url_name == 'quant_lab_pricing_equities' or request.resolver_match.url_name == 'quant_lab_pricing_commodities' or request.resolver_match.url_name == 'hypo_portfolio' or request.resolver_match.url_name == 'simulation_lab' or request.resolver_match.url_name == 'rates_conversion_lab' %}active{% endif %}">

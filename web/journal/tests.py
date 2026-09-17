@@ -200,6 +200,8 @@ class JournalHubNavTests(TestCase):
         self.assertNotIn('bi-lightning-charge', nav)
         self.assertNotIn('Market Data', nav)
         self.assertNotIn('bi-umbrella', nav)
+        self.assertNotIn('C++ docs', nav)
+        self.assertNotIn('href="/docs/"', nav)
 
     def test_signed_in_sidebar_uses_hubs_and_lab_flask(self):
         response = self.client.get(reverse('journal:market_data'))
@@ -209,6 +211,8 @@ class JournalHubNavTests(TestCase):
         self.assertIn('Risk', html)
         self.assertIn('bi-flask', html)
         self.assertIn('Quant Lab', html)
+        self.assertIn('C++ docs', html)
+        self.assertIn('href="/docs/"', html)
         self.assertIn('bi-umbrella', html)
         self.assertNotIn('bi-lightning-charge', html)
         self.assertIn('Futures curves', html)
