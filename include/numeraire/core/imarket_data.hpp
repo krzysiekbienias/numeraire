@@ -44,7 +44,7 @@ public:
 
     [[nodiscard]] virtual double DividendYield(std::string_view underlying_id) const = 0;
 
-    /// Black–Scholes-style vol for \((K, T)\) and option side (call/put surface leg).
+    /// Black–Scholes-style vol for \f$(K, T)\f$ and option side (call/put surface leg).
     [[nodiscard]] virtual double ImpliedVolatility(std::string_view underlying_id,
                                                    double strike,
                                                    double time_to_expiry_years,

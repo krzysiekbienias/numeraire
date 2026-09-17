@@ -5,7 +5,7 @@
 
 namespace numeraire::market_data {
 
-/// Bilinear-style interpolation on sparse \((\ln(K/S), \tau)\) points.
+/// Bilinear-style interpolation on sparse \f$(\ln(K/S), \tau)\f$ points.
 /// Clamps to the convex hull edges in each dimension; needs at least one point.
 [[nodiscard]] double InterpolateImpliedVol(const std::vector<database::VolSurfaceGridPoint>& points,
                                            double log_moneyness,

@@ -10,9 +10,9 @@
 
 namespace numeraire::products {
 
-/// European **equity forward**: at expiry settles on forward price `Strike()` \(K\)
+/// European **equity forward**: at expiry settles on forward price `Strike()` \f$K\f$
 /// (cash or physical per catalog). `pv_unit` is **long forward** NPV:
-/// \(S e^{-qT} - K e^{-rT}\); leg `direction` applies sign at position level.
+/// \f$S e^{-qT} - K e^{-rT}\f$; leg `direction` applies sign at position level.
 /// `OptionKind()` is unused for pricing — pricers must branch on this type.
 class EquityForwardProduct final : public core::IProduct {
 public:

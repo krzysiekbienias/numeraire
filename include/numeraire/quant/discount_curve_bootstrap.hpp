@@ -13,7 +13,7 @@ enum class CurvePillarKind : std::uint8_t {
     kSwap,
 };
 
-/// One quoted pillar before bootstrap. `quoted_rate` is the market par/simple quote \(R_i\)
+/// One quoted pillar before bootstrap. `quoted_rate` is the market par/simple quote \f$R_i\f$
 /// (annualized decimal, e.g. 0.0379 = 3.79%), **not** the bootstrapped zero rate.
 struct CurvePillarQuote {
     std::string tenor;
@@ -50,16 +50,16 @@ struct BootstrapResult {
 /// Deposit pillar: simple quote → continuous zero rate.
 [[nodiscard]] double DepositZeroRateFromQuote(const double quoted_rate, const double time_years) noexcept;
 
-/// Futures/forward pillar: chains the implied forward rate \(F\) off the previously solved node.
-/// \(DF(t_i) = DF(t_{i-1}) / (1 + F \cdot (t_i - t_{i-1}))\), then \(Z = -\ln(DF(t_i)) / t_i\).
-/// With no previous node (\(t_{i-1} = 0\)) this collapses to the deposit formula. No convexity
+/// Futures/forward pillar: chains the implied forward rate \f$F\f$ off the previously solved node.
+/// \f$DF(t_i) = DF(t_{i-1}) / (1 + F \cdot (t_i - t_{i-1}))\f$, then \f$Z = -\ln(DF(t_i)) / t_i\f$.
+/// With no previous node (\f$t_{i-1} = 0\f$) this collapses to the deposit formula. No convexity
 /// adjustment (textbook strip).
 [[nodiscard]] double ForwardZeroRateFromQuote(double quoted_rate,
                                               double prev_time_years,
                                               double prev_zero_rate,
                                               double time_years) noexcept;
 
-/// Continuous zero rate → discount factor \(DF(t) = e^{-Z t}\).
+/// Continuous zero rate → discount factor \f$DF(t) = e^{-Z t}\f$.
 [[nodiscard]] double DiscountFactorFromZeroRate(const double zero_rate, const double time_years) noexcept;
 
 /// Linear zero-rate interpolation on bootstrapped pillars (same convention as the swap solver).
@@ -68,11 +68,11 @@ struct BootstrapResult {
 
 /// Build a continuously compounded zero curve from quoted deposit/swap pillars.
 ///
-/// Deposits (short end): \(DF = 1 / (1 + R T)\), \(Z = -\ln(DF) / T\).
+/// Deposits (short end): \f$DF = 1 / (1 + R T)\f$, \f$Z = -\ln(DF) / T\f$.
 /// Futures (mid curve): forward strip chained off the previous node (see
 /// `ForwardZeroRateFromQuote`); absent for FRED-style curves, in which case the strip step is
 /// simply never taken.
-/// Swaps (long end): semi-annual par bond with coupon \(c = R/2\); missing intermediate
+/// Swaps (long end): semi-annual par bond with coupon \f$c = R/2\f$; missing intermediate
 /// pillars are filled by **linear zero-rate interpolation** in time, with the terminal
 /// node solved numerically via bisection on the par-pricing residual.
 [[nodiscard]] BootstrapResult BootstrapDiscountCurve(const std::vector<CurvePillarQuote>& quotes);

@@ -8,7 +8,7 @@
 
 namespace numeraire::database {
 
-/// One implied-vol grid point in \((\ln(K/S), \tau)\) coordinates.
+/// One implied-vol grid point in \f$(\ln(K/S), \tau)\f$ coordinates.
 struct VolSurfaceGridPoint {
     double log_moneyness{0.0};
     double years_to_maturity{0.0};

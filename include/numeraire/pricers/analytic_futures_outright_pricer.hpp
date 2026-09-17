@@ -5,8 +5,8 @@
 namespace numeraire::pricers {
 
 /// Mark-to-market pricer for listed `CommodityFuturesOutrightProduct`.
-/// `pv_unit = Spot(contract_ticker)` (settle loaded into the spot map);
-/// unit delta = 1. No vol, rates, or day-count — daily exchange margining.
+/// `pv_unit` is `Spot(contract_ticker)` (settle loaded into the spot map);
+/// unit delta \f$= 1\f$. No vol, rates, or day-count — daily exchange margining.
 class AnalyticFuturesOutrightPricer final : public core::IPricer {
    public:
     [[nodiscard]] numeraire::PricingEngineType EngineKind() const override;

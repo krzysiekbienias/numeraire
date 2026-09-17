@@ -18,7 +18,7 @@ struct ImpliedVolResult {
     double implied_vol{0.0};
 };
 
-/// Invert Black–Scholes European vanilla price to absolute \(\sigma\) (not percent).
+/// Invert Black–Scholes European vanilla price to absolute \f$\sigma\f$ (not percent).
 /// `market_price` is the observed premium per unit underlying (e.g. EOD `close`).
 [[nodiscard]] ImpliedVolResult ImpliedVolEuropeanVanilla(OptionType option_type,
                                                          double market_price,

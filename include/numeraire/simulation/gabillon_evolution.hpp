@@ -22,14 +22,13 @@ namespace numeraire::simulation {
 /// A futures price is a martingale, so each contract diffuses with no drift beyond the
 /// Ito correction:
 ///
-/// \(d\ln F(t,T) = -\tfrac12\sigma_F(\tau)^2 dt + \sigma_S e^{-k\tau} dW_S
-///                 + \sigma_L (1-e^{-k\tau}) dW_L\), with \(\tau = T-t\).
+/// \f$d\ln F(t,T) = -\tfrac12\sigma_F(\tau)^2 dt + \sigma_S e^{-k\tau} dW_S + \sigma_L (1-e^{-k\tau}) dW_L\f$, with \f$\tau = T-t\f$.
 ///
 /// This is the substantive difference from evolving constant-maturity pillars under GBM.
 /// A pillar strip gives a contract the dynamics of whatever maturity it currently sits at
 /// and lets it drift down today's curve as it ages, which for a seasonal commodity walks a
 /// December contract into shoulder-season prices. Here the contract keeps its own anchor
-/// and only its *volatility* changes as \(\tau\) shrinks — the Samuelson effect, which is
+/// and only its *volatility* changes as \f$\tau\f$ shrinks — the Samuelson effect, which is
 /// the part that is real.
 ///
 /// Contracts of one curve share its two shocks, so their correlation is a consequence of

@@ -19,7 +19,7 @@ struct SingleFactorGbmSpec {
 ///
 /// Per-factor `spots`, `volatilities`, `risk_free_rates`, and `dividend_yields` share
 /// the same ordering. `cholesky` maps independent standard normals to correlated
-/// diffusion shocks (`eps = L * Z`) at each step.
+/// diffusion shocks \f$\varepsilon = LZ\f$ at each step.
 struct MultiFactorGbmSpec {
     std::vector<double> spots;
     std::vector<double> risk_free_rates;

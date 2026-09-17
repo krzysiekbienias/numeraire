@@ -12,27 +12,27 @@ struct FixedIncomeCashflow {
     double amount{0.0};
 };
 
-/// Discount factor \(DF(t)\) from bootstrapped pillars: linear \(Z\) interpolation, then \(e^{-Zt}\).
+/// Discount factor \f$DF(t)\f$ from bootstrapped pillars: linear \f$Z\f$ interpolation, then \f$e^{-Zt}\f$.
 [[nodiscard]] double DiscountFactorAtTime(const std::vector<BootstrappedCurvePoint>& pillars,
                                           double time_years) noexcept;
 
-/// Simple forward rate from discount factors over accrual \(\tau\):
-/// \(F = \bigl(DF(t_{\mathrm{start}}) / DF(t_{\mathrm{end}}) - 1\bigr) / \tau\).
+/// Simple forward rate from discount factors over accrual \f$\tau\f$:
+/// \f$F = \bigl(DF(t_{\mathrm{start}}) / DF(t_{\mathrm{end}}) - 1\bigr) / \tau\f$.
 [[nodiscard]] double SimpleForwardRateFromDiscountFactors(double discount_factor_start,
                                                           double discount_factor_end,
                                                           double accrual_time_years) noexcept;
 
-/// Present value of a zero-coupon bond: \(\mathrm{NPV} = N \cdot DF(T)\).
+/// Present value of a zero-coupon bond: \f$\mathrm{NPV} = N \cdot DF(T)\f$.
 [[nodiscard]] double ZeroCouponBondPv(const std::vector<BootstrappedCurvePoint>& pillars,
                                     double notional,
                                     double maturity_time_years) noexcept;
 
-/// Present value of deterministic cashflows: \(\mathrm{NPV} = \sum_i c_i \cdot DF(t_i)\).
+/// Present value of deterministic cashflows: \f$\mathrm{NPV} = \sum_i c_i \cdot DF(t_i)\f$.
 [[nodiscard]] double FixedCouponBondPv(const std::vector<BootstrappedCurvePoint>& pillars,
                                      const std::vector<FixedIncomeCashflow>& cashflows) noexcept;
 
 /// FRA NPV to the party that **receives fixed** and pays floating (standard FRA buyer):
-/// \(\mathrm{NPV} = N \cdot \tau \cdot DF(t_{\mathrm{pay}}) \cdot (K - F)\).
+/// \f$\mathrm{NPV} = N \cdot \tau \cdot DF(t_{\mathrm{pay}}) \cdot (K - F)\f$.
 [[nodiscard]] double FraNpv(const std::vector<BootstrappedCurvePoint>& pillars,
                           double notional,
                           double fixed_rate,

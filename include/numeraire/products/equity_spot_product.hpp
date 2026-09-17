@@ -15,7 +15,7 @@ namespace numeraire::products {
 ///
 /// Catalog: `equity_spot` (shares) or `index_spot` (index units). No strike, no
 /// natural expiry — `ExpiryDate()` mirrors `TradeDate()` for `IProduct` only;
-/// the spot pricer ignores \(\tau\). `OptionKind()` / `Strike()` are unused stubs
+/// the spot pricer ignores \f$\tau\f$. `OptionKind()` / `Strike()` are unused stubs
 /// (same pattern as `EquityForwardProduct`).
 class EquitySpotProduct final : public core::IProduct {
 public:

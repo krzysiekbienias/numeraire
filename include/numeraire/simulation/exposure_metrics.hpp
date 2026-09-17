@@ -31,7 +31,7 @@ struct LegExposureMetrics {
 };
 
 /// Compute EE (mean) and PFE quantiles from path-wise leg PV totals.
-/// Exposure per path: `max(0, pv_total)`.
+/// Exposure per path: \f$\max(0, \mathrm{pv\_total})\f$.
 void ComputeLegExposureMetrics(const LegPathPvBuffer& leg_pv,
                                const std::vector<LegExposureIdentity>& legs,
                                const ExposureTimeGrid& time_grid,

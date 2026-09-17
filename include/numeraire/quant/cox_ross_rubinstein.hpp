@@ -10,7 +10,7 @@ namespace numeraire::quant {
 
 /// One node of a recombining CRR tree (educational / audit snapshot).
 /// `up_moves` = number of up moves from the root along the path to this node
-/// (equivalently index \(i\) with spot \(S_0 u^{i} d^{step-i}\)).
+/// (equivalently index \f$i\f$ with spot \f$S_0 u^{i} d^{step-i}\f$).
 struct CrrTreeNode {
     int step = 0;
     int up_moves = 0;
@@ -21,7 +21,7 @@ struct CrrTreeNode {
     bool early_exercise = false;
 };
 
-/// Full tree dump for a small \(n\) (lab / audit). `nodes` ordered by
+/// Full tree dump for a small \f$n\f$ (lab / audit). `nodes` ordered by
 /// increasing `step`, then `up_moves`.
 struct CrrTreeDump {
     std::size_t n_steps = 0;
@@ -34,7 +34,7 @@ struct CrrTreeDump {
     std::vector<CrrTreeNode> nodes;
 };
 
-/// Cox–Ross–Rubinstein recombining tree for equity vanilla (continuous \(r\), \(q\)).
+/// Cox–Ross–Rubinstein recombining tree for equity vanilla (continuous \f$r\f$, \f$q\f$).
 /// Tree state is a single flat `std::vector` of size `n_steps + 1` (in-place rollback).
 /// Amounts are **per one unit of underlying**.
 [[nodiscard]] double CoxRossRubinsteinVanillaPrice(OptionType option_type,
@@ -49,7 +49,7 @@ struct CrrTreeDump {
 
 /// Same economics as `CoxRossRubinsteinVanillaPrice`, but keeps every node.
 /// Intended for small `n_steps` (lab tree drawing / audit). Root NPV matches the
-/// scalar pricer when a proper tree is built (positive vol, \(\tau>0\), \(n\ge 1\)).
+/// scalar pricer when a proper tree is built (positive vol, \f$\tau>0\f$, \f$n\ge 1\f$).
 [[nodiscard]] CrrTreeDump CoxRossRubinsteinVanillaTree(OptionType option_type,
                                                        ExerciseStyle exercise,
                                                        double spot,

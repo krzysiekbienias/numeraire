@@ -17,13 +17,13 @@ namespace numeraire::pricers {
 /// — commodity futures outrights → `AnalyticFuturesOutrightPricer`
 /// — commodity futures forwards → `AnalyticCommodityFuturesForwardPricer`
 class AnalyticCompositePricer final : public core::IPricer {
-   public:
+public:
     [[nodiscard]] numeraire::PricingEngineType EngineKind() const override;
 
     [[nodiscard]] core::PricingResult Price(const core::IProduct& product,
                                             const core::IMarketData& market) const override;
 
-   private:
+private:
     AnalyticBlackScholesEquityPricer equity_options_{};
     AnalyticSpotPricer spots_{};
     AnalyticForwardPricer forwards_{};

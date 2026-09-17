@@ -11,9 +11,9 @@
 namespace numeraire::products {
 
 /// Uncollateralized **forward on a listed commodity futures** contract.
-/// Locks delivery price `Strike()` \(K\) against the dated futures
+/// Locks delivery price `Strike()` \f$K\f$ against the dated futures
 /// (`UnderlyingId()` = contract ticker, e.g. `CLX6`). Analytic PV:
-/// \(e^{-r\tau}(F_{t,T}-K)\). `OptionKind()` is unused for pricing.
+/// \f$e^{-r\tau}(F_{t,T}-K)\f$. `OptionKind()` is unused for pricing.
 class CommodityFuturesForwardProduct final : public core::IProduct {
 public:
     CommodityFuturesForwardProduct(std::string contract_ticker,

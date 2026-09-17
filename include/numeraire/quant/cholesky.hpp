@@ -12,7 +12,7 @@ enum class CholeskyStatus : std::uint8_t {
     kNotPositiveDefinite,
 };
 
-/// Lower-triangular factor `L` with `R = L * L^T` (row-major `n x n`; entries above the
+/// Lower-triangular factor \f$L\f$ with \f$R = LL^{\top}\f$ (row-major `n x n`; entries above the
 /// diagonal are zero).
 struct CholeskyFactor {
     std::size_t n{0};
@@ -24,17 +24,17 @@ struct CholeskyResult {
     CholeskyFactor factor;
 };
 
-/// Cholesky decomposition of a symmetric positive-definite matrix `R` stored row-major
+/// Cholesky decomposition of a symmetric positive-definite matrix \f$R\f$ stored row-major
 /// (`n * n` elements). For correlation matrices, diagonals must be `1` within `1e-8`.
 [[nodiscard]] CholeskyResult CholeskyDecompose(std::span<const double> matrix_row_major,
                                                std::size_t n);
 
-/// `out = L * in` where `L` is lower triangular (`factor.lower`, row-major).
-/// `in` and `out` must have length `factor.n`.
+/// Applies \f$y = Lx\f$ (`in` \f$\to\f$ `out`) where \f$L\f$ is lower triangular
+/// (`factor.lower`, row-major). `in` and `out` must have length `factor.n`.
 void ApplyLowerTriangular(const CholeskyFactor& factor, std::span<const double> in,
                           std::span<double> out);
 
-/// Reconstruct `R = L * L^T` from a lower factor (row-major output, `n * n`).
+/// Reconstruct \f$R = LL^{\top}\f$ from a lower factor (row-major output, `n * n`).
 [[nodiscard]] std::vector<double> ReconstructFromLower(const CholeskyFactor& factor);
 
 }  // namespace numeraire::quant

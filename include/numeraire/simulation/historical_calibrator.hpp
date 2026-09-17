@@ -19,7 +19,7 @@ struct HistoricalCalibratorConfig {
     /// Minimum aligned log-return observations required across all factors.
     std::size_t min_return_observations = 60;
     int adjusted = 1;
-    /// Annualization factor for historical vol (`sigma_daily * sqrt(N)`).
+    /// Annualization factor for historical vol (\f$\sigma_{\mathrm{daily}}\sqrt{N}\f$).
     int vol_annualization_days = 252;
     /// Constant-maturity pillars calibrated per commodity curve (M1..Mn).
     int commodity_pillars = 6;

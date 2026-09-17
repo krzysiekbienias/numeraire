@@ -23,7 +23,7 @@ enum class GabillonFitStatus : std::uint8_t {
 };
 
 /// Deterministic seasonal shape as Fourier coefficients over the calendar year:
-/// \(\mathrm{seas}(\phi) = \sum_i a_i \cos(2\pi i \phi) + b_i \sin(2\pi i \phi)\).
+/// \f$\mathrm{seas}(\phi) = \sum_i a_i \cos(2\pi i \phi) + b_i \sin(2\pi i \phi)\f$.
 /// Mean-zero across a full year by construction, so it never competes with the curve level.
 struct SeasonalShape {
     std::vector<double> cos_coeffs;
@@ -32,7 +32,7 @@ struct SeasonalShape {
 
 /// Two-factor Gabillon decomposition of one futures curve.
 ///
-/// \(\ln F(0,T) = e^{-k\tau}\ln S + (1-e^{-k\tau})\ln L + \mathrm{seas}(\phi(T))\)
+/// \f$\ln F(0,T) = e^{-k\tau}\ln S + (1-e^{-k\tau})\ln L + \mathrm{seas}(\phi(T))\f$
 ///
 /// The short factor pins the front of the curve, the long factor its asymptote, and the
 /// seasonal term carries whatever repeats every calendar year. Separating them is the
@@ -40,7 +40,7 @@ struct SeasonalShape {
 /// instead of sliding down today's curve slope the way a constant-maturity view makes it.
 ///
 /// The two levels are effective rather than structural. Gabillon's deterministic
-/// convexity term depends on \(\tau\) alone, so the fit absorbs it into the same two
+/// convexity term depends on \f$\tau\f$ alone, so the fit absorbs it into the same two
 /// degrees of freedom — harmless when the purpose is to separate seasonality from curve
 /// shape, but it means `short_factor_level` is not literally today's spot.
 struct GabillonCurveFit {
@@ -62,7 +62,7 @@ struct GabillonCurveFit {
                                            double time_to_settlement_years,
                                            double year_phase);
 
-/// Fit with `mean_reversion` held fixed. With \(k\) known the model is linear in the
+/// Fit with `mean_reversion` held fixed. With \f$k\f$ known the model is linear in the
 /// remaining unknowns, so this is one small normal-equation solve.
 [[nodiscard]] GabillonCurveFit FitGabillonCurveGivenMeanReversion(
         const std::vector<ForwardCurvePoint>& curve, double mean_reversion, int num_harmonics);
@@ -74,12 +74,11 @@ struct GabillonCurveFit {
                                                 double min_mean_reversion = 0.05,
                                                 double max_mean_reversion = 20.0);
 
-/// Instantaneous volatility of \(\ln F\) for a contract \(\tau\) years from settlement:
-/// \(\sigma^2 = \sigma_S^2 e^{-2k\tau} + \sigma_L^2 (1-e^{-k\tau})^2
-///            + 2\rho\sigma_S\sigma_L e^{-k\tau}(1-e^{-k\tau})\).
+/// Instantaneous volatility of \f$\ln F\f$ for a contract \f$\tau\f$ years from settlement:
+/// \f$\sigma^2 = \sigma_S^2 e^{-2k\tau} + \sigma_L^2 (1-e^{-k\tau})^2 + 2\rho\sigma_S\sigma_L e^{-k\tau}(1-e^{-k\tau})\f$.
 ///
 /// This is the Samuelson effect in closed form — the front of the curve is driven by the
-/// short factor, the deferred end by the long factor, and \(k\) sets how fast one hands
+/// short factor, the deferred end by the long factor, and \f$k\f$ sets how fast one hands
 /// over to the other.
 [[nodiscard]] double GabillonForwardVolatility(double time_to_settlement_years,
                                                double mean_reversion,
@@ -97,7 +96,7 @@ struct GabillonVolFit {
     double rmse{0.0};
 };
 
-/// Recover \(k, \sigma_S, \sigma_L, \rho\) from pillar volatilities observed at
+/// Recover \f$k, \sigma_S, \sigma_L, \rho\f$ from pillar volatilities observed at
 /// `time_to_settlement_years`, by least squares on `GabillonForwardVolatility`.
 ///
 /// Passing the mean reversion from the curve fit is usually wrong: the curve pins how

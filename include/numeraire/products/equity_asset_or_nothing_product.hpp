@@ -10,11 +10,11 @@
 
 namespace numeraire::products {
 
-/// European **asset-or-nothing** binary on equity: at expiry pays **spot** \(S_T\)
-/// if ITM (call: \(S_T > K\), put: \(S_T < K\)), otherwise zero — **not** the
-/// vanilla \((S_T - K)^+\). Same `IProduct` surface as vanilla so calendars and
+/// European **asset-or-nothing** binary on equity: at expiry pays **spot** \f$S_T\f$
+/// if ITM (call: \f$S_T > K\f$, put: \f$S_T < K\f$), otherwise zero — **not** the
+/// vanilla \f$(S_T - K)^+\f$. Same `IProduct` surface as vanilla so calendars and
 /// hooks align; **pricers must branch on concrete type** (or a future
-/// `InstrumentKind`) rather than assuming BS delta-gamma on \((S-K)^+\).
+/// `InstrumentKind`) rather than assuming BS delta-gamma on \f$(S-K)^+\f$.
 class EquityAssetOrNothingProduct final : public core::IProduct {
 public:
     EquityAssetOrNothingProduct(std::string underlying_id,

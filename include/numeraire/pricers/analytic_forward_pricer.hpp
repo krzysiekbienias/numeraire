@@ -5,7 +5,7 @@
 namespace numeraire::pricers {
 
 /// Closed-form **carry / linear forward** pricer (no implied vol).
-/// v1: `EquityForwardProduct` only — \(S e^{-qT} - K e^{-rT}\).
+/// v1: `EquityForwardProduct` only — \f$S e^{-qT} - K e^{-rT}\f$.
 /// FX forward and FRA will extend this pricer (or a sibling) later, not
 /// `AnalyticBlackScholesEquityPricer`.
 class AnalyticForwardPricer final : public core::IPricer {

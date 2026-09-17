@@ -4,12 +4,12 @@
 
 namespace numeraire::quant {
 
-/// European vanilla on equity/index with continuous \(r\), \(q\), constant \(\sigma\).
+/// European vanilla on equity/index with continuous \f$r\f$, \f$q\f$, constant \f$\sigma\f$.
 /// All amounts are **per one unit of underlying** (one share or one index point).
 ///
 /// Degenerate inputs are folded in so callers do not repeat the branches:
-/// \(T \le 0\) returns intrinsic on spot, \(\sigma \le 0\) returns the deterministic
-/// forward limit \(e^{-rT}\max(F-K, 0)\) with \(F = S e^{(r-q)T}\).
+/// \f$T \le 0\f$ returns intrinsic on spot, \f$\sigma \le 0\f$ returns the deterministic
+/// forward limit \f$e^{-rT}\max(F-K, 0)\f$ with \f$F = S e^{(r-q)T}\f$.
 [[nodiscard]] double EuropeanVanillaPrice(OptionType option_type,
                                           double spot,
                                           double strike,
@@ -28,8 +28,8 @@ namespace numeraire::quant {
 
 [[nodiscard]] double EuropeanVanillaIntrinsic(OptionType option_type, double spot, double strike);
 
-/// First-order sensitivities per one unit of underlying, w.r.t. spot \(S\), **absolute**
-/// volatility \(\sigma\), and rate \(r\) on the same \(T\) as the price. `theta` is decay
+/// First-order sensitivities per one unit of underlying, w.r.t. spot \f$S\f$, **absolute**
+/// volatility \f$\sigma\f$, and rate \f$r\f$ on the same \f$T\f$ as the price. `theta` is decay
 /// **per calendar year**, not per day.
 ///
 /// Owned by `quant` rather than reusing `core::PricingGreeks` so this module stays a leaf
@@ -42,7 +42,7 @@ struct EuropeanVanillaGreeks {
     double rho{0.0};
 };
 
-/// Undefined for \(T \le 0\) or \(\sigma \le 0\); callers must skip those cases (there is
+/// Undefined for \f$T \le 0\f$ or \f$\sigma \le 0\f$; callers must skip those cases (there is
 /// no meaningful sensitivity once the payoff is deterministic).
 [[nodiscard]] EuropeanVanillaGreeks EuropeanVanillaAllGreeks(OptionType option_type,
                                                              double spot,
@@ -52,7 +52,7 @@ struct EuropeanVanillaGreeks {
                                                              double volatility,
                                                              double time_to_expiry_years);
 
-/// Asset-or-nothing: pays \(S_T\) if ITM. Call: \(S e^{-qT} N(d_1)\); put: \(S e^{-qT} N(-d_1)\).
+/// Asset-or-nothing: pays \f$S_T\f$ if ITM. Call: \f$S e^{-qT} N(d_1)\f$; put: \f$S e^{-qT} N(-d_1)\f$.
 /// Same degenerate handling as `EuropeanVanillaPrice`.
 [[nodiscard]] double AssetOrNothingPrice(OptionType option_type,
                                          double spot,
@@ -62,10 +62,10 @@ struct EuropeanVanillaGreeks {
                                          double volatility,
                                          double time_to_expiry_years);
 
-/// Value at expiry: spot when ITM (call \(S > K\), put \(S < K\)), else zero.
+/// Value at expiry: spot when ITM (call \f$S > K\f$, put \f$S < K\f$), else zero.
 [[nodiscard]] double AssetOrNothingIntrinsic(OptionType option_type, double spot, double strike);
 
-/// Cash-or-nothing: pays `cash_payout` if ITM. Call: \(Q e^{-rT} N(d_2)\); put: \(Q e^{-rT} N(-d_2)\).
+/// Cash-or-nothing: pays `cash_payout` if ITM. Call: \f$Q e^{-rT} N(d_2)\f$; put: \f$Q e^{-rT} N(-d_2)\f$.
 /// Same degenerate handling as `EuropeanVanillaPrice`.
 [[nodiscard]] double CashOrNothingPrice(OptionType option_type,
                                         double spot,
@@ -76,7 +76,7 @@ struct EuropeanVanillaGreeks {
                                         double volatility,
                                         double time_to_expiry_years);
 
-/// Value at expiry: `cash_payout` when ITM (call \(S > K\), put \(S < K\)), else zero.
+/// Value at expiry: `cash_payout` when ITM (call \f$S > K\f$, put \f$S < K\f$), else zero.
 [[nodiscard]] double CashOrNothingIntrinsic(OptionType option_type,
                                             double spot,
                                             double strike,

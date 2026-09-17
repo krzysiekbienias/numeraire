@@ -10,7 +10,7 @@ namespace numeraire::simulation {
 /// Evolve one risk factor (`factor = 0`) along `time_grid` with exact GBM steps
 /// between consecutive grid nodes:
 ///
-/// `S(t_{k+1}) = S(t_k) * exp((r - q - 0.5*sigma^2)*dt + sigma*sqrt(dt)*Z)`.
+/// \f$S(t_{k+1}) = S(t_k)\exp\bigl((r-q-\tfrac12\sigma^2)\Delta t + \sigma\sqrt{\Delta t}\,Z\bigr)\f$.
 ///
 /// Writes `spec.spot` to step `0` for every path, then fills steps `1..K-1`.
 /// Requires `buffer.NumFactors() == 1` and `buffer.NumSteps() == time_grid.NumSteps()`.
@@ -22,10 +22,10 @@ void EvolveSingleFactorGbm(ScenarioBuffer& buffer,
 
 /// Evolve `F` correlated risk factors along `time_grid` with exact GBM steps.
 ///
-/// At each step draws independent `Z ~ N(0, I)`, forms correlated shocks
-/// `eps = L * Z` via `spec.cholesky`, then for each factor `f`:
+/// At each step draws independent \f$Z \sim N(0, I)\f$, forms correlated shocks
+/// \f$\varepsilon = LZ\f$ via `spec.cholesky`, then for each factor \f$f\f$:
 ///
-/// `S_f(t_{k+1}) = S_f(t_k) * exp((r_f - q_f - 0.5*sigma_f^2)*dt + sigma_f*sqrt(dt)*eps_f)`.
+/// \f$S_f(t_{k+1}) = S_f(t_k)\exp\bigl((r_f-q_f-\tfrac12\sigma_f^2)\Delta t + \sigma_f\sqrt{\Delta t}\,\varepsilon_f\bigr)\f$.
 ///
 /// Writes per-factor spots to step `0`, then fills steps `1..K-1`.
 /// Requires `buffer.NumFactors() == spec.NumFactors() == spec.cholesky.n`.

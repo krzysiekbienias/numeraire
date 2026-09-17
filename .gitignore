@@ -36,6 +36,7 @@
 build/
 out/
 cmake-build-*/
+docs/doxygen/
 
 # --- CMake generated --------------------------------------------------------
 CMakeFiles/

@@ -6,7 +6,7 @@
 
 namespace numeraire::simulation {
 
-/// Draws independent standard normals `N(0, 1)` from an `IRandomEngine` via the
+/// Draws independent standard normals \f$N(0,1)\f$ from an `IRandomEngine` via the
 /// Box–Muller transform (two uniforms per pair). Caches one spare value so odd
 /// batch sizes and sequential `Next()` calls stay consistent.
 class StandardNormalGenerator {

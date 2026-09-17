@@ -12,7 +12,7 @@ namespace numeraire::products {
 
 /// European **cash-or-nothing** (digital) on equity: at expiry pays fixed cash
 /// `CashPayoutPerShare()` (per-share scale, same as `pv_unit`) if ITM (call:
-/// \(S_T > K\), put: \(S_T < K\)), otherwise zero. `Strike()` is the barrier \(K\).
+/// \f$S_T > K\f$, put: \f$S_T < K\f$), otherwise zero. `Strike()` is the barrier \f$K\f$.
 class EquityCashOrNothingProduct final : public core::IProduct {
 public:
     EquityCashOrNothingProduct(std::string underlying_id,
