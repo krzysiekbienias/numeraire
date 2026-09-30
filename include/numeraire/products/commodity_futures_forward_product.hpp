@@ -18,7 +18,7 @@ class CommodityFuturesForwardProduct final : public core::IProduct {
 public:
     CommodityFuturesForwardProduct(std::string contract_ticker,
                                    std::string product_code,
-                                   double forward_price,
+                                   double delivery_price,
                                    schedule::Date trade_date,
                                    schedule::Date expiry_date,
                                    std::optional<schedule::Schedule> payments = std::nullopt);
@@ -46,7 +46,7 @@ public:
 private:
     std::string contract_ticker_;
     std::string product_code_;
-    double forward_price_{};
+    double delivery_price_{};
     schedule::Date trade_date_;
     schedule::Date expiry_date_;
     std::optional<schedule::Schedule> payments_;
