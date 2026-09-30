@@ -2,10 +2,13 @@ from django.urls import path
 from django.views.generic import RedirectView
 
 from journal import views
+from journal.doxygen_docs import cpp_docs
 
 app_name = 'journal'
 
 urlpatterns = [
+    path('docs/', cpp_docs, name='cpp_docs'),
+    path('docs/<path:path>', cpp_docs),
     path('', views.LandingView.as_view(), name='landing'),
     path('product/', views.ProductView.as_view(), name='product'),
     path('about/', views.AboutView.as_view(), name='about'),

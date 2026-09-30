@@ -220,6 +220,23 @@ class JournalHubNavTests(TestCase):
         self.assertNotIn('>Commodity curves<', html)
         self.assertNotIn('>Underliers<', html)
 
+    def test_cpp_docs_require_login_and_serve_index_when_generated(self):
+        anon = Client()
+        guest = anon.get('/docs/')
+        self.assertEqual(guest.status_code, 302)
+        self.assertIn('/accounts/login/', guest['Location'])
+
+        from django.conf import settings
+
+        index = settings.REPO_ROOT / 'docs' / 'doxygen' / 'html' / 'index.html'
+        response = self.client.get('/docs/')
+        if index.is_file():
+            self.assertEqual(response.status_code, 200)
+            body = b''.join(response.streaming_content)
+            self.assertIn(b'Numeraire', body)
+        else:
+            self.assertEqual(response.status_code, 404)
+
     def test_equities_and_risk_hubs_render_tiles(self):
         equities = self.client.get(reverse('journal:market_equities'))
         self.assertEqual(equities.status_code, 200)
