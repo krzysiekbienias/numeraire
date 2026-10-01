@@ -4,6 +4,8 @@
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
 
+#include <limits>
+
 namespace {
 
 numeraire::database::TradeCatalogBundle MakeBundle(const std::string& status, const double execution_price) {
@@ -44,19 +46,25 @@ TEST(TradeBookingRulesTest, BookingRequiresPendingMtmRequiresLive) {
     EXPECT_THROW(numeraire::database::RequireTradeLiveForMtm(pending.trade), numeraire::ValidationError);
 }
 
-TEST(TradeBookingRulesTest, MtmRequiresBookedLegs) {
-    auto pending = MakeBundle("LIVE", 0.0);
-    EXPECT_THROW(numeraire::database::RequireAllLegsBookedForMtm(pending), numeraire::ValidationError);
-    auto live = MakeBundle("LIVE", 1.0);
-    EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(live));
-}
+TEST(TradeBookingRulesTest, MtmRequiresFiniteExecutionPrice) {
+    EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(MakeBundle("LIVE", 1.0)));
+    EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(MakeBundle("LIVE", 0.0)));
+    EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(MakeBundle("LIVE", -37.63)));
 
-TEST(TradeBookingRulesTest, AtmLinearForwardCountsAsBooked) {
-    auto live = MakeBundle("LIVE", 0.0);
-    live.legs[0].product.catalog_instrument_type = std::string{"commodity_futures_forward"};
-    EXPECT_NO_THROW(numeraire::database::RequireAllLegsBookedForMtm(live));
-    EXPECT_TRUE(numeraire::database::AllLegsBooked(live));
-    EXPECT_FALSE(numeraire::database::AllLegExecutionPricesPositive(live));
+    numeraire::database::TradeCatalogBundle empty;
+    empty.trade.trade_id = "TRD_EMPTY";
+    empty.trade.status = "LIVE";
+    EXPECT_THROW(numeraire::database::RequireAllLegsBookedForMtm(empty), numeraire::ValidationError);
+
+    EXPECT_THROW(numeraire::database::RequireAllLegsBookedForMtm(
+                         MakeBundle("LIVE", std::numeric_limits<double>::quiet_NaN())),
+                 numeraire::ValidationError);
+    EXPECT_THROW(numeraire::database::RequireAllLegsBookedForMtm(
+                         MakeBundle("LIVE", std::numeric_limits<double>::infinity())),
+                 numeraire::ValidationError);
+    EXPECT_THROW(numeraire::database::RequireAllLegsBookedForMtm(
+                         MakeBundle("LIVE", -std::numeric_limits<double>::infinity())),
+                 numeraire::ValidationError);
 }
 
 TEST(TradeBookingRulesTest, MtmAsOfNotBeforeTradeDate) {

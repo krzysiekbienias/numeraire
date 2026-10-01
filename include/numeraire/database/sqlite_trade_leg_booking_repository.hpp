@@ -22,7 +22,7 @@ class SqliteTradeLegBookingRepository {
     SqliteTradeLegBookingRepository(SqliteTradeLegBookingRepository&&) = delete;
     SqliteTradeLegBookingRepository& operator=(SqliteTradeLegBookingRepository&&) = delete;
 
-    /// `execution_price` must be non-negative. Throws if `leg_id` is missing.
+    /// `execution_price` must be finite (zero and negative are valid). Throws if `leg_id` is missing.
     void UpdateExecutionPrice(std::string_view leg_id, double execution_price) const;
 
     /// Updates each leg by `leg_id`. Throws if any `leg_id` is missing.
@@ -36,7 +36,7 @@ class SqliteTradeLegBookingRepository {
     /// Updates `trades.status` (e.g. `PENDING` → `LIVE` after successful booking).
     void SetTradeStatus(std::string_view trade_id, std::string_view status) const;
 
-    /// All leg updates and optional header timestamp in one transaction.
+    /// All leg updates, optional header timestamp, and `status = LIVE` in one transaction.
     /// Leg updates use `WHERE leg_id = ? AND trade_id = ?` so legs must belong to `trade_id`.
     void ApplyTradeBooking(std::string_view trade_id,
                            std::span<const TradeLegBookingUpdate> leg_updates,

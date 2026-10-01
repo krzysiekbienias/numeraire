@@ -193,7 +193,7 @@ Not a cron job. Prod does not SSH to Hetzner.
 
 ## Manual backfill (missed day / holiday)
 
-From the **repository root** of that host. Set `NUMERAIRE_AS_OF` per **session** date (the `as_of` you want in SQLite, usually yesterday’s US session). LIVE legs need `execution_price > 0`.
+From the **repository root** of that host. Set `NUMERAIRE_AS_OF` per **session** date (the `as_of` you want in SQLite, usually yesterday’s US session). MTM requires **LIVE** trades; `execution_price` must be finite (zero and negative are valid booked marks).
 
 ```bash
 cd /opt/numeraire/dev    # or prod

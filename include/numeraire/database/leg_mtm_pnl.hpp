@@ -8,7 +8,8 @@
 namespace numeraire::database {
 
 /// Booked entry mark: `LegPvTotal(direction, quantity, contract_size, execution_price)`.
-/// Uses `trade_legs.execution_price` (per-share premium at booking; commission excluded).
+/// Uses `trade_legs.execution_price` (per-share model value at booking; commission excluded).
+/// Zero and negative marks are valid; the value must be finite.
 [[nodiscard]] double LegBookedMark(const TradeLegCatalogRow& row) noexcept;
 
 /// `trade_legs.commission` when set, else `0`.

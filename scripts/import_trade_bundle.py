@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sqlite3
@@ -466,8 +467,8 @@ def _parse_deferred_execution_price(lg: Mapping[str, Any], leg_id: str) -> float
         exe = float(lg["execution_price"])
     except (TypeError, ValueError):
         _die(f"leg {leg_id!r}: execution_price must be a number or null")
-    if exe < 0.0:
-        _die(f"leg {leg_id!r}: execution_price must be non-negative")
+    if not math.isfinite(exe):
+        _die(f"leg {leg_id!r}: execution_price must be a finite number (got {exe!r})")
     return exe
 
 

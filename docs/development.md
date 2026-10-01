@@ -114,7 +114,7 @@ NUMERAIRE_DEV_QUOTE_SOURCE=db ./build/dev_main --as-of 2026-06-01 TRD_10004
 4. **And** `trade_leg_mtm_eod` row count unchanged by the booking run.
 5. **And** `commission` columns unchanged.
 6. **And** combining `--price-booking` with `--as-of` in one argv fails fast with `ValidationError`.
-7. **And** when all booked `execution_price > 0`, `trades.status` becomes **`LIVE`**; MTM on that trade then succeeds with `--as-of` ≥ `trade_date`.
+7. **And** `trades.status` becomes **`LIVE`** inside `ApplyTradeBooking`; MTM on that trade then succeeds with `--as-of` ≥ `trade_date`.
 
 **SQL verify after booking:**
 
@@ -214,7 +214,7 @@ Ensure `.env` has `POLYGON_API_KEY`, `NUMERAIRE_DB_PATH`, `NUMERAIRE_DEV_RATE`, 
 
 ### Manual backfill (gaps)
 
-Set **`NUMERAIRE_AS_OF`** per missing session date. MTM requires **LIVE** trades with **`execution_price > 0`** on every leg.
+Set **`NUMERAIRE_AS_OF`** per missing session date. MTM requires **LIVE** trades with a **finite** `execution_price` on every leg (zero and negative booked marks are valid).
 
 **Market data only:**
 

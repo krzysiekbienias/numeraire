@@ -575,10 +575,10 @@ void PrintUsage() {
             "trade_date)\n"
             "If no args: NUMERAIRE_DEV_TRADE_ID from the environment (single trade, MTM mode).\n"
             "MTM requires --as-of or NUMERAIRE_DEV_AS_OF. Booking forbids --as-of; ValuationDate = trade_date.\n"
-            "Booking: status PENDING → LIVE when legs are booked (execution_price > 0, or 0 for an ATM "
-            "linear forward). "
+            "Booking: successful ApplyTradeBooking writes finite execution_price on each leg and sets "
+            "status PENDING → LIVE in the same transaction. "
             "Matured LIVE trades become EXPIRED on the first as_of after max leg expiry (before MTM/sim). "
-            "MTM requires LIVE + booked legs.\n"
+            "MTM requires LIVE, at least one leg, and a finite execution_price on every leg.\n"
             "Pricing quote: NUMERAIRE_DEV_QUOTE_SOURCE=env|db (`db` reads equity close or futures settle; "
             "NUMERAIRE_DEV_SPOT_SOURCE is still accepted). "
             "Implied vol: NUMERAIRE_DEV_VOL_SOURCE=env|db (`db` reads vol_surface_eod; needs --build-vol-surface-eod). "
@@ -1055,14 +1055,7 @@ void AttachDiscountCurveToSnapshot(const DevMainMarketQuotesConfig& mq,
 
         const std::vector<TradeLegBookingUpdate> updates = PriceBundleForBooking(bundle, *mkt_handle, *pricer);
         booking_repo.ApplyTradeBooking(tid, updates, std::nullopt);
-
-        const TradeCatalogBundle booked = repo.GetCatalogForTrade(tid);
-        if (numeraire::database::AllLegsBooked(booked)) {
-            booking_repo.SetTradeStatus(tid, std::string{numeraire::database::kTradeStatusLive});
-            Logger::NumInfo("Trade {} promoted to LIVE (legs booked; ATM forwards may have execution_price 0).", tid);
-        } else {
-            Logger::NumInfo("Trade {} remains PENDING (at least one leg not booked after booking run).", tid);
-        }
+        Logger::NumInfo("Trade {} promoted to LIVE.", tid);
     }
 
     Logger::NumInfo("Booked {} trade(s) on trade_date valuation.", trade_ids.size());
