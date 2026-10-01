@@ -110,6 +110,7 @@ class TradeLeg(models.Model):
     quantity = models.FloatField()
     execution_price = models.FloatField()
     commission = models.FloatField()
+    trade_price = models.FloatField(blank=True, null=True)
 
     class Meta:
         managed = False

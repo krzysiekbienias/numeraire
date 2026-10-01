@@ -76,6 +76,8 @@ class BookableInstrument:
     has_contract_ticker: bool = False
     # Two listed outrights, one trade header (calendar / later strip).
     is_calendar: bool = False
+    # Leg entry price K for listed futures outright (not commodity.strike).
+    has_trade_price: bool = False
 
 
 PLAIN_VANILLA_EUROPEAN = BookableInstrument(
@@ -168,6 +170,7 @@ COMMODITY_FUTURES_OUTRIGHT = BookableInstrument(
     contract_size_help='Futures multiplier (e.g. 1000 bbl for CL). Override from product catalog if known.',
     extension='commodity',
     has_contract_ticker=True,
+    has_trade_price=True,
 )
 
 COMMODITY_FUTURES_FORWARD = BookableInstrument(
@@ -576,6 +579,8 @@ def build_bundle(
         'execution_price': None,
         'commission_per_contract': cleaned['commission_per_contract'],
     }
+    if spec.has_trade_price:
+        leg['trade_price'] = cleaned['trade_price']
     bundle: dict = {
         '_comment': (
             f'Booked from the Numeraire Journal{who} at {now:%Y-%m-%d %H:%M:%S}. '
@@ -727,6 +732,7 @@ def build_calendar_bundle(
                     'quantity': qty,
                     'execution_price': None,
                     'commission_per_contract': commission,
+                    'trade_price': cleaned['near_trade_price'],
                 },
                 {
                     'product_id': far_id,
@@ -734,6 +740,7 @@ def build_calendar_bundle(
                     'quantity': qty,
                     'execution_price': None,
                     'commission_per_contract': commission,
+                    'trade_price': cleaned['far_trade_price'],
                 },
             ],
         },

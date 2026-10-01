@@ -1,17 +1,15 @@
-#include <gtest/gtest.h>
-
-#include <numeraire/database/sqlite_trade_leg_booking_repository.hpp>
-#include <numeraire/utils/exception.hpp>
-
 #include <SQLiteCpp/SQLiteCpp.h>
-
-#include <fstream>
-#include <sstream>
-#include <string>
+#include <gtest/gtest.h>
 #include <unistd.h>
-#include <vector>
 
 #include <filesystem>
+#include <fstream>
+#include <limits>
+#include <numeraire/database/sqlite_trade_leg_booking_repository.hpp>
+#include <numeraire/utils/exception.hpp>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -45,25 +43,21 @@ void SeedBookingFixtureDb(const std::string& db_path) {
     SQLite::Database db(db_path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
     db.exec(ReadSchemaFile());
 
-    db.exec(
-            "INSERT INTO products (product_id, asset_kind, underlying_id, expiry_date, settlement, "
+    db.exec("INSERT INTO products (product_id, asset_kind, underlying_id, expiry_date, settlement, "
             "currency, contract_size, day_count, calendar) VALUES "
             "('P_AAPL_001', 'EQUITY', 'AAPL', '2025-11-04', 'PHYSICAL', "
             "'USD', 100.0, 'Actual365Fixed', 'UnitedStates');");
 
-    db.exec(
-            "INSERT INTO products_equity (product_id, instrument_type, option_type, strike, "
+    db.exec("INSERT INTO products_equity (product_id, instrument_type, option_type, strike, "
             "exercise_style, structured_params) VALUES "
             "('P_AAPL_001', 'plain_vanilla_european_option', 'call', 233, 'european', '{}');");
 
-    db.exec(
-            "INSERT INTO trades (trade_id, portfolio_id, strategy_type, booking_timestamp, trade_date, "
+    db.exec("INSERT INTO trades (trade_id, portfolio_id, strategy_type, booking_timestamp, trade_date, "
             "updated_at, status) VALUES "
             "('TRD_001', 'BOOK_1', 'VANILLA_OPTION', NULL, '2025-08-06', "
-            "'2026-05-11 16:34:30', 'LIVE');");
+            "'2026-05-11 16:34:30', 'PENDING');");
 
-    db.exec(
-            "INSERT INTO trade_legs (leg_id, trade_id, product_id, direction, quantity, "
+    db.exec("INSERT INTO trade_legs (leg_id, trade_id, product_id, direction, quantity, "
             "execution_price, commission) VALUES "
             "('TRD_001_L1', 'TRD_001', 'P_AAPL_001', 'LONG', 100, 0, 75);");
 }
@@ -87,6 +81,16 @@ void SeedBookingFixtureDb(const std::string& db_path) {
     }
     if (q.getColumn(0).isNull()) {
         return {};
+    }
+    return q.getColumn(0).getText();
+}
+
+[[nodiscard]] std::string ReadStatus(const std::string& db_path, const std::string& trade_id) {
+    SQLite::Database db(db_path, SQLite::OPEN_READONLY);
+    SQLite::Statement q(db, "SELECT status FROM trades WHERE trade_id = ?");
+    q.bind(1, trade_id);
+    if (!q.executeStep()) {
+        throw std::runtime_error("trade not found: " + trade_id);
     }
     return q.getColumn(0).getText();
 }
@@ -115,12 +119,29 @@ TEST(SqliteTradeLegBookingRepositoryTest, MissingLegThrows) {
     fs::remove(path);
 }
 
-TEST(SqliteTradeLegBookingRepositoryTest, NegativeExecutionPriceThrows) {
+TEST(SqliteTradeLegBookingRepositoryTest, NegativeExecutionPriceAccepted) {
     std::string const path = TempSqlitePath();
     SeedBookingFixtureDb(path);
 
     numeraire::database::SqliteTradeLegBookingRepository repo(path);
-    EXPECT_THROW(repo.UpdateExecutionPrice("TRD_001_L1", -0.01), numeraire::ValidationError);
+    repo.UpdateExecutionPrice("TRD_001_L1", -0.01);
+    EXPECT_DOUBLE_EQ(ReadExecutionPrice(path, "TRD_001_L1"), -0.01);
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegBookingRepositoryTest, NonFiniteExecutionPriceThrows) {
+    std::string const path = TempSqlitePath();
+    SeedBookingFixtureDb(path);
+
+    numeraire::database::SqliteTradeLegBookingRepository repo(path);
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double pos_inf = std::numeric_limits<double>::infinity();
+    const double neg_inf = -std::numeric_limits<double>::infinity();
+    EXPECT_THROW(repo.UpdateExecutionPrice("TRD_001_L1", nan), numeraire::ValidationError);
+    EXPECT_THROW(repo.UpdateExecutionPrice("TRD_001_L1", pos_inf), numeraire::ValidationError);
+    EXPECT_THROW(repo.UpdateExecutionPrice("TRD_001_L1", neg_inf), numeraire::ValidationError);
+    EXPECT_DOUBLE_EQ(ReadExecutionPrice(path, "TRD_001_L1"), 0.0);
 
     fs::remove(path);
 }
@@ -163,6 +184,24 @@ TEST(SqliteTradeLegBookingRepositoryTest, ApplyTradeBookingTransaction) {
 
     EXPECT_DOUBLE_EQ(ReadExecutionPrice(path, "TRD_001_L1"), 18.25);
     EXPECT_EQ(ReadBookingTimestamp(path, "TRD_001"), "2025-08-06 10:00:00");
+    EXPECT_EQ(ReadStatus(path, "TRD_001"), "LIVE");
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeLegBookingRepositoryTest, ApplyTradeBookingAcceptsNegativeExecutionPrice) {
+    std::string const path = TempSqlitePath();
+    SeedBookingFixtureDb(path);
+
+    const std::vector<numeraire::database::TradeLegBookingUpdate> updates{
+            {.leg_id = "TRD_001_L1", .execution_price = -37.63},
+    };
+
+    numeraire::database::SqliteTradeLegBookingRepository repo(path);
+    repo.ApplyTradeBooking("TRD_001", updates, std::nullopt);
+
+    EXPECT_DOUBLE_EQ(ReadExecutionPrice(path, "TRD_001_L1"), -37.63);
+    EXPECT_EQ(ReadStatus(path, "TRD_001"), "LIVE");
 
     fs::remove(path);
 }
@@ -180,6 +219,7 @@ TEST(SqliteTradeLegBookingRepositoryTest, ApplyTradeBookingWrongTradeRollsBack) 
 
     EXPECT_DOUBLE_EQ(ReadExecutionPrice(path, "TRD_001_L1"), 0.0);
     EXPECT_TRUE(ReadBookingTimestamp(path, "TRD_001").empty());
+    EXPECT_EQ(ReadStatus(path, "TRD_001"), "PENDING");
 
     fs::remove(path);
 }
@@ -189,14 +229,10 @@ TEST(SqliteTradeLegBookingRepositoryTest, SetTradeStatus) {
     SeedBookingFixtureDb(path);
 
     numeraire::database::SqliteTradeLegBookingRepository repo(path);
-    repo.SetTradeStatus("TRD_001", "PENDING");
+    EXPECT_EQ(ReadStatus(path, "TRD_001"), "PENDING");
+    repo.SetTradeStatus("TRD_001", "LIVE");
     EXPECT_EQ(ReadBookingTimestamp(path, "TRD_001"), "");
-
-    SQLite::Database db(path, SQLite::OPEN_READONLY);
-    SQLite::Statement q(db, "SELECT status FROM trades WHERE trade_id = ?");
-    q.bind(1, "TRD_001");
-    ASSERT_TRUE(q.executeStep());
-    EXPECT_EQ(q.getColumn(0).getText(), std::string{"PENDING"});
+    EXPECT_EQ(ReadStatus(path, "TRD_001"), "LIVE");
 
     fs::remove(path);
 }

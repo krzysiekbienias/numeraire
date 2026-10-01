@@ -17,7 +17,7 @@ namespace numeraire::products {
 class EquityForwardProduct final : public core::IProduct {
 public:
     EquityForwardProduct(std::string underlying_id,
-                         double forward_price,
+                         double delivery_price,
                          schedule::Date trade_date,
                          schedule::Date expiry_date,
                          std::optional<schedule::Schedule> payments = std::nullopt);
@@ -42,7 +42,7 @@ public:
 
 private:
     std::string underlying_id_;
-    double forward_price_;
+    double delivery_price_;
     schedule::Date trade_date_;
     schedule::Date expiry_date_;
     std::optional<schedule::Schedule> payments_;

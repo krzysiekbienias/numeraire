@@ -1,6 +1,6 @@
 # Incoming trade bundles
 
-Copy [`trade_bundle.sample.json`](trade_bundle.sample.json) (vanilla), [`trade_bundle_binary.sample.json`](trade_bundle_binary.sample.json) (binaries), or [`trade_bundle_forward.sample.json`](trade_bundle_forward.sample.json) (equity forward) to a new filename, fill empty/required fields, then import with [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py).
+Copy [`trade_bundle.sample.json`](trade_bundle.sample.json) (vanilla), [`trade_bundle_binary.sample.json`](trade_bundle_binary.sample.json) (binaries), [`trade_bundle_forward.sample.json`](trade_bundle_forward.sample.json) (equity forward), or [`trade_bundle_commodity_outright.sample.json`](trade_bundle_commodity_outright.sample.json) (listed futures) to a new filename, fill empty/required fields, then import with [`scripts/import_trade_bundle.py`](../scripts/import_trade_bundle.py).
 
 Only `trade_bundle*.sample.json` files are tracked; other `*.json` files in this directory are gitignored. **Do not import a sample as-is** — samples intentionally fail validation until filled.
 
@@ -35,7 +35,7 @@ Set `product.product_id` once:
 - `equity.product_id` and each `legs[].product_id` ← `product.product_id` (conflict → error)
 - `legs[].leg_id` ← `{trade_id}_L1`, `_L2`, … if omitted
 
-Fields filled later by booking pricer: `execution_price` (null → `0`). **Commission at import:** prefer `commission_per_contract` (× `quantity`, e.g. `0.25` and `100` → `25` in DB); or flat `commission` if `commission_per_contract` is omitted. `updated_at` → `datetime('now')` when omitted.
+Fields filled later by booking pricer: `execution_price` (null → `0`). Listed futures outright legs also need **`trade_price`** (finite entry K; not `commodity.strike`). **Commission at import:** prefer `commission_per_contract` (× `quantity`, e.g. `0.25` and `100` → `25` in DB); or flat `commission` if `commission_per_contract` is omitted. `updated_at` → `datetime('now')` when omitted.
 
 ## Binary options
 
@@ -90,6 +90,12 @@ Cash underlier positions for **delta hedging** (same `portfolio_id` as the optio
 - Templates: [`trade_bundle_equity_spot.sample.json`](trade_bundle_equity_spot.sample.json), [`trade_bundle_index_spot.sample.json`](trade_bundle_index_spot.sample.json).
 - The underlier mark resolves from `equity_daily_eod` or `index_daily_eod` (e.g. NDX → `I:NDX`) when `NUMERAIRE_DEV_QUOTE_SOURCE=db`.
 
+## Commodity futures outright (catalog FUT)
+
+Listed futures. `commodity.instrument_type` = **`commodity_futures_outright`**. Entry price **K** is **`legs[].trade_price`** (finite; negative allowed). Do not put K in `commodity.strike`. Product id pattern: **`FUT_OUTRIGHT_{PRODUCT_CODE}_{TICKER}`**.
+
+Template: [`trade_bundle_commodity_outright.sample.json`](trade_bundle_commodity_outright.sample.json).
+
 ## Commodity futures forward (catalog CFF)
 
 Uncollateralized lock against a **listed** futures ticker. `commodity.instrument_type` = **`commodity_futures_forward`**. Forward price **K** in `commodity.strike`; the contract ticker (e.g. `CLX6`) is `commodity.contract_ticker`. Product id pattern: **`FWD_CFF_{PRODUCT_CODE}_{TICKER}_{K}`**.
@@ -100,6 +106,6 @@ Template: [`trade_bundle_commodity_forward.sample.json`](trade_bundle_commodity_
 
 ## Pipeline
 
-Import (always **`PENDING`** in `trades`, even if JSON says `LIVE`) → `dev_main --price-booking <trade_id>` → `LIVE` when legs are booked (`execution_price > 0`, or `0` for an ATM linear forward) → `dev_main --as-of …` MTM. See [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle*.
+Import (always **`PENDING`** in `trades`, even if JSON says `LIVE`) → `dev_main --price-booking <trade_id>` → **`LIVE`** inside `ApplyTradeBooking` (finite `execution_price` on each leg; zero and negative marks are valid) → `dev_main --as-of …` MTM. See [`docs/architecture.md`](../../docs/architecture.md) § *Trade lifecycle*.
 
 **Fix existing row booked as LIVE by mistake:** `UPDATE trades SET status='PENDING' WHERE trade_id='…';` and reset `execution_price=0` on legs before re-running `--price-booking`.

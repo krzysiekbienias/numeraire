@@ -38,4 +38,8 @@ TEST(DatabaseDtosTest, TradeLegDtoSampleShape) {
     EXPECT_EQ(leg.leg_id, "TRD_001_L1");
     ASSERT_TRUE(leg.commission.has_value());
     EXPECT_DOUBLE_EQ(*leg.commission, 0.0);
+    EXPECT_FALSE(leg.trade_price.has_value());
+    leg.trade_price = 80.31;
+    ASSERT_TRUE(leg.trade_price.has_value());
+    EXPECT_DOUBLE_EQ(*leg.trade_price, 80.31);
 }

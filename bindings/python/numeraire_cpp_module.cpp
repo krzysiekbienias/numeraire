@@ -415,10 +415,10 @@ constexpr std::size_t kMaxCrrTreeDumpSteps = 12;
 }
 
 [[nodiscard]] py::dict PriceEquityForward(
-        const double spot, const double forward_price, const double rate, const double div, const double tau_years) {
-    RequirePositiveSpotStrike(spot, forward_price);
+        const double spot, const double delivery_price, const double rate, const double div, const double tau_years) {
+    RequirePositiveSpotStrike(spot, delivery_price);
     const LabDates dates = MakeLabDates(tau_years);
-    const numeraire::products::EquityForwardProduct product("LAB", forward_price, dates.valuation, dates.expiry);
+    const numeraire::products::EquityForwardProduct product("LAB", delivery_price, dates.valuation, dates.expiry);
     // Vol unused for forwards; FlatMarket still needs a value.
     const FlatMarket market(dates.valuation, spot, rate, div, 0.0);
     return PriceWithAnalytic(product, market, dates, "c++_analytic_forward");

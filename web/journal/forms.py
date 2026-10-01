@@ -6,6 +6,7 @@ rules exist so a mistake comes back as a red field instead of a subprocess error
 
 from __future__ import annotations
 
+import math
 from datetime import date as date_cls
 
 from django import forms
@@ -22,6 +23,10 @@ from journal.booking import (
 _TEXT = {'class': 'form-control form-control-sm'}
 _SELECT = {'class': 'form-select form-select-sm'}
 _DATE = {'class': 'form-control form-control-sm', 'type': 'date'}
+_TRADE_PRICE_HELP = (
+    'Price at which the contract was bought or sold. '
+    'PV = F − K per unit, undiscounted (daily margined).'
+)
 
 
 class NewTradeForm(forms.Form):
@@ -96,6 +101,11 @@ class NewTradeForm(forms.Form):
         widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
         help_text='Charged separately from the model premium; total = rate × quantity.',
     )
+    trade_price = forms.FloatField(
+        label='Trade price K',
+        widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
+        help_text=_TRADE_PRICE_HELP,
+    )
 
     def __init__(
         self,
@@ -119,6 +129,8 @@ class NewTradeForm(forms.Form):
             del self.fields['option_type']
         if not spec.has_strike:
             del self.fields['strike']
+        if not spec.has_trade_price:
+            del self.fields['trade_price']
         if not spec.has_expiry or spec.has_contract_ticker:
             # Commodity: expiry comes from futures_contract.settlement_date.
             if 'expiry_date' in self.fields:
@@ -172,6 +184,12 @@ class NewTradeForm(forms.Form):
         if quantity <= 0:
             raise forms.ValidationError('Must be positive.')
         return quantity
+
+    def clean_trade_price(self) -> float:
+        price = self.cleaned_data['trade_price']
+        if not math.isfinite(price):
+            raise forms.ValidationError('Must be a finite number.')
+        return price
 
     def clean_contract_size(self) -> float:
         contract_size = self.cleaned_data['contract_size']
@@ -406,6 +424,16 @@ class CalendarTradeForm(forms.Form):
         widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
         help_text='Charged on each leg; total = rate × quantity × 2.',
     )
+    near_trade_price = forms.FloatField(
+        label='Near trade price K',
+        widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
+        help_text=_TRADE_PRICE_HELP,
+    )
+    far_trade_price = forms.FloatField(
+        label='Far trade price K',
+        widget=forms.NumberInput(attrs={**_TEXT, 'step': 'any'}),
+        help_text=_TRADE_PRICE_HELP,
+    )
 
     def __init__(
         self,
@@ -452,6 +480,18 @@ class CalendarTradeForm(forms.Form):
         if quantity <= 0:
             raise forms.ValidationError('Must be positive.')
         return quantity
+
+    def clean_near_trade_price(self) -> float:
+        price = self.cleaned_data['near_trade_price']
+        if not math.isfinite(price):
+            raise forms.ValidationError('Must be a finite number.')
+        return price
+
+    def clean_far_trade_price(self) -> float:
+        price = self.cleaned_data['far_trade_price']
+        if not math.isfinite(price):
+            raise forms.ValidationError('Must be a finite number.')
+        return price
 
     def clean_contract_size(self) -> float:
         contract_size = self.cleaned_data['contract_size']

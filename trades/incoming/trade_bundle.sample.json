@@ -40,6 +40,8 @@
         "quantity": 100,
         "execution_price": null,
         "_execution_price_comment": "null → 0 until booking pricer on trade_date",
+        "trade_price": null,
+        "_trade_price_comment": "required finite K on commodity_futures_outright legs only; omit or null otherwise (CFF uses commodity.strike)",
         "commission_per_contract": 0.25,
         "_commission_per_contract_comment": "USD per contract → DB commission = rate × quantity (here 0.25 × 100 = 25)",
         "commission": null,

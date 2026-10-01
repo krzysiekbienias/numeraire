@@ -46,6 +46,8 @@
         "_quantity_comment": "with contract_size=1: number of shares",
         "execution_price": null,
         "_execution_price_comment": "null → 0 until booking pricer on trade_date",
+        "trade_price": null,
+        "_trade_price_comment": "omit or null — equity_forward K lives in equity.strike, not trade_price",
         "commission_per_contract": 0,
         "_commission_per_contract_comment": "optional — multiplied by quantity",
         "commission": null,

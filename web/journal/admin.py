@@ -75,7 +75,7 @@ class ProductCommodityAdmin(ReadOnlyAdmin):
 class TradeLegAdmin(ReadOnlyAdmin):
     list_display = (
         'leg_id', 'trade', 'product', 'direction',
-        'quantity', 'execution_price', 'commission',
+        'quantity', 'execution_price', 'commission', 'trade_price',
     )
     list_filter = ('direction',)
     search_fields = ('leg_id', 'trade__trade_id', 'product__product_id')

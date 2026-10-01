@@ -3,12 +3,12 @@
 namespace numeraire::products {
 
 EquityForwardProduct::EquityForwardProduct(std::string underlying_id,
-                                           const double forward_price,
+                                           const double delivery_price,
                                            schedule::Date trade_date,
                                            schedule::Date expiry_date,
                                            std::optional<schedule::Schedule> payments)
     : underlying_id_(std::move(underlying_id)),
-      forward_price_(forward_price),
+      delivery_price_(delivery_price),
       trade_date_(trade_date),
       expiry_date_(expiry_date),
       payments_(std::move(payments)) {}
@@ -26,7 +26,7 @@ ExerciseStyle EquityForwardProduct::Exercise() const {
 }
 
 double EquityForwardProduct::Strike() const {
-    return forward_price_;
+    return delivery_price_;
 }
 
 const schedule::Date& EquityForwardProduct::TradeDate() const {

@@ -282,7 +282,8 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromEquityCatalog(
 std::unique_ptr<core::IProduct> ProductFactory::MakeFromCommodityCatalog(
         const database::ProductDto& product, const database::ProductEquityDto& header,
         const database::ProductCommodityDto& commodity,
-        const database::TradeHeaderDto* trade_header) {
+        const database::TradeHeaderDto* trade_header,
+        const database::TradeLegDto* trade_leg) {
     EnsureMatchingProductIds(product.product_id, header.product_id);
     if (product.product_id != commodity.product_id) {
         throw ValidationError("product_id mismatch between ProductDto and ProductCommodityDto");
@@ -339,13 +340,23 @@ std::unique_ptr<core::IProduct> ProductFactory::MakeFromCommodityCatalog(
                                                                expiry);
     }
 
-    return std::make_unique<CommodityFuturesOutrightProduct>(ticker, product_code, trade_date, expiry);
+    if (trade_leg == nullptr) {
+        throw ValidationError("commodity futures outright " + product.product_id +
+                              " requires a trade leg");
+    }
+    if (!trade_leg->trade_price.has_value()) {
+        throw ValidationError("commodity futures outright " + product.product_id +
+                              " requires trade_legs.trade_price (entry price K)");
+    }
+    return std::make_unique<CommodityFuturesOutrightProduct>(
+            ticker, product_code, trade_date, expiry, *trade_leg->trade_price);
 }
 
 std::unique_ptr<core::IProduct> ProductFactory::MakeFromCatalogLeg(
         const database::TradeLegCatalogRow& row, const database::TradeHeaderDto* trade_header) {
     if (row.commodity.has_value()) {
-        return MakeFromCommodityCatalog(row.product, row.equity, *row.commodity, trade_header);
+        return MakeFromCommodityCatalog(row.product, row.equity, *row.commodity, trade_header,
+                                        &row.leg);
     }
     return MakeFromEquityCatalog(row.product, row.equity, trade_header);
 }

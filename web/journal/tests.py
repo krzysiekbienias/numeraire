@@ -4,8 +4,17 @@ from django.contrib.auth import get_user_model
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 
-from journal.booking import bookable_instruments
+from journal.booking import (
+    bookable_instruments,
+    build_bundle,
+    build_calendar_bundle,
+    COMMODITY_CALENDAR,
+    COMMODITY_FUTURES_FORWARD,
+    COMMODITY_FUTURES_OUTRIGHT,
+    PLAIN_VANILLA_EUROPEAN,
+)
 from journal.commodity_curves import load_tenor_history
+from journal.forms import CalendarTradeForm, NewTradeForm
 from journal.commodity_curve_backtest import (
     MAX_HORIZON_DAYS,
     MIN_HORIZON_DAYS,
@@ -168,6 +177,13 @@ class BookableInstrumentTests(SimpleTestCase):
         self.assertEqual(spec.instrument_type, 'commodity_futures_forward')
         self.assertTrue(spec.has_strike)
         self.assertTrue(spec.has_contract_ticker)
+        self.assertFalse(spec.has_trade_price)
+
+    def test_fut_has_trade_price_calendar_does_not(self):
+        by_code = {spec.code: spec for spec in bookable_instruments()}
+        self.assertTrue(by_code['FUT'].has_trade_price)
+        self.assertFalse(by_code['CAL'].has_trade_price)
+        self.assertFalse(by_code['PVE'].has_trade_price)
 
 
 class LoginPageTests(TestCase):
@@ -249,3 +265,164 @@ class JournalHubNavTests(TestCase):
         self.assertContains(risk, 'beacon.jpg')
         self.assertContains(risk, 'celownik.jpg')
         self.assertContains(risk, 'bi-umbrella')
+
+
+def _fut_cleaned(*, trade_price: float = 80.31) -> dict:
+    return {
+        'underlying_id': 'CL',
+        'product_code': 'CL',
+        'contract_ticker': 'CLX6',
+        'contract_month': None,
+        'expiry_date': date(2026, 10, 20),
+        'tick_size': 0.01,
+        'settlement': 'PHYSICAL',
+        'contract_size': 1000.0,
+        'currency': 'USD',
+        'trade_date': date(2026, 8, 11),
+        'portfolio_id': 'BOOK_3',
+        'strategy_type': 'COMMODITY_FUTURES',
+        'direction': 'long',
+        'quantity': 1.0,
+        'commission_per_contract': 0.0,
+        'trade_price': trade_price,
+    }
+
+
+def _pve_cleaned() -> dict:
+    return {
+        'underlying_id': 'AAPL',
+        'option_type': 'call',
+        'strike': 290.0,
+        'expiry_date': date(2026, 10, 16),
+        'settlement': 'CASH',
+        'contract_size': 100.0,
+        'currency': 'USD',
+        'trade_date': date(2026, 5, 11),
+        'portfolio_id': 'BOOK_1',
+        'strategy_type': 'VANILLA_OPTION',
+        'direction': 'long',
+        'quantity': 10.0,
+        'commission_per_contract': 0.25,
+    }
+
+
+def _calendar_cleaned() -> dict:
+    return {
+        'underlying_id': 'CL',
+        'product_code': 'CL',
+        'settlement': 'PHYSICAL',
+        'contract_size': 1000.0,
+        'currency': 'USD',
+        'trade_date': date(2026, 9, 1),
+        'portfolio_id': 'BOOK_3',
+        'strategy_type': 'COMMODITY_CALENDAR',
+        'quantity': 1.0,
+        'commission_per_contract': 0.0,
+        'near_product_id': 'FUT_OUTRIGHT_CL_CLV6',
+        'far_product_id': 'FUT_OUTRIGHT_CL_CLX6',
+        'near_ticker': 'CLV6',
+        'far_ticker': 'CLX6',
+        'near_expiry_date': date(2026, 9, 22),
+        'far_expiry_date': date(2026, 10, 20),
+        'near_tick_size': 0.01,
+        'far_tick_size': 0.01,
+        'near_direction': 'short',
+        'far_direction': 'long',
+        'near_trade_price': 72.15,
+        'far_trade_price': 80.31,
+    }
+
+
+class TradePriceBookingFormTests(SimpleTestCase):
+    def test_fut_shows_trade_price_other_types_do_not(self):
+        fut = NewTradeForm(COMMODITY_FUTURES_OUTRIGHT)
+        self.assertIn('trade_price', fut.fields)
+        self.assertTrue(fut.fields['trade_price'].required)
+        pve = NewTradeForm(PLAIN_VANILLA_EUROPEAN)
+        self.assertNotIn('trade_price', pve.fields)
+        cff = NewTradeForm(COMMODITY_FUTURES_FORWARD)
+        self.assertNotIn('trade_price', cff.fields)
+
+    def test_fut_without_trade_price_is_invalid(self):
+        form = NewTradeForm(
+            COMMODITY_FUTURES_OUTRIGHT,
+            data={
+                'quantity': '1',
+                'direction': 'long',
+                'trade_date': '2026-08-11',
+                'portfolio_id': 'BOOK_3',
+                'strategy_type': 'COMMODITY_FUTURES',
+                'settlement': 'PHYSICAL',
+                'contract_size': '1000',
+                'currency': 'USD',
+            },
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('trade_price', form.errors)
+
+    def test_fut_accepts_negative_trade_price(self):
+        form = NewTradeForm(
+            COMMODITY_FUTURES_OUTRIGHT,
+            data={
+                'quantity': '1',
+                'direction': 'long',
+                'trade_date': '2026-08-11',
+                'portfolio_id': 'BOOK_3',
+                'strategy_type': 'COMMODITY_FUTURES',
+                'settlement': 'PHYSICAL',
+                'contract_size': '1000',
+                'currency': 'USD',
+                'trade_price': '-37.63',
+            },
+        )
+        form.is_valid()
+        self.assertNotIn('trade_price', form.errors)
+
+    def test_fut_bundle_contains_trade_price(self):
+        bundle = build_bundle(
+            COMMODITY_FUTURES_OUTRIGHT,
+            trade_id='TRD_T',
+            product_id='FUT_OUTRIGHT_CL_CLX6',
+            cleaned=_fut_cleaned(trade_price=80.31),
+        )
+        self.assertEqual(bundle['trade']['legs'][0]['trade_price'], 80.31)
+
+    def test_non_fut_bundle_omits_trade_price_key(self):
+        bundle = build_bundle(
+            PLAIN_VANILLA_EUROPEAN,
+            trade_id='TRD_PVE',
+            product_id='OPT_PVE_AAPL_C_290_20261016',
+            cleaned=_pve_cleaned(),
+        )
+        self.assertNotIn('trade_price', bundle['trade']['legs'][0])
+
+    def test_calendar_form_requires_both_trade_prices(self):
+        form = CalendarTradeForm(
+            COMMODITY_CALENDAR,
+            data={
+                'quantity': '1',
+                'direction': 'long',
+                'trade_date': '2026-09-01',
+                'portfolio_id': 'BOOK_3',
+                'strategy_type': 'COMMODITY_CALENDAR',
+                'settlement': 'PHYSICAL',
+                'contract_size': '1000',
+                'currency': 'USD',
+            },
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('near_trade_price', form.errors)
+        self.assertIn('far_trade_price', form.errors)
+
+    def test_calendar_bundle_legs_carry_own_trade_price(self):
+        bundle = build_calendar_bundle(
+            COMMODITY_CALENDAR,
+            trade_id='TRD_CAL',
+            cleaned=_calendar_cleaned(),
+        )
+        legs = bundle['trade']['legs']
+        self.assertEqual(legs[0]['trade_price'], 72.15)
+        self.assertEqual(legs[1]['trade_price'], 80.31)
+        self.assertEqual(legs[0]['product_id'], 'FUT_OUTRIGHT_CL_CLV6')
+        self.assertEqual(legs[1]['product_id'], 'FUT_OUTRIGHT_CL_CLX6')
+

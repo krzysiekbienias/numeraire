@@ -30,7 +30,8 @@ constexpr const char* kSelectCatalogSql =
         "p.contract_size, p.day_count, p.calendar, "
         "e.option_type, e.strike, e.instrument_type, e.exercise_style, e.structured_params, "
         "c.product_id, c.instrument_type, c.product_code, c.contract_ticker, c.settlement_date, "
-        "c.multiplier, c.structured_params, c.strike "
+        "c.multiplier, c.structured_params, c.strike, "
+        "tl.trade_price "
         "FROM trades t "
         "INNER JOIN trade_legs tl ON tl.trade_id = t.trade_id "
         "INNER JOIN products p ON p.product_id = tl.product_id "
@@ -75,6 +76,7 @@ enum class CatalogCol : int {
     kCommodityMultiplier = 32,
     kCommodityStructuredParams = 33,
     kCommodityStrike = 34,
+    kTradePrice = 35,
 };
 
 [[nodiscard]] std::string NormalizeEnumKey(std::string s) {
@@ -198,6 +200,11 @@ void AssertSameTradeHeader(SQLite::Statement const& st, TradeHeaderDto const& ex
         row.leg.commission = std::nullopt;
     } else {
         row.leg.commission = st.getColumn(static_cast<int>(CatalogCol::kCommission)).getDouble();
+    }
+    if (ColumnIsNull(st, static_cast<int>(CatalogCol::kTradePrice))) {
+        row.leg.trade_price = std::nullopt;
+    } else {
+        row.leg.trade_price = st.getColumn(static_cast<int>(CatalogCol::kTradePrice)).getDouble();
     }
 
     const std::string pid = ColumnText(st, static_cast<int>(CatalogCol::kProductId));

@@ -27,18 +27,11 @@ void RequireTradePendingForBooking(const TradeHeaderDto& trade);
 /// MTM run allowed only after the trade is `LIVE`.
 void RequireTradeLiveForMtm(const TradeHeaderDto& trade);
 
-/// Every leg must have a booked premium before MTM (`execution_price > 0`,
-/// except ATM linear forwards where entry PV may be 0).
+/// MTM requires at least one leg, each with a finite `execution_price`
+/// (zero and negative booked marks are valid). Status (`LIVE`) is the gate.
 void RequireAllLegsBookedForMtm(const TradeCatalogBundle& bundle);
 
 /// MTM `as_of` must not precede the trade's booking date (ISO string compare).
 void RequireMtmAsOfNotBeforeTradeDate(std::string_view as_of_iso, const TradeHeaderDto& trade);
-
-/// After booking pricer: legs are booked when `execution_price > 0`, or when a
-/// linear forward's entry PV is exactly 0 (ATM lock).
-[[nodiscard]] bool AllLegsBooked(const TradeCatalogBundle& bundle);
-
-/// After booking pricer: every leg must have `execution_price > 0` to promote to `LIVE`.
-[[nodiscard]] bool AllLegExecutionPricesPositive(const TradeCatalogBundle& bundle);
 
 }  // namespace numeraire::database

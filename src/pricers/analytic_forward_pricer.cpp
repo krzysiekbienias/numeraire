@@ -10,16 +10,16 @@ namespace numeraire::pricers {
 
 namespace {
 
-[[nodiscard]] double ForwardIntrinsicNpv(const double spot, const double forward_price) {
-    return spot - forward_price;
+[[nodiscard]] double ForwardIntrinsicNpv(const double spot, const double delivery_price) {
+    return spot - delivery_price;
 }
 
 [[nodiscard]] double ForwardNpv(const double spot,
-                                const double forward_price,
+                                const double delivery_price,
                                 const double r,
                                 const double q,
                                 const double tau) {
-    return (spot * std::exp(-q * tau)) - (forward_price * std::exp(-r * tau));
+    return (spot * std::exp(-q * tau)) - (delivery_price * std::exp(-r * tau));
 }
 
 [[nodiscard]] core::PricingResult PriceEquityForward(const products::EquityForwardProduct& forward,
@@ -27,17 +27,17 @@ namespace {
     const double time_to_expiry =
             schedule::Act365FixedYearFraction(market.ValuationDate(), forward.ExpiryDate());
     const double spot = market.Quote(forward.UnderlyingId());
-    const double forward_price = forward.Strike();
+    const double delivery_price = forward.Strike();
     const double r = market.RiskFreeRateForTenor(time_to_expiry);
     const double q = market.DividendYield(forward.UnderlyingId());
 
     core::PricingResult result;
     if (time_to_expiry <= 0.0) {
-        result.SetNpv(ForwardIntrinsicNpv(spot, forward_price));
+        result.SetNpv(ForwardIntrinsicNpv(spot, delivery_price));
         return result;
     }
 
-    result.SetNpv(ForwardNpv(spot, forward_price, r, q, time_to_expiry));
+    result.SetNpv(ForwardNpv(spot, delivery_price, r, q, time_to_expiry));
     return result;
 }
 

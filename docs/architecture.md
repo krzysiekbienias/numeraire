@@ -514,7 +514,7 @@ Three **separate** steps touch the book. They reuse the same stack (`ProductFact
 | Step | Tool | Valuation date (`IMarketData::ValuationDate()`) | Writes |
 |------|------|--------------------------------------------------|--------|
 | **1. Structural book** | [`import_trade_bundle.py`](../scripts/import_trade_bundle.py) | — | `products`, `products_equity`, `trades`, `trade_legs`; `execution_price` null → **0**; `commission` from JSON or **0** |
-| **2. Booking price** | `dev_main --price-booking` | **`trades.trade_date`** per trade (invariant: `ValuationDate` = `trade_date`; no `--as-of`) | `trade_legs.execution_price`; `PENDING` → `LIVE` when all legs `execution_price > 0` |
+| **2. Booking price** | `dev_main --price-booking` | **`trades.trade_date`** per trade (invariant: `ValuationDate` = `trade_date`; no `--as-of`) | `trade_legs.execution_price` (finite booked mark); `PENDING` → `LIVE` inside `ApplyTradeBooking` |
 | **3. EOD MTM** | `dev_main --as-of` *(shipped)* | **CLI `--as-of`** / `NUMERAIRE_DEV_AS_OF` | `trade_leg_mtm_eod` + archive only |
 
 **`Product::TradeDate()`** is set from `trades.trade_date` when the catalog bundle is built ([`ProductFactory`](../src/products/product_factory.cpp)); it is **metadata** on the instrument. **Time to expiry** for both booking and MTM uses **`ValuationDate()` → expiry** (Act/365 Fixed), not `TradeDate()`.
@@ -547,8 +547,8 @@ When shipped, booking answers: *“What was the model premium per share at trade
 | **Market inputs** | Same env as MTM: `NUMERAIRE_DEV_QUOTE_SOURCE` (alias `NUMERAIRE_DEV_SPOT_SOURCE`), `NUMERAIRE_DEV_RATE`, `NUMERAIRE_DEV_VOL`, `NUMERAIRE_DEV_DIV_YIELD`. With **`QUOTE_SOURCE=db`**, the mark is `equity_daily_eod.close` or a futures settle on **`trade_date`** (ingest required for that session). |
 | **Greeks / MTM tables** | Booking run **does not** write `trade_leg_mtm_eod` or greeks to the book row. |
 | **`booking_timestamp`** | Optional: set to `datetime('now')` on `trades` when booking completes; otherwise leave as imported. |
-| **Trade status** | Import with **`PENDING`**. Booking allowed only for **`PENDING`**. After booking, if every leg has **`execution_price > 0`**, status → **`LIVE`**; otherwise stays **`PENDING`**. |
-| **MTM gate** | **`LIVE`** + every leg **`execution_price > 0`** + MTM `as_of` ≥ `trade_date`. |
+| **Trade status** | Import with **`PENDING`**. Booking allowed only for **`PENDING`**. Successful `ApplyTradeBooking` sets status → **`LIVE`** in the same transaction as the booked marks. |
+| **MTM gate** | **`LIVE`** + at least one leg with a **finite** `execution_price` (zero and negative are valid) + MTM `as_of` ≥ `trade_date`. |
 | **Re-run** | Booking on non-`PENDING` trades fails (`ValidationError`). Re-book after manual status reset if needed. |
 | **CLI mutual exclusion** | `--price-booking` and `--as-of` cannot be combined (enforced in argv scan). |
 
@@ -560,7 +560,7 @@ dev_main --price-booking --all
 dev_main --price-booking --trades-json <path>
 ```
 
-**PnL on MTM rows** — Formulas for `pnl_daily` / `pnl_inception` (position-level, same currency as `numeraire_currency`) are specified in § *EOD MTM — PnL columns* below. **`dev_main --as-of`** populates both columns when MTM rows are persisted; booking must have run (`execution_price > 0`) before inception PnL is meaningful.
+**PnL on MTM rows** — Formulas for `pnl_daily` / `pnl_inception` (position-level, same currency as `numeraire_currency`) are specified in § *EOD MTM — PnL columns* below. **`dev_main --as-of`** populates both columns when MTM rows are persisted; booking must have run (`trades.status = LIVE`, finite `execution_price`) before inception PnL is meaningful.
 
 ### From book + market snapshot to NPV and MTM *(today’s `dev_main --as-of` path)*
 
@@ -603,7 +603,7 @@ See also [`mathematical_background.md`](mathematical_background.md) for formulas
 
 | Column | Formula | Notes |
 | ------ | ------- | ----- |
-| `pnl_inception` | `pv_total` − `booked_mark` − `commission` | Mark-to-model P&amp;L since booking. Commission is always **subtracted** (reduces P&amp;L). Requires `execution_price > 0`. |
+| `pnl_inception` | `pv_total` − `booked_mark` − `commission` | Mark-to-model P&amp;L since booking. Commission is always **subtracted** (reduces P&amp;L). `execution_price` is a finite booked mark (zero and negative allowed). |
 | `pnl_daily` | `pv_total` − `pv_total_prev` | Change in position mark vs the **prior official** EOD row. Commission **not** included (paid at entry only). |
 
 **Prior mark** `pv_total_prev` for `pnl_daily`:

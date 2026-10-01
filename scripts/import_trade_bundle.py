@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sqlite3
@@ -378,6 +379,17 @@ def load_bundle(
             _die(f"{label}: missing keys: {ml}")
         _normalize_leg_direction_db(str(lg["direction"]))
 
+    itype_by_pid = {
+        str(product["product_id"]): str(extension.get("instrument_type", ""))
+        for product, _ext_label, extension in items
+    }
+    for i, leg in enumerate(legs_raw):
+        label = f"trade.legs[{i}]"
+        if not isinstance(leg, dict):
+            _die(f"{label}: expected JSON object")
+        pid = str(leg["product_id"])
+        _apply_leg_trade_price(leg, instrument_type=itype_by_pid.get(pid, ""), label=label)
+
     return items, trade, auto_notes
 
 
@@ -466,9 +478,40 @@ def _parse_deferred_execution_price(lg: Mapping[str, Any], leg_id: str) -> float
         exe = float(lg["execution_price"])
     except (TypeError, ValueError):
         _die(f"leg {leg_id!r}: execution_price must be a number or null")
-    if exe < 0.0:
-        _die(f"leg {leg_id!r}: execution_price must be non-negative")
+    if not math.isfinite(exe):
+        _die(f"leg {leg_id!r}: execution_price must be a finite number (got {exe!r})")
     return exe
+
+
+def _apply_leg_trade_price(lg: dict[str, Any], *, instrument_type: str, label: str) -> None:
+    """Outright legs require a finite K; other types must omit trade_price."""
+    leg_id = str(lg.get("leg_id", label))
+    raw = lg.get("trade_price")
+    if _is_commodity_futures_outright(instrument_type):
+        if "trade_price" not in lg or _is_blank(raw):
+            _die(
+                f"{label}: commodity futures outright requires trade_price "
+                f"(entry price K) for leg {leg_id!r}"
+            )
+        try:
+            price = float(raw)
+        except (TypeError, ValueError):
+            _die(f"{label}: trade_price must be a finite number for leg {leg_id!r}")
+        if not math.isfinite(price):
+            _die(
+                f"{label}: trade_price must be a finite number for leg {leg_id!r} "
+                f"(got {price!r})"
+            )
+        lg["trade_price"] = price
+        return
+    if "trade_price" in lg and not _is_blank(raw):
+        if _is_commodity_futures_forward(instrument_type):
+            _die(
+                f"{label}: trade_price not supported for commodity_futures_forward; "
+                "use commodity.strike"
+            )
+        itype = instrument_type or "this instrument"
+        _die(f"{label}: trade_price not supported for {itype}")
 
 
 def _parse_commission(lg: Mapping[str, Any], quantity: float, leg_id: str) -> float:
@@ -710,13 +753,14 @@ def insert_items(
 
         exe = _parse_deferred_execution_price(lg, leg_id)
         commission = _parse_commission(lg, qty, leg_id)
+        trade_price = lg.get("trade_price")
 
         cur.execute(
             """
             INSERT INTO trade_legs (
                 leg_id, trade_id, product_id,
-                direction, quantity, execution_price, commission
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                direction, quantity, execution_price, commission, trade_price
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(lg["leg_id"]),
@@ -726,6 +770,7 @@ def insert_items(
                 qty,
                 exe,
                 commission,
+                trade_price,
             ),
         )
 

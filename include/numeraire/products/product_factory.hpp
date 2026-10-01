@@ -25,7 +25,8 @@ class ProductFactory {
     [[nodiscard]] static std::unique_ptr<core::IProduct> MakeFromCommodityCatalog(
             const database::ProductDto& product, const database::ProductEquityDto& header,
             const database::ProductCommodityDto& commodity,
-            const database::TradeHeaderDto* trade_header);
+            const database::TradeHeaderDto* trade_header,
+            const database::TradeLegDto* trade_leg);
 
     [[nodiscard]] static std::unique_ptr<core::IProduct> MakeFromCatalogLeg(
             const database::TradeLegCatalogRow& row, const database::TradeHeaderDto* trade_header);

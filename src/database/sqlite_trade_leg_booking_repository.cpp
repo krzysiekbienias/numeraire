@@ -1,7 +1,9 @@
 #include <SQLiteCpp/SQLiteCpp.h>
 
+#include <cmath>
 #include <memory>
 #include <numeraire/database/sqlite_trade_leg_booking_repository.hpp>
+#include <numeraire/database/trade_booking_rules.hpp>
 #include <numeraire/utils/exception.hpp>
 #include <string>
 
@@ -9,14 +11,12 @@ namespace numeraire::database {
 
 namespace {
 
-constexpr const char* kUpdateLegByLegIdSql =
-        "UPDATE trade_legs SET execution_price = ? WHERE leg_id = ?";
+constexpr const char* kUpdateLegByLegIdSql = "UPDATE trade_legs SET execution_price = ? WHERE leg_id = ?";
 
 constexpr const char* kUpdateLegByTradeAndLegSql =
         "UPDATE trade_legs SET execution_price = ? WHERE leg_id = ? AND trade_id = ?";
 
-constexpr const char* kSetBookingTimestampSql =
-        "UPDATE trades SET booking_timestamp = ? WHERE trade_id = ?";
+constexpr const char* kSetBookingTimestampSql = "UPDATE trades SET booking_timestamp = ? WHERE trade_id = ?";
 
 constexpr const char* kSetBookingTimestampNowSql =
         "UPDATE trades SET booking_timestamp = datetime('now') WHERE trade_id = ?";
@@ -30,9 +30,9 @@ void RequireNonEmpty(std::string_view value, const char* label) {
     }
 }
 
-void RequireNonNegativeExecutionPrice(const double execution_price, const std::string_view leg_id) {
-    if (execution_price < 0.0) {
-        throw ValidationError("execution_price must be non-negative for leg " + std::string{leg_id});
+void RequireFiniteExecutionPrice(const double execution_price, const std::string_view leg_id) {
+    if (!std::isfinite(execution_price)) {
+        throw ValidationError("execution_price must be finite for leg " + std::string{leg_id});
     }
 }
 
@@ -59,14 +59,11 @@ SqliteTradeLegBookingRepository::SqliteTradeLegBookingRepository(const std::stri
         impl_->db =
                 std::make_unique<SQLite::Database>(database_file_path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
         impl_->db->exec("PRAGMA foreign_keys = ON;");
-        impl_->update_leg_by_leg_id =
-                std::make_unique<SQLite::Statement>(*impl_->db, kUpdateLegByLegIdSql);
+        impl_->update_leg_by_leg_id = std::make_unique<SQLite::Statement>(*impl_->db, kUpdateLegByLegIdSql);
         impl_->update_leg_by_trade_and_leg =
                 std::make_unique<SQLite::Statement>(*impl_->db, kUpdateLegByTradeAndLegSql);
-        impl_->set_booking_timestamp =
-                std::make_unique<SQLite::Statement>(*impl_->db, kSetBookingTimestampSql);
-        impl_->set_booking_timestamp_now =
-                std::make_unique<SQLite::Statement>(*impl_->db, kSetBookingTimestampNowSql);
+        impl_->set_booking_timestamp = std::make_unique<SQLite::Statement>(*impl_->db, kSetBookingTimestampSql);
+        impl_->set_booking_timestamp_now = std::make_unique<SQLite::Statement>(*impl_->db, kSetBookingTimestampNowSql);
         impl_->set_trade_status = std::make_unique<SQLite::Statement>(*impl_->db, kSetTradeStatusSql);
     } catch (SQLite::Exception const& e) {
         throw PersistenceError(std::string{"SqliteTradeLegBookingRepository: "} + e.what());
@@ -78,7 +75,7 @@ SqliteTradeLegBookingRepository::~SqliteTradeLegBookingRepository() = default;
 void SqliteTradeLegBookingRepository::UpdateExecutionPrice(const std::string_view leg_id,
                                                            const double execution_price) const {
     RequireNonEmpty(leg_id, "leg_id");
-    RequireNonNegativeExecutionPrice(execution_price, leg_id);
+    RequireFiniteExecutionPrice(execution_price, leg_id);
 
     try {
         SQLite::Statement& st = *impl_->update_leg_by_leg_id;
@@ -102,7 +99,7 @@ void SqliteTradeLegBookingRepository::UpdateExecutionPriceForTrade(const std::st
                                                                    const double execution_price) const {
     RequireNonEmpty(trade_id, "trade_id");
     RequireNonEmpty(leg_id, "leg_id");
-    RequireNonNegativeExecutionPrice(execution_price, leg_id);
+    RequireFiniteExecutionPrice(execution_price, leg_id);
 
     try {
         SQLite::Statement& st = *impl_->update_leg_by_trade_and_leg;
@@ -112,9 +109,9 @@ void SqliteTradeLegBookingRepository::UpdateExecutionPriceForTrade(const std::st
         st.bind(2, std::string{leg_id});
         st.bind(3, std::string{trade_id});
         st.exec();
-        RequireRowsChanged(st.getChanges(),
-                           "SqliteTradeLegBookingRepository::UpdateExecutionPriceForTrade leg_id=" +
-                                   std::string{leg_id});
+        RequireRowsChanged(
+                st.getChanges(),
+                "SqliteTradeLegBookingRepository::UpdateExecutionPriceForTrade leg_id=" + std::string{leg_id});
     } catch (ValidationError const&) {
         throw;
     } catch (PersistenceError const&) {
@@ -136,8 +133,7 @@ void SqliteTradeLegBookingRepository::UpdateExecutionPrices(
 }
 
 void SqliteTradeLegBookingRepository::SetTradeBookingTimestamp(
-        const std::string_view trade_id,
-        const std::optional<std::string>& booking_timestamp) const {
+        const std::string_view trade_id, const std::optional<std::string>& booking_timestamp) const {
     RequireNonEmpty(trade_id, "trade_id");
 
     try {
@@ -189,10 +185,9 @@ void SqliteTradeLegBookingRepository::SetTradeStatus(const std::string_view trad
     }
 }
 
-void SqliteTradeLegBookingRepository::ApplyTradeBooking(
-        const std::string_view trade_id,
-        const std::span<const TradeLegBookingUpdate> leg_updates,
-        const std::optional<std::string>& booking_timestamp) const {
+void SqliteTradeLegBookingRepository::ApplyTradeBooking(const std::string_view trade_id,
+                                                        const std::span<const TradeLegBookingUpdate> leg_updates,
+                                                        const std::optional<std::string>& booking_timestamp) const {
     RequireNonEmpty(trade_id, "trade_id");
     if (leg_updates.empty()) {
         throw ValidationError("ApplyTradeBooking: leg_updates must be non-empty");
@@ -204,6 +199,7 @@ void SqliteTradeLegBookingRepository::ApplyTradeBooking(
             UpdateExecutionPriceForTrade(trade_id, u.leg_id, u.execution_price);
         }
         SetTradeBookingTimestamp(trade_id, booking_timestamp);
+        SetTradeStatus(trade_id, kTradeStatusLive);
         txn.commit();
     } catch (ValidationError const&) {
         throw;

@@ -32,11 +32,6 @@ struct PathPricingLegEntry {
     std::unique_ptr<core::IProduct> product;
     /// Set for listed futures legs: the dated contract this leg tracks.
     std::optional<CommodityContractRef> contract;
-    /// Subtracted from the unit PV before scaling. Zero for options and for
-    /// commodity/equity forwards, whose K (or premium) is already in PV. For a
-    /// listed futures outright it is the trade price, because the EOD pricer
-    /// marks at full settle and exposure should be the move since execution.
-    double pv_unit_offset{0.0};
 };
 
 /// Map calibration factor order (`factor_ids[f]`) to buffer factor indices.

@@ -1,7 +1,6 @@
-#include <numeraire/pricers/analytic_futures_outright_pricer.hpp>
-
 #include <numeraire/core/imarket_data.hpp>
 #include <numeraire/core/pricing_result.hpp>
+#include <numeraire/pricers/analytic_futures_outright_pricer.hpp>
 #include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/utils/exception.hpp>
 
@@ -9,9 +8,9 @@ namespace numeraire::pricers {
 
 namespace {
 
-[[nodiscard]] core::PricingResult PriceFuturesOutright(
-        const products::CommodityFuturesOutrightProduct& fut, const core::IMarketData& market) {
-    const double pv_unit = market.Quote(fut.UnderlyingId());
+[[nodiscard]] core::PricingResult PriceFuturesOutright(const products::CommodityFuturesOutrightProduct& fut,
+                                                       const core::IMarketData& market) {
+    const double pv_unit = market.Quote(fut.UnderlyingId()) - fut.DeliveryPrice();
 
     core::PricingResult result;
     result.SetNpv(pv_unit);

@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS trade_legs (
     quantity REAL NOT NULL,
     execution_price REAL NOT NULL,
     commission REAL NOT NULL DEFAULT 0,
+    -- Entry price of the position (K for a listed futures). Not execution_price
+    -- (booked unit PV on trade_date). Nullable; no CHECK (futures can trade negative).
+    trade_price REAL,
     FOREIGN KEY (trade_id) REFERENCES trades (trade_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products (product_id)
 );

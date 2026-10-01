@@ -1,0 +1,62 @@
+{
+  "_comment": "Listed commodity futures outright template — copy to e.g. TRD_10016.json, fill required fields, then import. Do not import as-is.",
+  "product": {
+    "product_id": "FUT_OUTRIGHT_CL_CLX6",
+    "_product_id_comment": "Pattern: FUT_OUTRIGHT_{PRODUCT_CODE}_{TICKER}",
+    "asset_kind": "COMMODITY",
+    "underlying_id": "CL",
+    "expiry_date": "",
+    "_expiry_date_comment": "required — YYYY-MM-DD (futures_contract.settlement_date)",
+    "settlement": "PHYSICAL",
+    "_settlement_comment": "PHYSICAL or CASH",
+    "currency": "USD",
+    "contract_size": 1000,
+    "_contract_size_comment": "Futures multiplier (e.g. 1000 bbl for CL)",
+    "day_count": "Actual365Fixed",
+    "calendar": "UnitedStates"
+  },
+  "commodity": {
+    "instrument_type": "commodity_futures_outright",
+    "_instrument_type_comment": "listed futures; mark-to-market at F. Not commodity_futures_forward.",
+    "product_code": "CL",
+    "contract_ticker": "",
+    "_contract_ticker_comment": "required — e.g. CLX6",
+    "contract_month": null,
+    "settlement_date": "",
+    "_settlement_date_comment": "required — same date as product.expiry_date",
+    "multiplier": 1000,
+    "tick_size": null,
+    "tick_value": null,
+    "option_type": null,
+    "strike": null,
+    "_strike_comment": "must be null — entry K is legs[].trade_price, not commodity.strike",
+    "exercise_style": null,
+    "option_ticker": null,
+    "underlying_contract_ticker": null,
+    "structured_params": {}
+  },
+  "trade": {
+    "trade_id": "TRD_SAMPLE_FUT",
+    "portfolio_id": "BOOK_3",
+    "strategy_type": "COMMODITY_FUTURES",
+    "booking_timestamp": "2026-08-11 09:00:00",
+    "_booking_timestamp_comment": "optional — YYYY-MM-DD HH:MM:SS",
+    "trade_date": null,
+    "_trade_date_comment": "required — YYYY-MM-DD",
+    "_status_comment": "optional — import always writes PENDING until --price-booking",
+    "legs": [
+      {
+        "_leg_id_comment": "optional — defaults to {trade_id}_L1",
+        "_product_id_comment": "optional — defaults from product.product_id",
+        "direction": "long",
+        "quantity": 1,
+        "execution_price": null,
+        "_execution_price_comment": "null → 0 until booking pricer on trade_date",
+        "trade_price": null,
+        "_trade_price_comment": "required finite entry K (negative allowed). PV = F − K per unit, undiscounted.",
+        "commission_per_contract": 0,
+        "commission": null
+      }
+    ]
+  }
+}

@@ -145,6 +145,7 @@ def _calendar_root(*, trade_id: str = "TRD_CAL_1") -> dict:
                     "quantity": 1,
                     "execution_price": None,
                     "commission_per_contract": 0,
+                    "trade_price": 72.15,
                 },
                 {
                     "product_id": "FUT_OUTRIGHT_CL_CLX6",
@@ -152,6 +153,7 @@ def _calendar_root(*, trade_id: str = "TRD_CAL_1") -> dict:
                     "quantity": 1,
                     "execution_price": None,
                     "commission_per_contract": 0,
+                    "trade_price": 80.31,
                 },
             ],
         },
@@ -183,15 +185,15 @@ class ImportCalendarBundleTest(unittest.TestCase):
                 {"FUT_OUTRIGHT_CL_CLV6", "FUT_OUTRIGHT_CL_CLX6"},
             )
             legs = conn.execute(
-                "SELECT leg_id, product_id, direction FROM trade_legs "
+                "SELECT leg_id, product_id, direction, trade_price FROM trade_legs "
                 "WHERE trade_id = ? ORDER BY leg_id",
                 (trade["trade_id"],),
             ).fetchall()
             self.assertEqual(
                 legs,
                 [
-                    ("TRD_CAL_1_L1", "FUT_OUTRIGHT_CL_CLV6", "SHORT"),
-                    ("TRD_CAL_1_L2", "FUT_OUTRIGHT_CL_CLX6", "LONG"),
+                    ("TRD_CAL_1_L1", "FUT_OUTRIGHT_CL_CLV6", "SHORT", 72.15),
+                    ("TRD_CAL_1_L2", "FUT_OUTRIGHT_CL_CLX6", "LONG", 80.31),
                 ],
             )
             strategy = conn.execute(
@@ -312,6 +314,141 @@ class ImportCommodityForwardBundleTest(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     itb.load_bundle(path)
             self.assertIn("must be one of this bundle's products", stderr.getvalue())
+
+    def test_outright_missing_trade_price_is_rejected(self) -> None:
+        product = _outright_product("FUT_OUTRIGHT_CL_CLX6", "CLX6", "2026-10-20")
+        commodity = product.pop("commodity")
+        trade = {
+            "trade_id": "TRD_FUT_NO_K",
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_FUTURES",
+            "trade_date": "2026-08-11",
+            "legs": [
+                {
+                    "direction": "long",
+                    "quantity": 1,
+                    "execution_price": None,
+                }
+            ],
+        }
+        root = {"product": product, "commodity": commodity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_FUT_NO_K.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                with self.assertRaises(SystemExit):
+                    itb.load_bundle(path)
+            self.assertIn("trade_price", stderr.getvalue())
+
+    def test_outright_negative_trade_price_is_accepted(self) -> None:
+        product = _outright_product("FUT_OUTRIGHT_CL_CLX6", "CLX6", "2026-10-20")
+        commodity = product.pop("commodity")
+        trade = {
+            "trade_id": "TRD_FUT_NEG",
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_FUTURES",
+            "trade_date": "2026-08-11",
+            "legs": [
+                {
+                    "direction": "long",
+                    "quantity": 1,
+                    "execution_price": None,
+                    "trade_price": -37.63,
+                }
+            ],
+        }
+        root = {"product": product, "commodity": commodity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_FUT_NEG.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            items, loaded, _notes = itb.load_bundle(path)
+        conn = sqlite3.connect(":memory:")
+        try:
+            _bootstrap_schema(conn)
+            itb.insert_items(conn, items, loaded)
+            row = conn.execute(
+                "SELECT trade_price FROM trade_legs WHERE trade_id = ?",
+                ("TRD_FUT_NEG",),
+            ).fetchone()
+            self.assertAlmostEqual(row[0], -37.63)
+        finally:
+            conn.close()
+
+    def test_outright_nan_trade_price_is_rejected(self) -> None:
+        product = _outright_product("FUT_OUTRIGHT_CL_CLX6", "CLX6", "2026-10-20")
+        commodity = product.pop("commodity")
+        trade = {
+            "trade_id": "TRD_FUT_NAN",
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_FUTURES",
+            "trade_date": "2026-08-11",
+            "legs": [
+                {
+                    "direction": "long",
+                    "quantity": 1,
+                    "execution_price": None,
+                    "trade_price": "nan",
+                }
+            ],
+        }
+        root = {"product": product, "commodity": commodity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_FUT_NAN.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                with self.assertRaises(SystemExit):
+                    itb.load_bundle(path)
+            self.assertIn("trade_price", stderr.getvalue())
+
+    def test_trade_price_on_forward_leg_is_rejected(self) -> None:
+        product = {
+            "product_id": "FWD_CFF_CL_CLX6_80_31",
+            "asset_kind": "COMMODITY",
+            "underlying_id": "CL",
+            "expiry_date": "2026-10-20",
+            "settlement": "CASH",
+            "currency": "USD",
+            "contract_size": 1000,
+            "day_count": "Actual365Fixed",
+            "calendar": "UnitedStates",
+        }
+        commodity = {
+            "instrument_type": "commodity_futures_forward",
+            "product_code": "CL",
+            "contract_ticker": "CLX6",
+            "settlement_date": "2026-10-20",
+            "multiplier": 1000,
+            "strike": 80.31,
+            "structured_params": {},
+        }
+        trade = {
+            "trade_id": "TRD_CFF_K_ON_LEG",
+            "portfolio_id": "BOOK_3",
+            "strategy_type": "COMMODITY_FUTURES_FORWARD",
+            "trade_date": "2026-08-11",
+            "legs": [
+                {
+                    "direction": "LONG",
+                    "quantity": 1,
+                    "execution_price": None,
+                    "trade_price": 80.31,
+                }
+            ],
+        }
+        root = {"product": product, "commodity": commodity, "trade": trade}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "TRD_CFF_K_ON_LEG.json"
+            path.write_text(json.dumps(root), encoding="utf-8")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                with self.assertRaises(SystemExit):
+                    itb.load_bundle(path)
+            msg = stderr.getvalue()
+            self.assertIn("trade_price not supported", msg)
+            self.assertIn("commodity.strike", msg)
+
 
     def test_single_product_bundle_still_loads(self) -> None:
         product, equity, trade = _minimal_bundle(
