@@ -87,6 +87,7 @@ trades/incoming/*.json
 !trades/incoming/trade_bundle.sample.json
 !trades/incoming/trade_bundle_binary.sample.json
 !trades/incoming/trade_bundle_forward.sample.json
+!trades/incoming/trade_bundle_commodity_outright.sample.json
 
 
 # --- python ---
@@ -109,6 +110,7 @@ web/staticfiles/
 # --- dev-only scripts (not for prod) ----------------------------------------
 scripts/backfill_mtm_dev.sh
 scripts/backfill_exposure_dev.sh
+scripts/rerun_mtm_dev.sh
 
 # ---- exports ---
 exports

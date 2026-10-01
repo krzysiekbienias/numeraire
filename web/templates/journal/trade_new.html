@@ -190,6 +190,13 @@
           <div class="nj-form-grid">
             {% include 'partials/form_field.html' with field=form.direction %}
             {% include 'partials/form_field.html' with field=form.quantity %}
+            {% if form.trade_price %}
+              {% include 'partials/form_field.html' with field=form.trade_price %}
+            {% endif %}
+            {% if spec.is_calendar %}
+              {% include 'partials/form_field.html' with field=form.near_trade_price %}
+              {% include 'partials/form_field.html' with field=form.far_trade_price %}
+            {% endif %}
             {% include 'partials/form_field.html' with field=form.commission_per_contract %}
           </div>
         </div>

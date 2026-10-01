@@ -46,22 +46,15 @@ For a bounded bugfix or small feature, treat the fix-level DoD as **acceptance c
 
 ### Batch `--as-of` reruns (weekdays)
 
-`dev_main` accepts **one** valuation date per run (`--as-of` or `NUMERAIRE_DEV_AS_OF`). For a date range, loop from the **repository root** after `cmake --build build`. Use `NUMERAIRE_DEV_QUOTE_SOURCE=db` only when `equity_daily_eod` has a bar for each day you price (weekends and holidays usually do not).
+`dev_main` accepts **one** valuation date per run (`--as-of` or `NUMERAIRE_DEV_AS_OF`). For a date range on **one currently LIVE trade** or **one `portfolio_id`**, use [`scripts/rerun_mtm.sh`](../scripts/rerun_mtm.sh) from the **repository root** after `cmake --build build`. It overwrites official `trade_leg_mtm_eod` (same persist as cron). [`daily_book_mtm.sh`](../scripts/daily_book_mtm.sh) is unchanged (all LIVE, one session). Quote/vol/rate from DB. Each `as_of` prices only LIVE trades with `trade_date <= as_of`. Sat/Sun and weekdays with no quote EOD (`futures_daily_eod` / `equity_daily_eod` / `index_daily_eod`) are skipped. EXPIRED trades are not re-marked over their past life. Other `dev_main` failures still stop the run.
 
 ```bash
-d=2026-05-01
-end=2026-05-15
-while [[ "$d" < "$end" || "$d" == "$end" ]]; do
-  dow=$(date -d "$d" +%u)   # 1=Mon … 7=Sun (GNU date)
-  if [[ "$dow" -le 5 ]]; then
-    ./build/dev_main --as-of "$d" TRD_10001 || break
-  fi
-  d=$(date -I -d "$d + 1 day")
-done
+./scripts/rerun_mtm.sh --from 2026-05-01 --to 2026-05-15 --trade TRD_10001
+./scripts/rerun_mtm.sh --from 2026-05-01 --to 2026-05-15 --book BOOK_3
+NUMERAIRE_DRY_RUN=1 ./scripts/rerun_mtm.sh --from 2026-05-01 --to 2026-05-15 --book BOOK_3
 ```
 
-- **`|| break`** — stop the whole batch on the first failed run (missing EOD, bad trade id, …). Use **`|| continue`** to skip bad days and keep going.
-- Adjust `d`, `end`, and the trade id; override env per run if needed (`NUMERAIRE_DEV_QUOTE_SOURCE=db`, rate/vol from `.env`).
+Stops on unexpected `dev_main` failure (not on weekend / holiday / `trade_date` gaps).
 
 Quick check in SQLite after the loop:
 
@@ -75,7 +68,7 @@ ORDER BY as_of, leg_id;
 "
 ```
 
-To drive dates only from rows that exist in the market table (no weekend gaps), see [`README.md`](../README.md) § *dev_main*; a future `--as-of-from` / `--as-of-to` on `dev_main` itself is not implemented yet.
+A future `--as-of-from` / `--as-of-to` on `dev_main` itself is not implemented.
 
 ---
 
