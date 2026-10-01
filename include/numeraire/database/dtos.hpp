@@ -70,6 +70,8 @@ struct TradeLegDto {
     double quantity{};
     double execution_price{};
     std::optional<double> commission;
+    /// Entry price of the position (K for a listed futures). Not `execution_price`.
+    std::optional<double> trade_price;
 };
 
 }  // namespace numeraire::database

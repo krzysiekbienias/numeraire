@@ -20,6 +20,14 @@ void ApplySchemaPatches(SQLite::Database& db) {
             db.exec("ALTER TABLE par_curve_point_eod ADD COLUMN quoted_price REAL");
         }
     }
+    // `CREATE TABLE IF NOT EXISTS` cannot add this to DBs that already have trade_legs.
+    {
+        SQLite::Statement has_trade_price(
+                db, "SELECT 1 FROM pragma_table_info('trade_legs') WHERE name = 'trade_price'");
+        if (!has_trade_price.executeStep()) {
+            db.exec("ALTER TABLE trade_legs ADD COLUMN trade_price REAL");
+        }
+    }
     // Commodity / futures ingest flags on existing universe + prep scope tables.
     // `CREATE TABLE IF NOT EXISTS` in schema_v1.sql cannot add these to DBs that predate them.
     for (const char* table : {"universe_instrument", "market_data_prep_scope"}) {

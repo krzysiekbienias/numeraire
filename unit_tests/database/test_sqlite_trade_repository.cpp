@@ -82,6 +82,7 @@ TEST(SqliteTradeRepositoryTest, LoadsCatalogAndBuildsProduct) {
     EXPECT_EQ(bundle.trade.portfolio_id, "BOOK_1");
     ASSERT_EQ(bundle.legs.size(), 1U);
     EXPECT_EQ(bundle.legs[0].leg.product_id, "P_AAPL_001");
+    EXPECT_FALSE(bundle.legs[0].leg.trade_price.has_value());
     EXPECT_EQ(bundle.legs[0].product.product_id, "P_AAPL_001");
     ASSERT_TRUE(bundle.legs[0].product.option_side.has_value());
     EXPECT_EQ(*bundle.legs[0].product.option_side, "call");
@@ -125,6 +126,32 @@ TEST(SqliteTradeRepositoryTest, ListsLiveTradesForPortfolio) {
 
     const auto missing = repo.ListLiveTradeIdsForPortfolio("BOOK_EMPTY");
     EXPECT_TRUE(missing.empty());
+
+    fs::remove(path);
+}
+
+TEST(SqliteTradeRepositoryTest, LoadsNegativeTradePrice) {
+    std::string const path = TempSqlitePath();
+    SeedFixtureDb(path);
+
+    {
+        SQLite::Database db(path, SQLite::OPEN_READWRITE);
+        db.exec(
+                "INSERT INTO trades (trade_id, portfolio_id, strategy_type, booking_timestamp, "
+                "trade_date, updated_at, status) VALUES "
+                "('TRD_NEG', 'BOOK_1', 'VANILLA_OPTION', '2025-08-04 10:00:00', '2025-08-06', "
+                "'2026-05-11 16:34:30', 'LIVE');");
+        db.exec(
+                "INSERT INTO trade_legs (leg_id, trade_id, product_id, direction, quantity, "
+                "execution_price, commission, trade_price) VALUES "
+                "('TRD_NEG_L1', 'TRD_NEG', 'P_AAPL_001', 'LONG', 100, 12.5, 0, -37.63);");
+    }
+
+    numeraire::database::SqliteTradeRepository repo(path);
+    const auto bundle = repo.GetCatalogForTrade("TRD_NEG");
+    ASSERT_EQ(bundle.legs.size(), 1U);
+    ASSERT_TRUE(bundle.legs[0].leg.trade_price.has_value());
+    EXPECT_DOUBLE_EQ(*bundle.legs[0].leg.trade_price, -37.63);
 
     fs::remove(path);
 }
