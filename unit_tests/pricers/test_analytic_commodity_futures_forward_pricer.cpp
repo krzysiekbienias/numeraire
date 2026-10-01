@@ -8,19 +8,16 @@
 #include <numeraire/products/commodity_futures_outright_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
-
 #include <string>
 #include <unordered_map>
 
 namespace {
 
 class MapMarket final : public numeraire::core::IMarketData {
-   public:
+public:
     void SetValuationDate(const numeraire::schedule::Date& date) { valuation_date_ = date; }
 
-    [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override {
-        return valuation_date_;
-    }
+    [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override { return valuation_date_; }
 
     [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
         return quotes_.at(std::string(underlying_id));
@@ -30,7 +27,9 @@ class MapMarket final : public numeraire::core::IMarketData {
 
     [[nodiscard]] double DividendYield(const std::string_view) const override { return 0.0; }
 
-    [[nodiscard]] double ImpliedVolatility(const std::string_view, const double, const double,
+    [[nodiscard]] double ImpliedVolatility(const std::string_view,
+                                           const double,
+                                           const double,
                                            const numeraire::OptionType) const override {
         return 0.2;
     }
@@ -39,7 +38,7 @@ class MapMarket final : public numeraire::core::IMarketData {
 
     void SetRate(const double r) { r_ = r; }
 
-   private:
+private:
     std::unordered_map<std::string, double> quotes_;
     double r_ = 0.0;
     numeraire::schedule::Date valuation_date_{.year = 2026, .month = 8, .day = 11};
@@ -91,7 +90,7 @@ TEST(AnalyticCommodityFuturesForwardPricerTest, RejectsOutright) {
     m.SetQuote("CLX6", 80.31);
     const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
     const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
-    const numeraire::products::CommodityFuturesOutrightProduct outright("CLX6", "CL", trade, expiry);
+    const numeraire::products::CommodityFuturesOutrightProduct outright("CLX6", "CL", trade, expiry, 80.0);
     const numeraire::pricers::AnalyticCommodityFuturesForwardPricer pricer;
     EXPECT_THROW(static_cast<void>(pricer.Price(outright, m)), numeraire::ValidationError);
 }

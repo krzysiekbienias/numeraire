@@ -7,19 +7,16 @@
 #include <numeraire/products/equity_spot_product.hpp>
 #include <numeraire/schedule/date.hpp>
 #include <numeraire/utils/exception.hpp>
-
 #include <string>
 #include <unordered_map>
 
 namespace {
 
 class MapMarket final : public numeraire::core::IMarketData {
-   public:
+public:
     void SetValuationDate(const numeraire::schedule::Date& date) { valuation_date_ = date; }
 
-    [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override {
-        return valuation_date_;
-    }
+    [[nodiscard]] const numeraire::schedule::Date& ValuationDate() const override { return valuation_date_; }
 
     [[nodiscard]] double Quote(const std::string_view underlying_id) const override {
         return quotes_.at(std::string(underlying_id));
@@ -29,36 +26,21 @@ class MapMarket final : public numeraire::core::IMarketData {
 
     [[nodiscard]] double DividendYield(const std::string_view) const override { return 0.0; }
 
-    [[nodiscard]] double ImpliedVolatility(const std::string_view, const double, const double,
+    [[nodiscard]] double ImpliedVolatility(const std::string_view,
+                                           const double,
+                                           const double,
                                            const numeraire::OptionType) const override {
         return 0.2;
     }
 
     void SetQuote(std::string id, const double v) { quotes_[std::move(id)] = v; }
 
-   private:
+private:
     std::unordered_map<std::string, double> quotes_;
     numeraire::schedule::Date valuation_date_{.year = 2026, .month = 8, .day = 11};
 };
 
 }  // namespace
-
-TEST(AnalyticFuturesOutrightPricerTest, MarksToSettlementWithUnitDelta) {
-    MapMarket m;
-    m.SetQuote("CLX6", 80.31);
-
-    const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
-    const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
-    const numeraire::products::CommodityFuturesOutrightProduct fut("CLX6", "CL", trade, expiry);
-    const numeraire::pricers::AnalyticFuturesOutrightPricer pricer;
-    const numeraire::core::PricingResult out = pricer.Price(fut, m);
-
-    ASSERT_TRUE(out.Npv().has_value());
-    EXPECT_DOUBLE_EQ(*out.Npv(), 80.31);
-    ASSERT_TRUE(out.Greeks().has_value());
-    ASSERT_TRUE(out.Greeks()->delta.has_value());
-    EXPECT_DOUBLE_EQ(*out.Greeks()->delta, 1.0);
-}
 
 TEST(AnalyticFuturesOutrightPricerTest, RejectsEquitySpot) {
     MapMarket m;
@@ -71,12 +53,29 @@ TEST(AnalyticFuturesOutrightPricerTest, RejectsEquitySpot) {
 
 TEST(AnalyticCompositePricerTest, RoutesFuturesOutright) {
     MapMarket m;
-    m.SetQuote("CLX6", 80.31);
+    m.SetQuote("CLX6", 81.0);
     const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
     const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
-    const numeraire::products::CommodityFuturesOutrightProduct fut("CLX6", "CL", trade, expiry);
+    const numeraire::products::CommodityFuturesOutrightProduct fut("CLX6", "CL", trade, expiry, 80.0);
     const numeraire::pricers::AnalyticCompositePricer composite;
     const numeraire::core::PricingResult out = composite.Price(fut, m);
     ASSERT_TRUE(out.Npv().has_value());
-    EXPECT_DOUBLE_EQ(*out.Npv(), 80.31);
+    EXPECT_DOUBLE_EQ(*out.Npv(), 1.0);
+}
+
+TEST(AnalyticFuturesOutrightPricerTest, NpvIsFuturesMinusTradePriceUndiscounted) {
+    MapMarket m;
+    m.SetQuote("CLX6", 82.5);
+
+    const numeraire::schedule::Date trade{.year = 2026, .month = 8, .day = 11};
+    const numeraire::schedule::Date expiry{.year = 2026, .month = 10, .day = 20};
+    const numeraire::products::CommodityFuturesOutrightProduct fut("CLX6", "CL", trade, expiry, /*trade_price=*/80.0);
+    const numeraire::pricers::AnalyticFuturesOutrightPricer pricer;
+    const numeraire::core::PricingResult out = pricer.Price(fut, m);
+
+    ASSERT_TRUE(out.Npv().has_value());
+    EXPECT_DOUBLE_EQ(*out.Npv(), 2.5);  // F - K, no DF despite r = 5%
+    ASSERT_TRUE(out.Greeks().has_value());
+    ASSERT_TRUE(out.Greeks()->delta.has_value());
+    EXPECT_DOUBLE_EQ(*out.Greeks()->delta, 1.0);
 }

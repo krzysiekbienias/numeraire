@@ -23,6 +23,7 @@ public:
                                     std::string product_code,
                                     schedule::Date trade_date,
                                     schedule::Date expiry_date,
+                                    double delivery_price,
                                     std::optional<schedule::Schedule> payments = std::nullopt);
 
     [[nodiscard]] std::string_view UnderlyingId() const override;
@@ -37,6 +38,8 @@ public:
 
     [[nodiscard]] const schedule::Date& ExpiryDate() const override;
 
+    [[nodiscard]] double DeliveryPrice() const;
+
     [[nodiscard]] const schedule::Schedule* PaymentSchedule() const override;
 
     [[nodiscard]] std::string_view ProductCode() const;
@@ -50,6 +53,7 @@ private:
     std::string product_code_;
     schedule::Date trade_date_;
     schedule::Date expiry_date_;
+    double delivery_price_;
     std::optional<schedule::Schedule> payments_;
 };
 

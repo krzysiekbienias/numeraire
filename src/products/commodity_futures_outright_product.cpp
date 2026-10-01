@@ -6,11 +6,13 @@ CommodityFuturesOutrightProduct::CommodityFuturesOutrightProduct(std::string con
                                                                  std::string product_code,
                                                                  schedule::Date trade_date,
                                                                  schedule::Date expiry_date,
+                                                                 double delivery_price,
                                                                  std::optional<schedule::Schedule> payments)
     : contract_ticker_(std::move(contract_ticker)),
       product_code_(std::move(product_code)),
       trade_date_(trade_date),
       expiry_date_(expiry_date),
+      delivery_price_(delivery_price),
       payments_(std::move(payments)) {}
 
 std::string_view CommodityFuturesOutrightProduct::UnderlyingId() const {
@@ -35,6 +37,10 @@ const schedule::Date& CommodityFuturesOutrightProduct::TradeDate() const {
 
 const schedule::Date& CommodityFuturesOutrightProduct::ExpiryDate() const {
     return expiry_date_;
+}
+
+double CommodityFuturesOutrightProduct::DeliveryPrice() const {
+    return delivery_price_;
 }
 
 const schedule::Schedule* CommodityFuturesOutrightProduct::PaymentSchedule() const {
